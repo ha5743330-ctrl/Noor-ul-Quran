@@ -3,6 +3,22 @@
     {
       "source": "/config.js",
       "destination": "/api/config"
+    },
+    {
+      "source": "/admin.html",
+      "destination": "/admin-console.html"
+    },
+    {
+      "source": "/admin-panel.html",
+      "destination": "/admin-console.html"
+    },
+    {
+      "source": "/auth",
+      "destination": "/auth.html"
+    },
+    {
+      "source": "/favicon.ico",
+      "destination": "/assets/logo.png"
     }
   ]
 }
