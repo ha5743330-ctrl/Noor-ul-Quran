@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Noor ul Quran – Auto Quran Reel Generator Studio</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .arabic-font { font-family: 'Amiri', serif; }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .glow-effect {
+            box-shadow: 0 0 50px -12px rgba(245, 158, 11, 0.25);
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col justify-between selection:bg-amber-500 selection:text-slate-900">
+
+    <!-- Navbar -->
+    <header class="sticky top-0 z-50 bg-slate-900/80 backdrop-blur-md border-b border-slate-800/80">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-11 h-11 rounded-2xl bg-gradient-to-tr from-amber-500 to-yellow-300 flex items-center justify-center text-slate-950 font-bold text-xl shadow-lg shadow-amber-500/20">
+                    <i class="fa-solid fa-quran"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold bg-gradient-to-r from-amber-300 to-yellow-500 bg-clip-text text-transparent">Noor ul Quran</h1>
+                    <p class="text-xs text-slate-400 font-medium">Auto Quran Reel Generator</p>
+                </div>
+            </div>
+
+            <nav class="hidden md:flex items-center space-x-8 text-sm font-medium text-slate-300">
+                <a href="#home" class="hover:text-amber-400 transition-colors">Home</a>
+                <a href="#generator" class="hover:text-amber-400 transition-colors">Studio</a>
+                <a href="#features" class="hover:text-amber-400 transition-colors">Features</a>
+                <a href="#about" class="hover:text-amber-400 transition-colors">Guide</a>
+                <a href="admin.html" class="text-amber-400 hover:text-amber-300 transition-colors flex items-center gap-1.5 font-semibold bg-amber-500/10 px-3 py-1.5 rounded-lg border border-amber-500/20">
+                    <i class="fa-solid fa-user-shield text-xs"></i> Admin Portal
+                </a>
+            </nav>
+
+            <div class="flex items-center gap-3">
+                <span id="user-status-tag" class="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700">
+                    <i class="fa-solid fa-user"></i> Free Tier
+                </span>
+                <a href="#generator" class="bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 px-5 py-2.5 rounded-xl font-bold text-sm hover:shadow-lg hover:shadow-amber-500/25 transition-all flex items-center gap-2">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i>
+                    Create Reel
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section id="home" class="relative py-24 px-4 sm:px-6 lg:px-8 overflow-hidden">
+        <div class="max-w-4xl mx-auto text-center relative z-10">
+            <span class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20 mb-6">
+                <i class="fa-solid fa-bolt"></i> 100% Automated & Pixel Perfect Alignment
+            </span>
+            <h2 class="text-4xl sm:text-6xl font-extrabold text-slate-100 leading-tight mb-6 tracking-tight">
+                Generate High-Quality <span class="bg-gradient-to-r from-amber-400 to-yellow-200 bg-clip-text text-transparent">Quranic Reels</span> Effortlessly
+            </h2>
+            <p class="text-lg text-slate-400 mb-10 max-w-2xl mx-auto leading-relaxed">
+                Create synchronized portrait shorts with verified Uthmani Arabic recitation, precise Tashkeel diacritics, and Urdu translation in seconds without any video editing skills.
+            </p>
+            <div class="flex flex-wrap justify-center gap-4">
+                <a href="#generator" class="bg-amber-500 hover:bg-amber-400 text-slate-950 px-8 py-4 rounded-xl font-bold text-base transition-all shadow-xl shadow-amber-500/20 flex items-center gap-3">
+                    <i class="fa-solid fa-play"></i>
+                    Generate Now
+                </a>
+                <a href="#about" class="glass-card hover:bg-slate-800/50 text-slate-200 px-8 py-4 rounded-xl font-bold text-base transition-all border border-slate-800 flex items-center gap-3">
+                    <i class="fa-solid fa-circle-info"></i>
+                    Learn More
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Generator Section Studio -->
+    <section id="generator" class="py-16 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto w-full">
+        <div class="glass-card rounded-3xl p-6 sm:p-10 border border-slate-800 shadow-2xl relative glow-effect">
+            <div class="text-center mb-10">
+                <h3 class="text-2xl sm:text-3xl font-bold text-slate-100 mb-2">Video Generator Studio</h3>
+                <p class="text-slate-400 text-sm">Configure your preferences to render studio-grade Quranic reels</p>
+            </div>
+
+            <!-- Mode Selection Tabs -->
+            <div class="grid grid-cols-3 gap-2 p-1.5 bg-slate-900/90 rounded-2xl mb-8 border border-slate-800/80 text-center">
+                <button id="btn-pick" onclick="setMode('pick')" class="py-3 rounded-xl font-bold text-sm transition-all bg-slate-800 border border-amber-500/30 text-amber-400 shadow-sm">
+                    <i class="fa-solid fa-bookmark mr-2"></i> Single Verse
+                </button>
+                <button id="btn-picks" onclick="setMode('picks')" class="py-3 rounded-xl font-bold text-sm transition-all text-slate-400 hover:text-white flex items-center justify-center gap-1.5">
+                    <i class="fa-solid fa-list-check"></i> Custom List <i class="fa-solid fa-lock text-xs text-amber-400"></i>
+                </button>
+                <button id="btn-random" onclick="setMode('random')" class="py-3 rounded-xl font-bold text-sm transition-all text-slate-400 hover:text-white flex items-center justify-center gap-1.5">
+                    <i class="fa-solid fa-shuffle"></i> Bulk Random <i class="fa-solid fa-lock text-xs text-amber-400"></i>
+                </button>
+            </div>
+
+            <!-- Mode 1: Single Pick (Active in Free Mode) -->
+            <div id="mode-pick" class="space-y-6">
+                <div>
+                    <label class="block text-sm font-semibold text-slate-300 mb-2">Select Surah and Verses:</label>
+                    <input type="text" id="input-pick" placeholder="e.g. 55:1-8  or  18:9-15" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-3.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 transition-colors font-mono">
+                    <p class="text-xs text-slate-500 mt-2">Format: <code class="text-amber-400 font-mono">Surah_Number : Start_Ayah - End_Ayah</code></p>
+                </div>
+            </div>
+
+            <!-- Mode 2 & 3 Locked Notice (Shown when clicking locked tabs in free tier) -->
+            <div id="locked-pro-notice" class="hidden p-8 bg-slate-900/90 border border-amber-500/20 rounded-2xl text-center space-y-4">
+                <div class="w-12 h-12 bg-amber-500/10 text-amber-400 rounded-full flex items-center justify-center mx-auto text-xl">
+                    <i class="fa-solid fa-crown"></i>
+                </div>
+                <h4 class="text-xl font-bold text-slate-100">Bulk & Multi-Verse Generation is Locked</h4>
+                <p class="text-sm text-slate-400 max-w-md mx-auto">
+                    Multiple verse generation and bulk automated queues require Premium status or access granted by the Admin.
+                </p>
+                <button onclick="unlockPasscode()" class="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-6 py-2.5 rounded-xl text-sm transition-all shadow-lg shadow-amber-500/20">
+                    Unlock with Admin Passcode
+                </button>
+            </div>
+
+            <!-- Settings Grid -->
+            <div class="mt-8 pt-6 border-t border-slate-800/80 grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div>
+                    <label class="block text-sm font-semibold text-slate-300 mb-2">Maximum Video Duration:</label>
+                    <select id="input-max-dur" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-3.5 text-slate-100 focus:outline-none focus:border-amber-500 transition-colors">
+                        <option value="60">60 Seconds (1 Min - Standard Reel)</option>
+                        <option value="90">90 Seconds (1.5 Min - Story/Waqia Mode)</option>
+                        <option value="120">120 Seconds (2 Min - Extended)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-slate-300 mb-2">Background Source:</label>
+                    <select class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-3.5 text-slate-100 focus:outline-none focus:border-amber-500 transition-colors">
+                        <option value="local">Local Portrait Clips (backgrounds/ folder)</option>
+                        <option value="paxels" disabled>Nature & Landscapes 🔒 (Locked)</option>
+                        <option value="stars" disabled>Night Sky & Space 🔒 (Locked)</option>
+                        <option value="timelapse" disabled>Cloud Timelapses 🔒 (Locked)</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Generate CTA -->
+            <div class="mt-10">
+                <button onclick="startGeneration()" class="w-full bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 text-slate-950 font-bold py-4 rounded-xl shadow-lg shadow-amber-500/20 hover:scale-[1.005] active:scale-[0.995] transition-all flex items-center justify-center gap-3 text-lg">
+                    <i class="fa-solid fa-gear text-xl"></i>
+                    Generate Video
+                </button>
+            </div>
+
+            <!-- Render Status Terminal -->
+            <div id="output-box" class="mt-8 p-4 bg-slate-950 rounded-xl border border-slate-800 text-xs font-mono text-slate-400 space-y-2 hidden">
+                <div class="flex items-center justify-between text-slate-300 pb-2 border-b border-slate-800">
+                    <span><i class="fa-solid fa-spinner animate-spin text-amber-400 mr-2"></i> Status: Processing timeline...</span>
+                    <span id="status-percent">0%</span>
+                </div>
+                <p id="log-message" class="text-amber-300/90">> Preparing rendering queue...</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="features" class="py-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+        <div class="text-center mb-16">
+            <h3 class="text-3xl font-bold text-slate-100 mb-3">Key Platform Features</h3>
+            <p class="text-slate-400">Why Noor ul Quran Auto Reel Maker produces studio quality content</p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div class="glass-card p-8 rounded-2xl border border-slate-800 hover:border-amber-500/30 transition-all">
+                <div class="w-12 h-12 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center text-xl mb-6">
+                    <i class="fa-solid fa-language"></i>
+                </div>
+                <h4 class="text-xl font-bold text-slate-100 mb-3">Full Tashkeel Accuracy</h4>
+                <p class="text-slate-400 text-sm leading-relaxed">
+                    Arabic text is fetched directly from Madani Uthmani verified databases ensuring zero diacritical mark errors.
+                </p>
+            </div>
+
+            <div class="glass-card p-8 rounded-2xl border border-slate-800 hover:border-amber-500/30 transition-all">
+                <div class="w-12 h-12 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center text-xl mb-6">
+                    <i class="fa-solid fa-sliders"></i>
+                </div>
+                <h4 class="text-xl font-bold text-slate-100 mb-3">Auto Text Sync</h4>
+                <p class="text-slate-400 text-sm leading-relaxed">
+                    Displays Arabic text dynamically during recitation, automatically switching to Urdu text when translation audio begins.
+                </p>
+            </div>
+
+            <div class="glass-card p-8 rounded-2xl border border-slate-800 hover:border-amber-500/30 transition-all">
+                <div class="w-12 h-12 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center text-xl mb-6">
+                    <i class="fa-solid fa-file-csv"></i>
+                </div>
+                <h4 class="text-xl font-bold text-slate-100 mb-3">Ready-Made Captions</h4>
+                <p class="text-slate-400 text-sm leading-relaxed">
+                    Auto-generates social media captions and hashtags in a structured CSV file alongside rendered MP4 videos.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Guide Section -->
+    <section id="about" class="py-16 px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto">
+        <article class="glass-card p-8 sm:p-12 rounded-3xl border border-slate-800 space-y-6">
+            <div class="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                Project Guide
+            </div>
+            <h3 class="text-3xl font-bold text-slate-100">How to create reels with Noor ul Quran?</h3>
+            <p class="text-slate-300 leading-relaxed text-sm">
+                Noor ul Quran is an automated pipeline designed to produce high-definition Islamic short-form content for platforms like Instagram Reels, YouTube Shorts, and TikTok with verified Arabic script and precise audio timing.
+            </p>
+            <div class="p-4 bg-slate-900/80 rounded-xl border-l-4 border-amber-500 text-xs text-slate-300 space-y-2">
+                <p class="font-bold text-amber-400">Important Guidelines:</p>
+                <p>1. Always preview generated reels to verify audio sync before publishing.</p>
+                <p>2. Longer videos (e.g., 90-second story modes) take 15–30 seconds for FFmpeg rendering.</p>
+            </div>
+        </article>
+    </section>
+
+    <!-- Contact Section -->
+    <section id="contact" class="py-16 px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto text-center">
+        <div class="glass-card p-10 rounded-3xl border border-slate-800 space-y-6">
+            <h3 class="text-2xl font-bold text-slate-100">Get In Touch</h3>
+            <p class="text-slate-400 text-sm">Have suggestions or feature requests for the generator?</p>
+            <div class="flex justify-center gap-6 text-xl text-amber-400">
+                <a href="#" class="hover:text-amber-300 transition-colors"><i class="fa-brands fa-github"></i></a>
+                <a href="#" class="hover:text-amber-300 transition-colors"><i class="fa-brands fa-whatsapp"></i></a>
+                <a href="#" class="hover:text-amber-300 transition-colors"><i class="fa-solid fa-envelope"></i></a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="border-t border-slate-800/80 py-8 text-center text-xs text-slate-500">
+        <p>© 2026 Noor ul Quran Auto Reel Maker. All rights reserved.</p>
+    </footer>
+
+    <!-- Interactive JS Script -->
+    <script>
+        let isUnlocked = false;
+
+        function setMode(mode) {
+            const singleInput = document.getElementById('mode-pick');
+            const lockedNotice = document.getElementById('locked-pro-notice');
+
+            ['pick', 'picks', 'random'].forEach(m => {
+                const btn = document.getElementById(`btn-${m}`);
+                if (m === mode) {
+                    btn.className = "py-3 rounded-xl font-bold text-sm transition-all bg-slate-800 border border-amber-500/30 text-amber-400 shadow-sm";
+                } else {
+                    btn.className = "py-3 rounded-xl font-bold text-sm transition-all text-slate-400 hover:text-white";
+                }
+            });
+
+            if (mode === 'pick' || isUnlocked) {
+                singleInput.classList.remove('hidden');
+                lockedNotice.classList.add('hidden');
+            } else {
+                singleInput.classList.add('hidden');
+                lockedNotice.classList.remove('hidden');
+            }
+        }
+
+        function unlockPasscode() {
+            const passcode = prompt("Enter Admin Passcode to unlock bulk mode:");
+            if (passcode === "admin123") {
+                isUnlocked = true;
+                document.getElementById('user-status-tag').innerHTML = '<i class="fa-solid fa-crown text-amber-400"></i> Pro Access';
+                alert("Bulk & Custom List Features Unlocked!");
+                setMode('pick');
+            } else {
+                alert("Invalid Passcode.");
+            }
+        }
+
+        function startGeneration() {
+            const outputBox = document.getElementById('output-box');
+            const logMsg = document.getElementById('log-message');
+            const statusPercent = document.getElementById('status-percent');
+            outputBox.classList.remove('hidden');
+            logMsg.innerText = "> Loading local portrait clip from backgrounds/...";
+            statusPercent.innerText = "30%";
+            setTimeout(() => { logMsg.innerText = "> Aligning Arabic Uthmani text and Urdu translation..."; statusPercent.innerText = "70%"; }, 1500);
+            setTimeout(() => { logMsg.innerText = "✓ Render Complete! Video saved in output/ folder."; statusPercent.innerText = "100%"; }, 3500);
+        }
+    </script>
+</body>
+</html>

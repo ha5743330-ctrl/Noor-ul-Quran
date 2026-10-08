@@ -1,0 +1,100 @@
+==================================================
+        NOOR UL QURAN - HOW TO USE GUIDE
+==================================================
+
+--------------------------------------------------
+STEP 1: INITIAL SETUP & ASSETS
+--------------------------------------------------
+
+1. Requirements Install Karein:
+   pip install -r requirements.txt
+
+2. Assets Fetch Karein:
+   Quran Majeed ka Arabic Uthmani text aur Urdu translation download karne ke liye:
+   python fetch_assets.py
+
+3. Fonts Aur Backgrounds Add Karein:
+   - Urdu/Arabic Font: fonts/ folder mein official Quranic font (maslan Amiri-Regular.ttf ya ScheherazadeNew-Regular.ttf) daalein.
+   - Background Videos: 1080x1920 (Vertical) HD videos (Pexels / Pixabay se) backgrounds/ folder mein daalein.
+   - (Optional) Frame Overlay: Apna transparent PNG design assets/overlay.png mein rakh sakte hain.
+
+
+--------------------------------------------------
+STEP 2: VIDEOS GENERATE KARNE KI COMMANDS
+--------------------------------------------------
+
+Option A: Direct Kisi Ek Specific Verse Ki Video Banani Ho (Fastest)
+------------------------------------------------------------------
+Puri picks.txt ko edit kiye bina, terminal se direct ek Surah ya Verse ki video banane ke liye:
+
+- Choti Reel (Single Verse):
+  python make.py --pick 55:1-8
+
+- Lambi Video / Waqia (Up to 1m 30s):
+  python make.py --pick 18:9-15 --max-dur 90
+
+
+Option B: Multiple Selected Ayaat Se Videos Banani Ho (picks.txt)
+------------------------------------------------------------------
+picks.txt file kholein aur apni pasand ki ayaat likhein:
+
+# Jis line ke shuru mein # hoga wo skip ho jayegi
+55:1-8
+2:284-286
+18:9-15
+
+Terminal par Command chalaein:
+python make.py --picks picks.txt
+
+
+Option C: Automatic Random Reels Banani Ho (Auto Pilot)
+-------------------------------------------------------
+- 1 Random Video (Standard 20-60 Seconds):
+  python make.py --random 1
+
+- 5 Random Videos Ek Sath:
+  python make.py --random 5
+
+- 1 Random Long Video (1 to 1.5 Minutes):
+  python make.py --random 1 --max-dur 90
+
+
+--------------------------------------------------
+HELPFUL COMMANDS & CHECKS
+--------------------------------------------------
+
+- Audio Check Karein:
+  Yeh check karne ke liye ke kisi Surah ki audio server par available hai ya nahi:
+  python make.py --check 112 55 18
+
+- Dry Run (Testing Without Video Generation):
+  Video generate kiye bina sirf plan check karne ke liye:
+  python make.py --picks picks.txt --dry
+
+
+--------------------------------------------------
+OUTPUT LOCATIONS
+--------------------------------------------------
+
+- Tayar Videos: output/ folder mein .mp4 format mein save hoti hain.
+- Video Captions: output/captions.csv file mein har video ka Title, Ayat details, aur Hashtags mil jayenge.
+
+
+--------------------------------------------------
+AUDIO & QARI CUSTOMIZATION (make.py Settings)
+--------------------------------------------------
+
+make.py file ke top par aap yeh settings change kar sakte hain:
+
+- Arabic Reciter: ARABIC_FOLDER = "Alafasy_128kbps" (EveryAyah.com se doosre Qari ka folder name bhi rakh sakte hain).
+- Urdu Reciter: URDU_FOLDER = "translations/urdu_shamshad_ali_khan_46kbps"
+- Sirf Urdu Audio (No Arabic): INCLUDE_ARABIC_AUDIO = False
+- Video Brightness: BRIGHTNESS = -0.18 (Dark background ke liye).
+
+
+--------------------------------------------------
+ZAROORI HIDAYAT
+--------------------------------------------------
+
+1. Pehli 5 videos ko upload karne se pehle zaroor sunein taake audio aur Urdu text ki sync check ho sake.
+2. Long videos (jaise 18:9-15) render hone mein 15–30 seconds ka time leti hain, is liye terminal ko beech mein stop na karein (Ctrl+C na dabayein).

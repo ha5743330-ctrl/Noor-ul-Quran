@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Noor ul Quran – Admin Control Dashboard</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex">
+
+    <!-- Sidebar Navigation -->
+    <aside class="w-64 bg-slate-900 border-r border-slate-800 hidden md:flex flex-col justify-between p-5">
+        <div class="space-y-8">
+            <!-- Brand -->
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-amber-500 flex items-center justify-center text-slate-950 font-bold">
+                    <i class="fa-solid fa-user-shield text-lg"></i>
+                </div>
+                <div>
+                    <h2 class="font-bold text-slate-100 text-sm">Admin Control</h2>
+                    <p class="text-xs text-amber-400">Noor ul Quran</p>
+                </div>
+            </div>
+
+            <!-- Nav Links -->
+            <nav class="space-y-1.5 text-sm font-medium">
+                <a href="#overview" class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                    <i class="fa-solid fa-chart-pie w-5"></i> Dashboard
+                </a>
+                <a href="#users" class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 transition-colors">
+                    <i class="fa-solid fa-users w-5"></i> User Management
+                </a>
+                <a href="#clips" class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 transition-colors">
+                    <i class="fa-solid fa-film w-5"></i> Portrait Clips
+                </a>
+                <a href="#logs" class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 transition-colors">
+                    <i class="fa-solid fa-terminal w-5"></i> System Logs
+                </a>
+            </nav>
+        </div>
+
+        <a href="index.html" class="flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700/80 rounded-xl text-xs font-semibold text-slate-300 transition-colors border border-slate-700">
+            <i class="fa-solid fa-arrow-left"></i> Back to Generator Studio
+        </a>
+    </aside>
+
+    <!-- Main Content Area -->
+    <div class="flex-1 flex flex-col min-h-screen">
+
+        <!-- Top Header -->
+        <header class="h-20 bg-slate-900/60 border-b border-slate-800 px-6 flex items-center justify-between">
+            <div class="flex items-center gap-4">
+                <h1 class="text-lg font-bold text-slate-100">System Overview & User Access Control</h1>
+            </div>
+            <div class="flex items-center gap-4">
+                <span class="text-xs bg-emerald-500/10 text-emerald-400 px-3 py-1.5 rounded-full border border-emerald-500/20 font-semibold flex items-center gap-1.5">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Engine Online
+                </span>
+                <div class="w-9 h-9 rounded-full bg-amber-500 text-slate-950 flex items-center justify-center font-bold text-xs">
+                    AD
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Dashboard View -->
+        <main class="p-6 md:p-10 space-y-8 max-w-7xl mx-auto w-full">
+
+            <!-- Metrics Cards Grid -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div class="glass-panel p-6 rounded-2xl border border-slate-800">
+                    <div class="text-xs text-slate-400 font-semibold mb-1">Total Users</div>
+                    <div class="text-3xl font-extrabold text-slate-100">1,248</div>
+                    <p class="text-xs text-emerald-400 mt-2 font-medium"><i class="fa-solid fa-arrow-up mr-1"></i> +12% this week</p>
+                </div>
+                <div class="glass-panel p-6 rounded-2xl border border-slate-800">
+                    <div class="text-xs text-slate-400 font-semibold mb-1">Pro / Premium Passcodes</div>
+                    <div class="text-3xl font-extrabold text-amber-400">86 Users</div>
+                    <p class="text-xs text-slate-400 mt-2">Bulk access active</p>
+                </div>
+                <div class="glass-panel p-6 rounded-2xl border border-slate-800">
+                    <div class="text-xs text-slate-400 font-semibold mb-1">Local Background Clips</div>
+                    <div class="text-3xl font-extrabold text-slate-100">24 Videos</div>
+                    <p class="text-xs text-slate-400 mt-2">Portrait MP4s in <code>backgrounds/</code></p>
+                </div>
+                <div class="glass-panel p-6 rounded-2xl border border-slate-800">
+                    <div class="text-xs text-slate-400 font-semibold mb-1">Rendered Reels</div>
+                    <div class="text-3xl font-extrabold text-yellow-400">340 Output MP4s</div>
+                    <p class="text-xs text-slate-400 mt-2">Captions saved in CSV</p>
+                </div>
+            </div>
+
+            <!-- Dummy Users Management & Access Grant Table -->
+            <div id="users" class="glass-panel p-6 sm:p-8 rounded-2xl border border-slate-800 space-y-6">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                        <h3 class="text-xl font-bold text-slate-100">User Access & Permission Grants</h3>
+                        <p class="text-xs text-slate-400 mt-1">Manage single vs bulk download access for registered platform users</p>
+                    </div>
+                    <button onclick="alert('New Access Passcode Generated: NOOR-PRO-2026')" class="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-4 py-2 rounded-xl text-xs transition-all shadow-md">
+                        + Generate New Passcode
+                    </button>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm text-slate-300">
+                        <thead class="bg-slate-900/90 text-xs text-slate-400 uppercase border-b border-slate-800">
+                            <tr>
+                                <th class="p-3.5">User</th>
+                                <th class="p-3.5">Role</th>
+                                <th class="p-3.5">Single Verse</th>
+                                <th class="p-3.5">Bulk Download Access</th>
+                                <th class="p-3.5">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-800/60 font-medium">
+                            <tr>
+                                <td class="p-3.5 flex items-center gap-3">
+                                    <div class="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center font-bold text-xs text-amber-400">HA</div>
+                                    <div>
+                                        <p class="font-bold text-slate-100">Haider Ali</p>
+                                        <p class="text-xs text-slate-500">haider@example.com</p>
+                                    </div>
+                                </td>
+                                <td class="p-3.5"><span class="px-2.5 py-1 rounded-full text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20 font-semibold">Pro Admin</span></td>
+                                <td class="p-3.5 text-emerald-400"><i class="fa-solid fa-circle-check"></i> Granted</td>
+                                <td class="p-3.5 text-emerald-400"><i class="fa-solid fa-circle-check"></i> Granted</td>
+                                <td class="p-3.5">
+                                    <input type="checkbox" checked disabled class="accent-amber-500 scale-125">
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="p-3.5 flex items-center gap-3">
+                                    <div class="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center font-bold text-xs text-slate-300">SA</div>
+                                    <div>
+                                        <p class="font-bold text-slate-100">Salman Ahmed</p>
+                                        <p class="text-xs text-slate-500">salman@example.com</p>
+                                    </div>
+                                </td>
+                                <td class="p-3.5"><span class="px-2.5 py-1 rounded-full text-xs bg-slate-800 text-slate-400 border border-slate-700">Free Tier</span></td>
+                                <td class="p-3.5 text-emerald-400"><i class="fa-solid fa-circle-check"></i> Granted</td>
+                                <td class="p-3.5 text-rose-400"><i class="fa-solid fa-circle-xmark"></i> Locked</td>
+                                <td class="p-3.5">
+                                    <input type="checkbox" onchange="alert('Permission Updated')" class="accent-amber-500 scale-125">
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="p-3.5 flex items-center gap-3">
+                                    <div class="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center font-bold text-xs text-slate-300">FK</div>
+                                    <div>
+                                        <p class="font-bold text-slate-100">Fatima Khan</p>
+                                        <p class="text-xs text-slate-500">fatima@example.com</p>
+                                    </div>
+                                </td>
+                                <td class="p-3.5"><span class="px-2.5 py-1 rounded-full text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20 font-semibold">Pro User</span></td>
+                                <td class="p-3.5 text-emerald-400"><i class="fa-solid fa-circle-check"></i> Granted</td>
+                                <td class="p-3.5 text-emerald-400"><i class="fa-solid fa-circle-check"></i> Granted</td>
+                                <td class="p-3.5">
+                                    <input type="checkbox" checked onchange="alert('Permission Updated')" class="accent-amber-500 scale-125">
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Background Clip Manager -->
+            <div id="clips" class="glass-panel p-6 sm:p-8 rounded-2xl border border-slate-800 space-y-4">
+                <h3 class="text-xl font-bold text-slate-100">Background Video Directory</h3>
+                <p class="text-xs text-slate-400">Manage 1080x1920 local MP4 files used for video backgrounds</p>
+                <div class="p-4 bg-slate-900 rounded-xl border border-slate-800 flex items-center justify-between">
+                    <div class="flex items-center gap-3 text-xs font-mono text-slate-300">
+                        <i class="fa-solid fa-folder-open text-amber-400 text-lg"></i>
+                        <span>/backgrounds/ (24 MP4 Clips Active)</span>
+                    </div>
+                    <button onclick="alert('Upload functionality ready for backend sync!')" class="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3.5 py-1.5 rounded-lg text-xs font-semibold border border-slate-700">
+                        + Add New Clip
+                    </button>
+                </div>
+            </div>
+
+        </main>
+    </div>
+</body>
+</html>
