@@ -43,7 +43,7 @@
                 <a href="#generator" class="hover:text-amber-400 transition-colors">Studio</a>
                 <a href="#features" class="hover:text-amber-400 transition-colors">Features</a>
                 <a href="#about" class="hover:text-amber-400 transition-colors">Guide</a>
-                <a href="admin.html" class="text-amber-400 hover:text-amber-300 transition-colors flex items-center gap-1.5 font-semibold bg-amber-500/10 px-3 py-1.5 rounded-lg border border-amber-500/20">
+                <a id="admin-portal-link" href="/admin.html" class="hidden text-amber-400 hover:text-amber-300 transition-colors flex items-center gap-1.5 font-semibold bg-amber-500/10 px-3 py-1.5 rounded-lg border border-amber-500/20">
                     <i class="fa-solid fa-user-shield text-xs"></i> Admin Portal
                 </a>
             </nav>
@@ -52,6 +52,7 @@
                 <span id="user-status-tag" class="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700">
                     <i class="fa-solid fa-user"></i> Free Tier
                 </span>
+                <a id="nav-auth-btn" href="/auth.html" class="text-slate-300 hover:text-white px-3 py-2 text-sm font-semibold">Sign In</a>
                 <a href="#generator" class="bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 px-5 py-2.5 rounded-xl font-bold text-sm hover:shadow-lg hover:shadow-amber-500/25 transition-all flex items-center gap-2">
                     <i class="fa-solid fa-wand-magic-sparkles"></i>
                     Create Reel
@@ -92,80 +93,120 @@
                 <h3 class="text-2xl sm:text-3xl font-bold text-slate-100 mb-2">Video Generator Studio</h3>
                 <p class="text-slate-400 text-sm">Configure your preferences to render studio-grade Quranic reels</p>
             </div>
+            <p id="access-message" class="hidden mb-6 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200" role="status" aria-live="polite"></p>
 
             <!-- Mode Selection Tabs -->
             <div class="grid grid-cols-3 gap-2 p-1.5 bg-slate-900/90 rounded-2xl mb-8 border border-slate-800/80 text-center">
-                <button id="btn-pick" onclick="setMode('pick')" class="py-3 rounded-xl font-bold text-sm transition-all bg-slate-800 border border-amber-500/30 text-amber-400 shadow-sm">
+                <button id="btn-pick" type="button" onclick="setMode('pick')" class="py-3 rounded-xl font-bold text-sm transition-all bg-slate-800 border border-amber-500/30 text-amber-400 shadow-sm">
                     <i class="fa-solid fa-bookmark mr-2"></i> Single Verse
                 </button>
-                <button id="btn-picks" onclick="setMode('picks')" class="py-3 rounded-xl font-bold text-sm transition-all text-slate-400 hover:text-white flex items-center justify-center gap-1.5">
+                <button id="btn-picks" type="button" onclick="setMode('picks')" class="py-3 rounded-xl font-bold text-sm transition-all text-slate-400 hover:text-white flex items-center justify-center gap-1.5">
                     <i class="fa-solid fa-list-check"></i> Custom List <i class="fa-solid fa-lock text-xs text-amber-400"></i>
                 </button>
-                <button id="btn-random" onclick="setMode('random')" class="py-3 rounded-xl font-bold text-sm transition-all text-slate-400 hover:text-white flex items-center justify-center gap-1.5">
+                <button id="btn-random" type="button" onclick="setMode('random')" class="py-3 rounded-xl font-bold text-sm transition-all text-slate-400 hover:text-white flex items-center justify-center gap-1.5">
                     <i class="fa-solid fa-shuffle"></i> Bulk Random <i class="fa-solid fa-lock text-xs text-amber-400"></i>
                 </button>
             </div>
 
-            <!-- Mode 1: Single Pick (Active in Free Mode) -->
-            <div id="mode-pick" class="space-y-6">
-                <div>
-                    <label class="block text-sm font-semibold text-slate-300 mb-2">Select Surah and Verses:</label>
-                    <input type="text" id="input-pick" placeholder="e.g. 55:1-8  or  18:9-15" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-3.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 transition-colors font-mono">
-                    <p class="text-xs text-slate-500 mt-2">Format: <code class="text-amber-400 font-mono">Surah_Number : Start_Ayah - End_Ayah</code></p>
-                </div>
-            </div>
+            <form id="reel-generator-form" onsubmit="handleFormSubmit(event)">
+                <!-- Active Mode Input Tracker -->
+                <input type="hidden" id="mode-select" value="pick">
 
-            <!-- Mode 2 & 3 Locked Notice (Shown when clicking locked tabs in free tier) -->
-            <div id="locked-pro-notice" class="hidden p-8 bg-slate-900/90 border border-amber-500/20 rounded-2xl text-center space-y-4">
-                <div class="w-12 h-12 bg-amber-500/10 text-amber-400 rounded-full flex items-center justify-center mx-auto text-xl">
-                    <i class="fa-solid fa-crown"></i>
+                <!-- Mode 1: Single Pick (Active in Free Mode) -->
+                <div id="mode-pick" class="space-y-6">
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-300 mb-2">Select Surah and Verses:</label>
+                        <input type="text" id="input-pick" placeholder="e.g. 55:1-8  or  18:9-15" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-3.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 transition-colors font-mono">
+                        <p class="text-xs text-slate-500 mt-2">Format: <code class="text-amber-400 font-mono">Surah_Number : Start_Ayah - End_Ayah</code></p>
+                    </div>
                 </div>
-                <h4 class="text-xl font-bold text-slate-100">Bulk & Multi-Verse Generation is Locked</h4>
-                <p class="text-sm text-slate-400 max-w-md mx-auto">
-                    Multiple verse generation and bulk automated queues require Premium status or access granted by the Admin.
-                </p>
-                <button onclick="unlockPasscode()" class="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-6 py-2.5 rounded-xl text-sm transition-all shadow-lg shadow-amber-500/20">
-                    Unlock with Admin Passcode
-                </button>
-            </div>
 
-            <!-- Settings Grid -->
-            <div class="mt-8 pt-6 border-t border-slate-800/80 grid grid-cols-1 sm:grid-cols-2 gap-6">
-                <div>
-                    <label class="block text-sm font-semibold text-slate-300 mb-2">Maximum Video Duration:</label>
-                    <select id="input-max-dur" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-3.5 text-slate-100 focus:outline-none focus:border-amber-500 transition-colors">
-                        <option value="60">60 Seconds (1 Min - Standard Reel)</option>
-                        <option value="90">90 Seconds (1.5 Min - Story/Waqia Mode)</option>
-                        <option value="120">120 Seconds (2 Min - Extended)</option>
-                    </select>
+                <div id="mode-picks" class="hidden space-y-3">
+                    <h4 class="font-semibold text-slate-200">Custom verse list</h4>
+                    <p class="text-sm text-slate-400">The generator will use the verse ranges saved in <code class="text-amber-400">picks.txt</code>.</p>
                 </div>
-                <div>
-                    <label class="block text-sm font-semibold text-slate-300 mb-2">Background Source:</label>
-                    <select class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-3.5 text-slate-100 focus:outline-none focus:border-amber-500 transition-colors">
-                        <option value="local">Local Portrait Clips (backgrounds/ folder)</option>
-                        <option value="paxels" disabled>Nature & Landscapes 🔒 (Locked)</option>
-                        <option value="stars" disabled>Night Sky & Space 🔒 (Locked)</option>
-                        <option value="timelapse" disabled>Cloud Timelapses 🔒 (Locked)</option>
-                    </select>
-                </div>
-            </div>
 
-            <!-- Generate CTA -->
-            <div class="mt-10">
-                <button onclick="startGeneration()" class="w-full bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 text-slate-950 font-bold py-4 rounded-xl shadow-lg shadow-amber-500/20 hover:scale-[1.005] active:scale-[0.995] transition-all flex items-center justify-center gap-3 text-lg">
-                    <i class="fa-solid fa-gear text-xl"></i>
-                    Generate Video
-                </button>
-            </div>
+                <div id="mode-random" class="hidden space-y-3">
+                    <label for="input-random-count" class="block text-sm font-semibold text-slate-300">Number of random reels</label>
+                    <input id="input-random-count" type="number" min="1" max="25" value="1" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-3.5 text-slate-100 focus:outline-none focus:border-amber-500">
+                </div>
+
+                <div id="locked-pro-notice" class="hidden p-8 bg-slate-900/90 border border-amber-500/20 rounded-2xl text-center space-y-4">
+                    <div class="w-12 h-12 bg-amber-500/10 text-amber-400 rounded-full flex items-center justify-center mx-auto text-xl">
+                        <i class="fa-solid fa-crown"></i>
+                    </div>
+                    <h4 class="text-xl font-bold text-slate-100">Bulk & Multi-Verse Generation is Locked</h4>
+                    <p class="text-sm text-slate-400 max-w-md mx-auto">
+                        An admin must grant your account premium access to use custom lists and random generation.
+                    </p>
+                </div>
+
+                <!-- Settings Grid -->
+                <div class="mt-8 pt-6 border-t border-slate-800/80 grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-300 mb-2">Maximum Video Duration:</label>
+                        <select id="input-max-dur" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-3.5 text-slate-100 focus:outline-none focus:border-amber-500 transition-colors">
+                            <option value="60">60 Seconds (1 Min - Standard Reel)</option>
+                            <option value="90">90 Seconds (1.5 Min - Story/Waqia Mode)</option>
+                            <option value="120">120 Seconds (2 Min - Extended)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-300 mb-2">Background Source:</label>
+                        <select class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-3.5 text-slate-100 focus:outline-none focus:border-amber-500 transition-colors">
+                            <option value="local">Local Portrait Clips (backgrounds/ folder)</option>
+                            <option value="paxels" disabled>Nature & Landscapes 🔒 (Locked)</option>
+                            <option value="stars" disabled>Night Sky & Space 🔒 (Locked)</option>
+                            <option value="timelapse" disabled>Cloud Timelapses 🔒 (Locked)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Generate CTA -->
+                <div class="mt-10">
+                    <button id="generate-button" type="submit" class="w-full bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 text-slate-950 font-bold py-4 rounded-xl shadow-lg shadow-amber-500/20 hover:scale-[1.005] active:scale-[0.995] transition-all flex items-center justify-center gap-3 text-lg">
+                        <i class="fa-solid fa-gear text-xl"></i>
+                        Generate Video
+                    </button>
+                </div>
+            </form>
 
             <!-- Render Status Terminal -->
             <div id="output-box" class="mt-8 p-4 bg-slate-950 rounded-xl border border-slate-800 text-xs font-mono text-slate-400 space-y-2 hidden">
                 <div class="flex items-center justify-between text-slate-300 pb-2 border-b border-slate-800">
-                    <span><i class="fa-solid fa-spinner animate-spin text-amber-400 mr-2"></i> Status: Processing timeline...</span>
+                    <span><i id="status-spinner" class="fa-solid fa-spinner animate-spin text-amber-400 mr-2"></i> <span id="status-heading">Status: Processing timeline...</span></span>
                     <span id="status-percent">0%</span>
                 </div>
                 <p id="log-message" class="text-amber-300/90">> Preparing rendering queue...</p>
+                <div id="status-box" class="text-xs font-bold mt-2"></div>
             </div>
+            <!-- Video Preview Container (Hidden by default) -->
+<div id="video-preview-box" class="mt-8 p-6 bg-slate-900/90 rounded-2xl border border-amber-500/30 text-center space-y-4 hidden">
+    <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h4 class="text-base font-bold text-amber-400 flex items-center gap-2">
+            <i class="fa-solid fa-circle-check text-green-400"></i> Video Ready for Preview
+        </h4>
+        <span id="preview-filename" class="text-xs font-mono text-slate-400">001_s55_1-8.mp4</span>
+    </div>
+
+    <!-- Video Player Element -->
+    <div class="relative max-w-xs mx-auto rounded-xl overflow-hidden border border-slate-700 shadow-2xl aspect-[9/16] bg-black">
+        <video id="rendered-video-player" controls class="w-full h-full object-contain">
+            <source id="video-source" src="" type="video/mp4">
+            Your browser does not support the video tag.
+        </video>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="flex justify-center gap-3 pt-2">
+        <a id="download-btn" href="#" download class="bg-amber-500 hover:bg-amber-400 text-slate-950 px-5 py-2.5 rounded-xl font-bold text-xs transition-all flex items-center gap-2">
+            <i class="fa-solid fa-download"></i> Download Reel
+        </a>
+        <button type="button" onclick="copyCaption()" class="glass-card hover:bg-slate-800 text-slate-200 px-4 py-2.5 rounded-xl font-bold text-xs transition-all border border-slate-700 flex items-center gap-2">
+            <i class="fa-solid fa-copy"></i> Copy Captions
+        </button>
+    </div>
+</div>
         </div>
     </section>
 
@@ -245,54 +286,10 @@
         <p>© 2026 Noor ul Quran Auto Reel Maker. All rights reserved.</p>
     </footer>
 
-    <!-- Interactive JS Script -->
-    <script>
-        let isUnlocked = false;
-
-        function setMode(mode) {
-            const singleInput = document.getElementById('mode-pick');
-            const lockedNotice = document.getElementById('locked-pro-notice');
-
-            ['pick', 'picks', 'random'].forEach(m => {
-                const btn = document.getElementById(`btn-${m}`);
-                if (m === mode) {
-                    btn.className = "py-3 rounded-xl font-bold text-sm transition-all bg-slate-800 border border-amber-500/30 text-amber-400 shadow-sm";
-                } else {
-                    btn.className = "py-3 rounded-xl font-bold text-sm transition-all text-slate-400 hover:text-white";
-                }
-            });
-
-            if (mode === 'pick' || isUnlocked) {
-                singleInput.classList.remove('hidden');
-                lockedNotice.classList.add('hidden');
-            } else {
-                singleInput.classList.add('hidden');
-                lockedNotice.classList.remove('hidden');
-            }
-        }
-
-        function unlockPasscode() {
-            const passcode = prompt("Enter Admin Passcode to unlock bulk mode:");
-            if (passcode === "admin123") {
-                isUnlocked = true;
-                document.getElementById('user-status-tag').innerHTML = '<i class="fa-solid fa-crown text-amber-400"></i> Pro Access';
-                alert("Bulk & Custom List Features Unlocked!");
-                setMode('pick');
-            } else {
-                alert("Invalid Passcode.");
-            }
-        }
-
-        function startGeneration() {
-            const outputBox = document.getElementById('output-box');
-            const logMsg = document.getElementById('log-message');
-            const statusPercent = document.getElementById('status-percent');
-            outputBox.classList.remove('hidden');
-            logMsg.innerText = "> Loading local portrait clip from backgrounds/...";
-            statusPercent.innerText = "30%";
-            setTimeout(() => { logMsg.innerText = "> Aligning Arabic Uthmani text and Urdu translation..."; statusPercent.innerText = "70%"; }, 1500);
-            setTimeout(() => { logMsg.innerText = "✓ Render Complete! Video saved in output/ folder."; statusPercent.innerText = "100%"; }, 3500);
-        }
-    </script>
+    <!-- Supabase & App JavaScript Integrations -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="/config.js"></script>
+    <script src="/auth.js?v=7"></script>
+    <script src="/app.js?v=4"></script>
 </body>
 </html>

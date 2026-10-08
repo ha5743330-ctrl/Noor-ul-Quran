@@ -1,0 +1,435 @@
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+from typing import Optional
+from urllib.parse import quote
+from uuid import UUID, uuid4
+
+import requests
+from dotenv import load_dotenv
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, RedirectResponse, Response
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+
+# 1. Environment Variables Load Karein
+BASE_DIR = Path(__file__).resolve().parent
+load_dotenv(BASE_DIR / ".env")
+
+SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
+SUPABASE_KEY = os.getenv("SUPABASE_ANON_KEY", "")
+SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
+MEDIA_BUCKET = os.getenv("SUPABASE_MEDIA_BUCKET", "noor-media")
+OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", BASE_DIR / "output"))
+BACKGROUND_DIR = Path(os.getenv("BACKGROUNDS_DIR", BASE_DIR / "backgrounds"))
+CACHE_DIR = Path(os.getenv("CACHE_DIR", BASE_DIR / "cache"))
+MAX_BACKGROUND_BYTES = 50 * 1024 * 1024
+
+# 2. FastAPI App Initialize Karein
+app = FastAPI(title="Noor ul Quran API Engine")
+
+# 3. CORS Setup (Frontend Integration ke liye)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        origin.strip()
+        for origin in os.getenv(
+            "FRONTEND_ORIGINS",
+            "http://127.0.0.1:8000,http://localhost:8000",
+        ).split(",")
+        if origin.strip()
+    ],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# 4. Output Directory Mount Karein (Rendered Videos Access karne ke liye)
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+BACKGROUND_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/output", StaticFiles(directory=str(OUTPUT_DIR)), name="output")
+
+# 5. Request Body Schema
+class GenerateRequest(BaseModel):
+    mode: str  # 'pick', 'picks', 'random'
+    verse: Optional[str] = None  # e.g. "55:1-8"
+    random_count: int = 1
+    max_duration: int = 60
+
+
+class PremiumAccessRequest(BaseModel):
+    enabled: bool
+
+
+def _supabase_request(method: str, path: str, token: str, **kwargs):
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        raise HTTPException(status_code=503, detail="Supabase is not configured on the server.")
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {token}",
+        **kwargs.pop("headers", {}),
+    }
+    try:
+        return requests.request(
+            method,
+            f"{SUPABASE_URL}{path}",
+            headers=headers,
+            timeout=15,
+            **kwargs,
+        )
+    except requests.RequestException as exc:
+        raise HTTPException(status_code=503, detail="Could not reach Supabase.") from exc
+
+
+def _storage_request(method: str, path: str, **kwargs):
+    if not SUPABASE_SERVICE_KEY:
+        raise HTTPException(status_code=503, detail="Supabase Storage service key is not configured on the backend.")
+    headers = {
+        "apikey": SUPABASE_SERVICE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
+        **kwargs.pop("headers", {}),
+    }
+    try:
+        response = requests.request(
+            method,
+            f"{SUPABASE_URL}/storage/v1{path}",
+            headers=headers,
+            timeout=60,
+            **kwargs,
+        )
+    except requests.RequestException as exc:
+        raise HTTPException(status_code=503, detail="Could not reach Supabase Storage.") from exc
+    if not response.ok and response.status_code != 404:
+        if response.status_code == 413:
+            raise HTTPException(status_code=413, detail="Supabase Free Storage accepts files up to 50 MB.")
+        raise HTTPException(status_code=502, detail="Supabase Storage request failed; check the media bucket and server key.")
+    return response
+
+
+def _list_media_objects(prefix: str):
+    response = _storage_request(
+        "POST",
+        f"/object/list/{quote(MEDIA_BUCKET, safe='')}",
+        json={"prefix": prefix, "limit": 100, "offset": 0, "sortBy": {"column": "name", "order": "asc"}},
+    )
+    return response.json()
+
+
+def _media_object_exists(object_path: str) -> bool:
+    prefix, filename = object_path.rsplit("/", 1)
+    return any(
+        item.get("name") in {filename, object_path}
+        for item in _list_media_objects(prefix)
+    )
+
+
+def _upload_media_file(local_path: Path, object_path: str, content_type: str):
+    if local_path.stat().st_size > MAX_BACKGROUND_BYTES:
+        raise HTTPException(status_code=413, detail="Supabase Free Storage accepts files up to 50 MB.")
+    with local_path.open("rb") as media_file:
+        _storage_request(
+            "POST",
+            f"/object/{quote(MEDIA_BUCKET, safe='')}/{quote(object_path, safe='/')}",
+            data=media_file,
+            headers={"Content-Type": content_type, "x-upsert": "true"},
+        )
+
+
+def _download_media_file(object_path: str, local_path: Path) -> bool:
+    response = _storage_request(
+        "GET",
+        f"/object/authenticated/{quote(MEDIA_BUCKET, safe='')}/{quote(object_path, safe='/')}",
+        stream=True,
+    )
+    if response.status_code == 404:
+        return False
+    local_path.parent.mkdir(parents=True, exist_ok=True)
+    with local_path.open("wb") as local_file:
+        for chunk in response.iter_content(chunk_size=1024 * 1024):
+            if chunk:
+                local_file.write(chunk)
+    return True
+
+
+def _signed_media_url(object_path: str) -> str:
+    response = _storage_request(
+        "POST",
+        f"/object/sign/{quote(MEDIA_BUCKET, safe='')}/{quote(object_path, safe='/')}",
+        json={"expiresIn": 7 * 24 * 60 * 60},
+    )
+    signed_path = response.json()["signedURL"]
+    if signed_path.startswith("http"):
+        return signed_path
+    return f"{SUPABASE_URL}/storage/v1{signed_path}"
+
+
+def _prepare_ephemeral_media():
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    BACKGROUND_DIR.mkdir(parents=True, exist_ok=True)
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    if not SUPABASE_SERVICE_KEY:
+        return
+
+    for item in _list_media_objects("backgrounds"):
+        object_name = item.get("name", "")
+        filename = Path(object_name).name
+        if Path(filename).suffix.lower() not in {".mp4", ".mov"}:
+            continue
+        object_path = object_name if object_name.startswith("backgrounds/") else f"backgrounds/{filename}"
+        local_path = BACKGROUND_DIR / filename
+        if not local_path.exists():
+            _download_media_file(object_path, local_path)
+
+    for object_path, local_path in (
+        ("metadata/captions.csv", OUTPUT_DIR / "captions.csv"),
+        ("state/used.json", CACHE_DIR / "used.json"),
+    ):
+        if _media_object_exists(object_path):
+            _download_media_file(object_path, local_path)
+
+
+def _raise_supabase_error(response: requests.Response):
+    if response.ok:
+        return
+    if response.status_code in (401, 403):
+        raise HTTPException(status_code=401, detail="Session is invalid or expired. Please sign in again.")
+    if response.status_code == 404:
+        raise HTTPException(status_code=503, detail="Run schema.sql in the Supabase SQL Editor to enable access control.")
+    raise HTTPException(status_code=502, detail="Supabase access check failed.")
+
+
+def get_current_user(authorization: Optional[str] = Header(default=None)):
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Please sign in to continue.")
+    token = authorization[7:].strip()
+    user_response = _supabase_request("GET", "/auth/v1/user", token)
+    _raise_supabase_error(user_response)
+    user = user_response.json()
+
+    access_response = _supabase_request(
+        "POST",
+        "/rest/v1/rpc/noor_my_access",
+        token,
+        json={},
+    )
+    _raise_supabase_error(access_response)
+    access = access_response.json()
+    return {
+        "id": user["id"],
+        "email": user.get("email", ""),
+        "is_admin": bool(access.get("is_admin")),
+        "premium_access": bool(access.get("premium_access")),
+        "token": token,
+    }
+
+
+def require_admin(user=Depends(get_current_user)):
+    if not user["is_admin"]:
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    return user
+
+
+def _latest_generated_video() -> Optional[str]:
+    if not OUTPUT_DIR.exists():
+        return None
+    videos = sorted(OUTPUT_DIR.glob("*.mp4"), key=lambda p: p.stat().st_mtime, reverse=True)
+    return videos[0].name if videos else None
+
+
+# 6. API Endpoints
+@app.get("/api/health")
+def health_check():
+    return {"status": "online", "system": "Noor ul Quran Engine"}
+
+
+@app.get("/api/access")
+def get_access(user=Depends(get_current_user)):
+    return {
+        "user_id": user["id"],
+        "email": user["email"],
+        "is_admin": user["is_admin"],
+        "premium_access": user["premium_access"],
+    }
+
+
+@app.get("/api/admin/users")
+def list_users(user=Depends(require_admin)):
+    response = _supabase_request(
+        "POST",
+        "/rest/v1/rpc/noor_admin_list_users",
+        user["token"],
+        json={},
+    )
+    _raise_supabase_error(response)
+    return response.json()
+
+
+@app.patch("/api/admin/users/{user_id}/premium")
+def set_premium_access(user_id: UUID, req: PremiumAccessRequest, user=Depends(require_admin)):
+    response = _supabase_request(
+        "POST",
+        "/rest/v1/rpc/noor_admin_set_premium",
+        user["token"],
+        json={"target_user_id": str(user_id), "enabled": req.enabled},
+    )
+    _raise_supabase_error(response)
+    return {"user_id": str(user_id), "premium_access": req.enabled}
+
+
+@app.get("/api/admin/backgrounds")
+def list_backgrounds(user=Depends(require_admin)):
+    if SUPABASE_SERVICE_KEY:
+        objects = _list_media_objects("backgrounds")
+        return [
+            {
+                "filename": item["name"],
+                "size": (item.get("metadata") or {}).get("size", 0),
+            }
+            for item in objects
+            if Path(item.get("name", "")).suffix.lower() in {".mp4", ".mov"}
+        ]
+
+    clips = sorted(
+        (path for path in BACKGROUND_DIR.iterdir() if path.suffix.lower() in {".mp4", ".mov"}),
+        key=lambda path: path.name.lower(),
+    )
+    return [{"filename": clip.name, "size": clip.stat().st_size} for clip in clips]
+
+
+@app.post("/api/admin/backgrounds")
+async def upload_background(request: Request, user=Depends(require_admin)):
+    original_name = Path(request.query_params.get("filename", "")).name
+    extension = Path(original_name).suffix.lower()
+    if extension not in {".mp4", ".mov"}:
+        raise HTTPException(status_code=400, detail="Upload an MP4 or MOV video clip.")
+
+    content_length = request.headers.get("content-length")
+    if content_length and int(content_length) > MAX_BACKGROUND_BYTES:
+        raise HTTPException(status_code=413, detail="Background clip must be 50 MB or smaller.")
+
+    stored_name = f"{uuid4().hex}{extension}"
+    destination = BACKGROUND_DIR / stored_name
+    total = 0
+    try:
+        with destination.open("wb") as output_file:
+            async for chunk in request.stream():
+                total += len(chunk)
+                if total > MAX_BACKGROUND_BYTES:
+                    raise HTTPException(status_code=413, detail="Background clip must be 50 MB or smaller.")
+                output_file.write(chunk)
+    except Exception:
+        destination.unlink(missing_ok=True)
+        raise
+
+    if total == 0:
+        destination.unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail="The uploaded clip is empty.")
+    if SUPABASE_SERVICE_KEY:
+        _upload_media_file(destination, f"backgrounds/{stored_name}", "video/mp4" if extension == ".mp4" else "video/quicktime")
+    return {"filename": stored_name, "size": total}
+
+
+@app.get("/config.js", include_in_schema=False)
+def frontend_config():
+    config = {
+        "url": SUPABASE_URL,
+        "anonKey": SUPABASE_KEY,
+        "apiBaseUrl": os.getenv("API_BASE_URL", "/api").rstrip("/"),
+    }
+    script = f"window.NOOR_SUPABASE_CONFIG = {json.dumps(config)};"
+    return Response(
+        content=script,
+        media_type="application/javascript",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    return FileResponse(BASE_DIR / "assets" / "logo.png", media_type="image/png")
+
+
+@app.get("/admin.html", include_in_schema=False)
+def admin_page():
+    return RedirectResponse(url="/admin-console.html")
+
+
+@app.get("/admin-panel.html", include_in_schema=False)
+def legacy_admin_page():
+    return RedirectResponse(url="/admin-console.html")
+
+
+@app.get("/auth", include_in_schema=False)
+def auth_page():
+    return RedirectResponse(url="/auth.html")
+
+
+@app.post("/api/generate")
+def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
+    if req.mode not in {"pick", "picks", "random"}:
+        raise HTTPException(status_code=400, detail="Invalid generation mode.")
+    if req.mode != "pick" and not (user["is_admin"] or user["premium_access"]):
+        raise HTTPException(status_code=403, detail="Premium access is required for custom and random generation.")
+    if req.max_duration > 60 and not (user["is_admin"] or user["premium_access"]):
+        raise HTTPException(status_code=403, detail="Premium access is required for videos longer than 60 seconds.")
+    if req.random_count < 1 or req.random_count > 25:
+        raise HTTPException(status_code=400, detail="Random count must be between 1 and 25.")
+    if req.max_duration < 20 or req.max_duration > 600:
+        raise HTTPException(status_code=400, detail="Maximum duration must be between 20 and 600 seconds.")
+
+    cmd = [sys.executable, str(BASE_DIR / "make.py")]
+    if req.mode == "pick" and req.verse:
+        cmd.extend(["--pick", req.verse])
+    elif req.mode == "picks":
+        cmd.extend(["--picks", str(BASE_DIR / "picks.txt")])
+    elif req.mode == "random":
+        cmd.extend(["--random", str(req.random_count)])
+    else:
+        raise HTTPException(status_code=400, detail="Verse is required for single-pick generation.")
+
+    cmd.extend(["--max-dur", str(req.max_duration)])
+
+    try:
+        _prepare_ephemeral_media()
+        completed = subprocess.run(cmd, cwd=str(BASE_DIR), capture_output=True, text=True)
+        if completed.returncode != 0:
+            raise HTTPException(
+                status_code=500,
+                detail=(completed.stderr or completed.stdout or "Video rendering failed."),
+            )
+
+        filename = _latest_generated_video()
+        if not filename:
+            raise HTTPException(status_code=500, detail="No video output was generated.")
+
+        video_url = f"/output/{filename}"
+        if SUPABASE_SERVICE_KEY:
+            video_path = OUTPUT_DIR / filename
+            stored_video = f"videos/{uuid4().hex}_{filename}"
+            _upload_media_file(video_path, stored_video, "video/mp4")
+            captions_path = OUTPUT_DIR / "captions.csv"
+            used_path = CACHE_DIR / "used.json"
+            if captions_path.exists():
+                _upload_media_file(captions_path, "metadata/captions.csv", "text/csv")
+            if used_path.exists():
+                _upload_media_file(used_path, "state/used.json", "application/json")
+            video_url = _signed_media_url(stored_video)
+
+        return {
+            "status": "success",
+            "message": "Video rendering completed successfully.",
+            "mode": req.mode,
+            "filename": filename,
+            "url": video_url,
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+# 7. Static Web Files Serve Karein (MUST BE AT THE VERY BOTTOM)
+app.mount("/", StaticFiles(directory=str(BASE_DIR), html=True), name="static")

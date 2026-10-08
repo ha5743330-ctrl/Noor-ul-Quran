@@ -3,7 +3,7 @@
    python make.py --random 1                      (Standard ~1 min reel)
    python make.py --picks picks.txt --max-dur 90  (Waqia/Long Reel up to 1m 30s)
 """
-import argparse, csv, json, random, re, subprocess, sys, time
+import argparse, csv, json, os, random, re, shutil, subprocess, sys, time
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont, features
 import requests
@@ -32,6 +32,9 @@ URDU_FOLDER = "translations/urdu_shamshad_ali_khan_46kbps"
 BISMILLAH = "بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ"
 # --------------------------------------------------
 ROOT = Path(__file__).parent
+OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", ROOT / "output"))
+BACKGROUND_DIR = Path(os.getenv("BACKGROUNDS_DIR", ROOT / "backgrounds"))
+CACHE_DIR = Path(os.getenv("CACHE_DIR", ROOT / "cache"))
 
 def run(cmd, **kw):
     return subprocess.run(cmd, check=True, **kw)
@@ -43,6 +46,12 @@ def dur(path):
 
 def urdu_digits(n): return str(n).translate(str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹"))
 def strip_harakat_surah(s): return re.sub("[\u064B-\u065F\u0670\u06D6-\u06ED]", "", s)
+
+def remove_leading_bismillah(text):
+    words = text.split()
+    expected = ["بسم", "الله", "الرحمن", "الرحيم"]
+    actual = [strip_harakat_surah(word).replace("ٱ", "ا") for word in words[:4]]
+    return " ".join(words[4:]) if actual == expected else text
 
 def fetch_ayah(kind, s, a):
     p = ROOT / "audio" / kind / f"{s:03d}{a:03d}.mp3"
@@ -145,6 +154,8 @@ def plan_reel(Q, s, a0, a1):
         c = ayah_clip(s, a)
         if c is None: return None
         ar_text = surah_data.get("arabic", {}).get(str(a), "")
+        if a == 1 and s != 9:
+            ar_text = remove_leading_bismillah(ar_text)
         ur_text = surah_data["ayahs"][str(a)]
         items.append(dict(c, ayah=a, text=ur_text, arabic=ar_text))
     return items
@@ -231,7 +242,7 @@ def parse_picks(f):
     return out
 
 def pick_random(Q, count, rng, min_dur, max_dur):
-    used_f = ROOT / "cache/used.json"; used = set(json.loads(used_f.read_text())) if used_f.exists() else set()
+    used_f = CACHE_DIR / "used.json"; used = set(json.loads(used_f.read_text())) if used_f.exists() else set()
     ns = [Q["surahs"][str(s)]["n"] for s in range(1, 115)]
     picks, tries = [], 0
     while len(picks) < count and tries < 3000:
@@ -251,9 +262,23 @@ def pick_random(Q, count, rng, min_dur, max_dur):
     used_f.parent.mkdir(exist_ok=True); used_f.write_text(json.dumps(sorted(used)))
     return picks
 
+def ensure_required_tools():
+    missing = [cmd for cmd in ("ffmpeg", "ffprobe") if shutil.which(cmd) is None]
+    if missing:
+        sys.exit(
+            "Missing required media tools: " + ", ".join(missing) + ". "
+            "Install FFmpeg and ensure ffmpeg/ffprobe are available on PATH. "
+            "Windows: winget install Gyan.Dev.FFmpeg or choco install ffmpeg"
+        )
+
+
 def main():
     if not features.check("raqm") and not HAS_BIDI:
-        sys.exit("Raqm support nahi hai. Run: pip install arabic-reshaper python-bidi")
+        sys.exit(
+            "Arabic text support missing. Activate the project venv and run: "
+            "pip install -r requirements.txt"
+        )
+    ensure_required_tools()
     ap = argparse.ArgumentParser()
     ap.add_argument("--picks")
     ap.add_argument("--pick", help="Direct single pick, e.g. 18:9-15")
@@ -282,9 +307,9 @@ def main():
         picks = [(int(m[1]), int(m[2]), int(m[3] or m[2]))] if m else []
     else:
         picks = parse_picks(a.picks) if a.picks else pick_random(Q, a.random, rng, a.min_dur, a.max_dur) if a.random else sys.exit("--picks, --pick ya --random do")
-    bgs = [p for p in (ROOT / "backgrounds").glob("*") if p.suffix.lower() in (".mp4", ".mov")]
+    bgs = [p for p in BACKGROUND_DIR.glob("*") if p.suffix.lower() in (".mp4", ".mov")]
     if not bgs: sys.exit("backgrounds/ folder mein mp4 clips daalo")
-    out = ROOT / "output"; out.mkdir(exist_ok=True); tmp = ROOT / "cache/tmp"; tmp.mkdir(exist_ok=True, parents=True)
+    out = OUTPUT_DIR; out.mkdir(exist_ok=True, parents=True); tmp = CACHE_DIR / "tmp"; tmp.mkdir(exist_ok=True, parents=True)
     capf = out / "captions.csv"; newcap = not capf.exists()
     
     with open(capf, "a", newline="", encoding="utf-8-sig") as fh:

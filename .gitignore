@@ -1,6 +1,8 @@
 # Python cache
 __pycache__/
 *.pyc
+venv/
+.vercel/
 
 # Heavy Media & Background Videos
 backgrounds/*.mp4
@@ -11,3 +13,5 @@ data/quran.json
 
 # Environment variables
 .env
+.env.*
+!.env.example

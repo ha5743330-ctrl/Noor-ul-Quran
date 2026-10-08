@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Noor ul Quran | Admin Access</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>body { font-family: 'DM Sans', sans-serif; }</style>
+</head>
+<body class="min-h-screen bg-slate-950 text-slate-100">
+    <header class="border-b border-slate-800 bg-slate-900/80">
+        <div class="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-4">
+            <div>
+                <p class="text-xs font-semibold uppercase text-amber-400">Noor ul Quran</p>
+                <h1 class="mt-1 text-xl font-bold">Admin access</h1>
+            </div>
+            <div class="flex items-center gap-3">
+                <span id="admin-email" class="hidden text-sm text-slate-400 sm:inline"></span>
+                <button type="button" onclick="handleSignOut(event)" class="rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300 hover:bg-slate-800" title="Sign out">
+                    <i class="fa-solid fa-right-from-bracket"></i><span class="ml-2">Sign out</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="mx-auto max-w-6xl space-y-6 px-5 py-8">
+        <div id="admin-message" class="hidden rounded-lg border px-4 py-3 text-sm" role="status" aria-live="polite"></div>
+
+        <section class="border-b border-slate-800 pb-5">
+            <div class="flex flex-wrap items-end justify-between gap-4">
+                <div>
+                    <h2 class="text-lg font-semibold">Registered users</h2>
+                    <p class="mt-1 text-sm text-slate-400">Grant or revoke premium access. Free accounts can generate single picks.</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <label class="sr-only" for="user-search">Search users</label>
+                    <input id="user-search" type="search" placeholder="Search email or name" class="w-64 max-w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-amber-500 focus:outline-none">
+                    <button id="refresh-users" type="button" class="h-10 w-10 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800" title="Refresh users">
+                        <i class="fa-solid fa-rotate"></i>
+                    </button>
+                </div>
+            </div>
+            <p id="user-count" class="mt-4 text-xs text-slate-500"></p>
+        </section>
+
+        <div class="overflow-x-auto">
+            <table class="w-full min-w-[700px] text-left text-sm">
+                <thead class="border-b border-slate-800 text-xs uppercase text-slate-500">
+                    <tr>
+                        <th class="px-3 py-3 font-semibold">Name</th>
+                        <th class="px-3 py-3 font-semibold">Email</th>
+                        <th class="px-3 py-3 font-semibold">Created</th>
+                        <th class="px-3 py-3 font-semibold">Premium access</th>
+                    </tr>
+                </thead>
+                <tbody id="users-table" class="divide-y divide-slate-800"></tbody>
+            </table>
+        </div>
+
+        <section class="space-y-4 border-t border-slate-800 pt-6">
+            <div>
+                <h2 class="text-lg font-semibold">Background clips</h2>
+                <p class="mt-1 text-sm text-slate-400">Upload MP4 or MOV clips for generated reels. Maximum file size: 50 MB.</p>
+            </div>
+            <form id="background-upload-form" class="flex flex-wrap items-center gap-3">
+                <label class="sr-only" for="background-file">Choose a video clip</label>
+                <input id="background-file" type="file" accept="video/mp4,video/quicktime,.mp4,.mov" required class="max-w-full text-sm text-slate-300 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-800 file:px-3 file:py-2 file:text-slate-200">
+                <button id="background-upload-button" type="submit" class="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-amber-400">
+                    <i class="fa-solid fa-upload mr-2"></i>Upload clip
+                </button>
+            </form>
+            <ul id="background-list" class="divide-y divide-slate-800 text-sm text-slate-300"></ul>
+        </section>
+
+        <footer class="border-t border-slate-800 pt-4">
+            <a href="/" class="text-sm text-amber-400 hover:text-amber-300"><i class="fa-solid fa-arrow-left mr-2"></i>Back to generator</a>
+        </footer>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="/config.js"></script>
+    <script src="/auth.js?v=7"></script>
+    <script src="/admin.js?v=3"></script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+venv/
+__pycache__/
+*.py
+*.pyc
+requirements.txt
+Dockerfile
+render.yaml
+.dockerignore
+.env
+.env.*
+node_modules/
+audio/
+backgrounds/
+output/
+cache/
+data/quran.json
+schema.sql

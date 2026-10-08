@@ -1,0 +1,14 @@
+.git/
+.vercel/
+venv/
+__pycache__/
+*.pyc
+.env
+.env.*
+node_modules/
+audio/
+backgrounds/*.mp4
+backgrounds/*.mov
+output/
+cache/
+data/quran.json
