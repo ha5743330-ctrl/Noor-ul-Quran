@@ -98,9 +98,16 @@ def encode_video(cmd, outfile):
 
     run(
         cmd
-        + ["-c:v", "libx264", "-preset", "superfast", "-crf", "22", "-pix_fmt", "yuv420p"]
+        + ["-c:v", "libx264", "-preset", "ultrafast", "-crf", "24", "-threads", "2", "-pix_fmt", "yuv420p"]
         + audio_args
     )
+
+def set_video_quality(quality):
+    global W, H, FPS
+    if quality == "high":
+        W, H, FPS = 1080, 1920, 30
+    else:
+        W, H, FPS = 720, 1280, 24
 
 def background_playlist(bgs, total, rng):
     unique, sizes = [], {}
@@ -420,9 +427,14 @@ def main():
     ap.add_argument("--seed", type=int)
     ap.add_argument("--min-dur", type=int, default=MIN_DUR)
     ap.add_argument("--max-dur", type=int, default=MAX_DUR)
+    ap.add_argument("--quality", choices=("balanced", "high"), default="balanced")
+    ap.add_argument("--batch-id")
+    ap.add_argument("--work-dir")
+    ap.add_argument("--result-json")
     ap.add_argument("--check", nargs="*", type=int)
     ap.add_argument("--dry", action="store_true")
     a = ap.parse_args()
+    set_video_quality(a.quality)
     
     qf = ROOT / "data/quran.json"
     if not qf.exists(): sys.exit("Pehle chalao: python fetch_assets.py")
@@ -443,18 +455,49 @@ def main():
         picks = parse_picks(a.picks) if a.picks else pick_random(Q, a.random, rng, a.min_dur, a.max_dur) if a.random else sys.exit("--picks, --pick ya --random do")
     bgs = [p for p in BACKGROUND_DIR.glob("*") if p.suffix.lower() in (".mp4", ".mov")]
     if not bgs: sys.exit("backgrounds/ folder mein mp4 clips daalo")
-    out = OUTPUT_DIR; out.mkdir(exist_ok=True, parents=True); tmp = CACHE_DIR / "tmp"; tmp.mkdir(exist_ok=True, parents=True)
+    out = OUTPUT_DIR; out.mkdir(exist_ok=True, parents=True)
+    tmp = Path(a.work_dir) if a.work_dir else CACHE_DIR / "tmp"
+    tmp.mkdir(exist_ok=True, parents=True)
+    batch_id = re.sub(r"[^A-Za-z0-9_-]", "", a.batch_id or "")
     capf = out / "captions.csv"; newcap = not capf.exists()
+
+    if a.dry:
+        for i, (s, a0, a1) in enumerate(picks, 1):
+            print(f"[{i}/{len(picks)}] Surah {s}:{a0}-{a1} [{a.quality}]")
+        return
     
+    generated = []
+    result_path = Path(a.result_json) if a.result_json else None
     with open(capf, "a", newline="", encoding="utf-8-sig") as fh:
         w = csv.writer(fh); newcap and w.writerow(["file", "caption"])
         for i, (s, a0, a1) in enumerate(picks, 1):
-            name = f"{i:03d}_s{s}_{a0}-{a1}.mp4"; print(f"[{i}/{len(picks)}] Surah {s}:{a0}-{a1}", end=" ")
-            if a.dry: print(); continue
-            res = build(Q, s, a0, a1, out / name, bgs, rng, tmp)
+            prefix = f"{batch_id}_" if batch_id else ""
+            name = f"{prefix}{i:03d}_s{s}_{a0}-{a1}.mp4"
+            outfile = out / name
+            suffix = 1
+            while outfile.exists():
+                outfile = out / f"{Path(name).stem}_{suffix}.mp4"
+                suffix += 1
+            name = outfile.name
+            print(f"[{i}/{len(picks)}] Surah {s}:{a0}-{a1}", end=" ")
+            res = build(Q, s, a0, a1, outfile, bgs, rng, tmp)
             if res is None: print("SKIP (audio download nahi hui)"); continue
             S, total = res
             print(f"-> {name} ({total:.0f}s)")
-            w.writerow([name, f"Surah {S['english']} ({s}) | Ayat {a0}" + (f"-{a1}" if a1 != a0 else "") + f"\n#Quran #Islam #{S['english'].replace(' ', '').replace('-', '')}"])
+            caption = f"Surah {S['english']} ({s}) | Ayat {a0}" + (f"-{a1}" if a1 != a0 else "") + f"\n#Quran #Islam #{S['english'].replace(' ', '').replace('-', '')}"
+            w.writerow([name, caption])
+            generated.append({
+                "filename": name,
+                "caption": caption,
+                "surah": s,
+                "start_ayah": a0,
+                "end_ayah": a1,
+                "duration": round(total, 2),
+            })
+            if result_path:
+                result_path.parent.mkdir(exist_ok=True, parents=True)
+                temp_result_path = result_path.with_suffix(result_path.suffix + ".tmp")
+                temp_result_path.write_text(json.dumps(generated, ensure_ascii=False), encoding="utf-8")
+                temp_result_path.replace(result_path)
 
 if __name__ == "__main__": main()

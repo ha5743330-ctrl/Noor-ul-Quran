@@ -1,7 +1,10 @@
 import json
 import os
+import shutil
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor
+from threading import Lock
 from pathlib import Path
 from typing import Optional
 from urllib.parse import quote
@@ -39,6 +42,10 @@ ALLOWED_AUDIO_TYPES = {
 
 # 2. FastAPI App Initialize Karein
 app = FastAPI(title="Noor ul Quran API Engine")
+GENERATION_LOCK = Lock()
+GENERATION_JOBS_LOCK = Lock()
+GENERATION_JOBS = {}
+GENERATION_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="quran-render")
 
 # 3. CORS Setup (Frontend Integration ke liye)
 app.add_middleware(
@@ -67,6 +74,7 @@ class GenerateRequest(BaseModel):
     verse: Optional[str] = None  # e.g. "55:1-8"
     random_count: int = 1
     max_duration: int = 60
+    quality: str = "balanced"
 
 
 class PremiumAccessRequest(BaseModel):
@@ -551,7 +559,7 @@ def signin_html_page():
     return RedirectResponse(url="/auth.html")
 
 
-@app.post("/api/generate")
+@app.post("/api/generate", status_code=202)
 def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
     if req.mode not in {"pick", "picks", "random"}:
         raise HTTPException(status_code=400, detail="Invalid generation mode.")
@@ -563,6 +571,8 @@ def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
         raise HTTPException(status_code=400, detail="Random count must be between 1 and 25.")
     if req.max_duration < 20 or req.max_duration > 600:
         raise HTTPException(status_code=400, detail="Maximum duration must be between 20 and 600 seconds.")
+    if req.quality not in {"balanced", "high"}:
+        raise HTTPException(status_code=400, detail="Quality must be balanced or high.")
 
     cmd = [sys.executable, str(BASE_DIR / "make.py")]
     if req.mode == "pick" and req.verse:
@@ -574,45 +584,125 @@ def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
     else:
         raise HTTPException(status_code=400, detail="Verse is required for single-pick generation.")
 
-    cmd.extend(["--max-dur", str(req.max_duration)])
+    batch_id = uuid4().hex[:10]
+    work_dir = CACHE_DIR / "tmp" / batch_id
+    manifest_path = CACHE_DIR / f"batch-{batch_id}.json"
+    cmd.extend([
+        "--max-dur", str(req.max_duration),
+        "--quality", req.quality,
+        "--batch-id", batch_id,
+        "--work-dir", str(work_dir),
+        "--result-json", str(manifest_path),
+    ])
 
-    try:
-        _prepare_ephemeral_media()
-        completed = subprocess.run(cmd, cwd=str(BASE_DIR), capture_output=True, text=True)
-        if completed.returncode != 0:
-            raise HTTPException(
-                status_code=500,
-                detail=(completed.stderr or completed.stdout or "Video rendering failed."),
-            )
-
-        filename = _latest_generated_video()
-        if not filename:
-            raise HTTPException(status_code=500, detail="No video output was generated.")
-
-        video_url = f"/output/{filename}"
-        if SUPABASE_SERVICE_KEY:
-            video_path = OUTPUT_DIR / filename
-            stored_video = f"videos/{uuid4().hex}_{filename}"
-            _upload_media_file(video_path, stored_video, "video/mp4")
-            captions_path = OUTPUT_DIR / "captions.csv"
-            used_path = CACHE_DIR / "used.json"
-            if captions_path.exists():
-                _upload_media_file(captions_path, "metadata/captions.csv", "text/csv")
-            if used_path.exists():
-                _upload_media_file(used_path, "state/used.json", "application/json")
-            video_url = _signed_media_url(stored_video)
-
-        return {
-            "status": "success",
-            "message": "Video rendering completed successfully.",
+    job_id = uuid4().hex
+    with GENERATION_JOBS_LOCK:
+        if len(GENERATION_JOBS) >= 64:
+            for old_job_id, old_job in list(GENERATION_JOBS.items()):
+                if old_job["status"] in {"completed", "partial", "failed"}:
+                    GENERATION_JOBS.pop(old_job_id)
+                if len(GENERATION_JOBS) < 64:
+                    break
+        if len(GENERATION_JOBS) >= 64:
+            raise HTTPException(status_code=503, detail="Generation queue is full. Try again after a running reel finishes.")
+        GENERATION_JOBS[job_id] = {
+            "owner_id": user["id"],
+            "status": "queued",
             "mode": req.mode,
-            "filename": filename,
-            "url": video_url,
+            "quality": req.quality,
+            "error": None,
+            "videos": [],
+            "manifest_path": str(manifest_path),
         }
-    except HTTPException:
-        raise
+    GENERATION_EXECUTOR.submit(
+        _run_generation_job,
+        job_id,
+        cmd,
+        req.mode,
+        manifest_path,
+        work_dir,
+    )
+    return {
+        "job_id": job_id,
+        "status": "queued",
+        "message": "Generation queued. Each reel will appear here as soon as it is ready.",
+        "videos": [],
+    }
+
+
+def _read_generation_manifest(manifest_path: Path):
+    try:
+        return json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+
+
+def _run_generation_job(job_id, cmd, mode, manifest_path, work_dir):
+    with GENERATION_JOBS_LOCK:
+        job = GENERATION_JOBS.get(job_id)
+        if job:
+            job["status"] = "processing"
+    try:
+        with GENERATION_LOCK:
+            _prepare_ephemeral_media()
+            completed = subprocess.run(cmd, cwd=str(BASE_DIR), capture_output=True, text=True)
+            videos = _read_generation_manifest(manifest_path)
+            if completed.returncode != 0 and not videos:
+                raise RuntimeError(completed.stderr or completed.stdout or "Video rendering failed.")
+            if not videos:
+                raise RuntimeError("No video output was generated.")
+
+            for video in videos:
+                video["url"] = f"/output/{quote(video['filename'], safe='')}"
+                if SUPABASE_SERVICE_KEY:
+                    video_path = OUTPUT_DIR / video["filename"]
+                    stored_video = f"videos/{uuid4().hex}_{video['filename']}"
+                    _upload_media_file(video_path, stored_video, "video/mp4")
+                    video["url"] = _signed_media_url(stored_video)
+
+            if SUPABASE_SERVICE_KEY:
+                captions_path = OUTPUT_DIR / "captions.csv"
+                used_path = CACHE_DIR / "used.json"
+                if captions_path.exists():
+                    _upload_media_file(captions_path, "metadata/captions.csv", "text/csv")
+                if used_path.exists():
+                    _upload_media_file(used_path, "state/used.json", "application/json")
+
+        with GENERATION_JOBS_LOCK:
+            job = GENERATION_JOBS.get(job_id)
+            if job:
+                job["videos"] = videos
+                job["status"] = "completed" if completed.returncode == 0 else "partial"
+                job["message"] = "All reels are ready." if completed.returncode == 0 else "Some reels could not be rendered; completed reels are ready."
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        with GENERATION_JOBS_LOCK:
+            job = GENERATION_JOBS.get(job_id)
+            if job:
+                job["status"] = "failed"
+                job["error"] = str(exc)
+                job["videos"] = _read_generation_manifest(manifest_path)
+    finally:
+        shutil.rmtree(work_dir, ignore_errors=True)
+        manifest_path.unlink(missing_ok=True)
+        manifest_path.with_suffix(manifest_path.suffix + ".tmp").unlink(missing_ok=True)
+
+
+@app.get("/api/generate/{job_id}")
+def generation_status(job_id: str, user=Depends(get_current_user)):
+    with GENERATION_JOBS_LOCK:
+        job = GENERATION_JOBS.get(job_id)
+        if not job or job["owner_id"] != user["id"]:
+            raise HTTPException(status_code=404, detail="Generation job not found.")
+        response = {key: value for key, value in job.items() if key not in {"owner_id", "manifest_path"}}
+        manifest_path = Path(job["manifest_path"])
+
+    if response["status"] in {"queued", "processing"}:
+        response["videos"] = _read_generation_manifest(manifest_path)
+
+    for video in response["videos"]:
+        video.setdefault("url", f"/output/{quote(video['filename'], safe='')}")
+    response["job_id"] = job_id
+    return response
 
 
 # 7. Static Web Files Serve Karein (MUST BE AT THE VERY BOTTOM)

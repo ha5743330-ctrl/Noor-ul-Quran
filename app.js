@@ -1,5 +1,7 @@
 const API_BASE_URL = (window.NOOR_API_BASE_URL || window.NOOR_SUPABASE_CONFIG?.apiBaseUrl || "/api").replace(/\/$/, "");
 window.userAccess = null;
+let generatedVideos = [];
+let currentVideoIndex = 0;
 
 document.addEventListener("DOMContentLoaded", initializeStudio);
 
@@ -72,17 +74,23 @@ async function generateVideo(event) {
     const outputBox = document.getElementById("output-box");
     const logMsg = document.getElementById("log-message");
     const statusPercent = document.getElementById("status-percent");
+    const generateButton = document.getElementById("generate-button");
 
     // Validation
     if (mode === "pick" && !verse) {
         alert("Please enter a Surah:Verse range (e.g., 55:1-8)");
         return;
     }
+    if (generateButton?.disabled) return;
 
     // Show Terminal Progress Box
     if (outputBox) outputBox.classList.remove("hidden");
     if (logMsg) logMsg.innerText = "> Sending request to Python FFmpeg Rendering Engine...";
-    if (statusPercent) statusPercent.innerText = "25%";
+    if (statusPercent) statusPercent.innerText = "Working";
+    if (generateButton) {
+        generateButton.disabled = true;
+        generateButton.setAttribute("aria-busy", "true");
+    }
 
     if (statusBox) {
         statusBox.innerText = "⏳ Request sent! Rendering started in background...";
@@ -105,58 +113,163 @@ async function generateVideo(event) {
                 mode: mode,
                 verse: verse,
                 max_duration: parseInt(duration, 10),
-                random_count: parseInt(document.getElementById("input-random-count")?.value || "1", 10)
+                random_count: parseInt(document.getElementById("input-random-count")?.value || "1", 10),
+                quality: document.getElementById("input-quality")?.value || "balanced"
             })
         });
 
-        const result = await response.json();
+        let result = await response.json().catch(() => ({ detail: `Server returned HTTP ${response.status}.` }));
+        if (response.status === 202 && result.job_id) {
+            result = await waitForGeneration(result.job_id, session.access_token, statusBox, logMsg, statusPercent);
+        }
 
-        if (response.ok) {
-            if (logMsg) logMsg.innerText = "✓ " + (result.message || "Video rendered successfully!");
+        if (response.ok && result.status !== "failed") {
+            if (logMsg) logMsg.innerText = "✓ " + (result.message || "Video rendering completed.");
             if (statusPercent) statusPercent.innerText = "100%";
             if (statusBox) {
-                statusBox.innerText = "✅ Video generation complete!";
-                statusBox.style.color = "#059669";
+                statusBox.innerText = result.status === "partial"
+                    ? "⚠ Some reels could not be rendered. Completed reels are available below."
+                    : `✅ ${result.videos?.length || 1} reel(s) ready to preview.`;
+                statusBox.style.color = result.status === "partial" ? "#d97706" : "#059669";
             }
-
-            // Video Preview & Download Setup
-            const videoPreviewBox = document.getElementById("video-preview-box");
-            const videoPlayer = document.getElementById("rendered-video-player");
-            const videoSource = document.getElementById("video-source");
-            const downloadBtn = document.getElementById("download-btn");
-            const previewFilename = document.getElementById("preview-filename");
-
-            const filename = result.filename || `001_s${verse.replace(':', '_')}.mp4`;
-
-            if (videoPreviewBox && videoPlayer) {
-                const apiOrigin = new URL(API_BASE_URL, window.location.origin).origin;
-                const videoUrl = new URL(result.url || `/output/${encodeURIComponent(filename)}`, apiOrigin);
-
-                if (videoSource) videoSource.src = videoUrl.href;
-                if (downloadBtn) downloadBtn.href = videoUrl.href;
-                if (previewFilename) previewFilename.innerText = filename;
-
-                videoPlayer.load();
-                videoPreviewBox.classList.remove("hidden");
-            }
+            const videos = Array.isArray(result.videos) ? result.videos : result.filename ? [result] : [];
+            showGeneratedVideos(videos);
         } else {
-            if (logMsg) logMsg.innerText = "❌ Error: " + (result.detail || "Generation failed.");
+            if (result.videos?.length) showGeneratedVideos(result.videos);
+            const errorMessage = result.error || result.detail || "Generation failed.";
+            if (logMsg) logMsg.innerText = "❌ Error: " + errorMessage;
             if (statusPercent) statusPercent.innerText = "0%";
             if (statusBox) {
-                statusBox.innerText = "❌ Error: " + (result.detail || "Generation failed.");
+                statusBox.innerText = "❌ Error: " + errorMessage;
                 statusBox.style.color = "#dc2626";
             }
         }
     } catch (error) {
         console.error("API Error:", error);
-        if (logMsg) logMsg.innerText = "❌ Unable to connect to FastAPI Backend Server.";
+        const errorMessage = error.message || "Unable to connect to FastAPI Backend Server.";
+        if (logMsg) logMsg.innerText = "❌ " + errorMessage;
         if (statusPercent) statusPercent.innerText = "0%";
         if (statusBox) {
-            statusBox.innerText = "❌ Connection failed. Make sure server is running.";
+            statusBox.innerText = "❌ " + errorMessage;
             statusBox.style.color = "#dc2626";
+        }
+    } finally {
+        if (generateButton) {
+            generateButton.removeAttribute("aria-busy");
+            const hasPremium = Boolean(window.userAccess?.is_admin || window.userAccess?.premium_access);
+            const currentMode = document.getElementById("mode-select")?.value || "pick";
+            generateButton.disabled = currentMode !== "pick" && !hasPremium;
         }
     }
 }
+
+async function waitForGeneration(jobId, accessToken, statusBox, logMsg, statusPercent) {
+    let lastVideoCount = 0;
+    while (true) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        const response = await fetch(`${API_BASE_URL}/generate/${encodeURIComponent(jobId)}`, {
+            headers: { Authorization: `Bearer ${accessToken}` }
+        });
+        const job = await response.json().catch(() => ({ error: `Status check returned HTTP ${response.status}.` }));
+        if (!response.ok) throw new Error(job.detail || job.error || "Could not read generation status.");
+
+        const videos = Array.isArray(job.videos) ? job.videos : [];
+        if (videos.length) showGeneratedVideos(videos);
+        if (videos.length !== lastVideoCount) {
+            lastVideoCount = videos.length;
+            if (statusPercent) statusPercent.innerText = `${lastVideoCount} ready`;
+            if (logMsg) logMsg.innerText = `✓ ${lastVideoCount} reel(s) ready; remaining reels are still rendering.`;
+            if (statusBox) {
+                statusBox.innerText = `✅ ${lastVideoCount} reel(s) ready. You can preview or download them while the batch continues.`;
+                statusBox.style.color = "#059669";
+            }
+        }
+        if (["completed", "partial", "failed"].includes(job.status)) return job;
+    }
+}
+
+function showGeneratedVideos(videos) {
+    const wasEmpty = generatedVideos.length === 0;
+    const selectedFilename = generatedVideos[currentVideoIndex]?.filename;
+    generatedVideos = videos;
+    const selectedIndex = generatedVideos.findIndex((video) => video.filename === selectedFilename);
+    currentVideoIndex = selectedIndex >= 0 ? selectedIndex : Math.min(currentVideoIndex, generatedVideos.length - 1);
+    const previewBox = document.getElementById("video-preview-box");
+    if (!generatedVideos.length || !previewBox) return;
+    previewBox.classList.remove("hidden");
+    renderCurrentVideo();
+    if (wasEmpty) previewBox.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+function renderCurrentVideo() {
+    const video = generatedVideos[currentVideoIndex];
+    if (!video) return;
+    const player = document.getElementById("rendered-video-player");
+    const apiOrigin = new URL(API_BASE_URL, window.location.origin).origin;
+    const fallbackUrl = `/output/${encodeURIComponent(video.filename)}`;
+    const videoUrl = new URL(video.url || fallbackUrl, apiOrigin);
+    const previewBox = document.getElementById("video-preview-box");
+    const filename = document.getElementById("preview-filename");
+    const counter = document.getElementById("preview-counter");
+    const downloadButton = document.getElementById("download-btn");
+    const caption = document.getElementById("preview-caption");
+    const previousButton = document.getElementById("preview-previous");
+    const nextButton = document.getElementById("preview-next");
+    const gallery = document.getElementById("video-gallery");
+
+    if (player) {
+        player.pause();
+        player.src = videoUrl.href;
+        player.load();
+    }
+    if (filename) filename.textContent = video.filename || `Reel ${currentVideoIndex + 1}`;
+    if (counter) counter.textContent = `${currentVideoIndex + 1} / ${generatedVideos.length}`;
+    if (downloadButton) {
+        downloadButton.href = videoUrl.href;
+        downloadButton.download = video.filename || "noor-ul-quran-reel.mp4";
+    }
+    if (caption) caption.textContent = video.caption || "";
+    if (previousButton) previousButton.disabled = currentVideoIndex === 0;
+    if (nextButton) nextButton.disabled = currentVideoIndex === generatedVideos.length - 1;
+    if (gallery) {
+        gallery.replaceChildren(...generatedVideos.map((item, index) => {
+            const button = document.createElement("button");
+            const range = item.start_ayah === item.end_ayah
+                ? `${item.start_ayah ?? ""}`
+                : `${item.start_ayah ?? ""}-${item.end_ayah ?? ""}`;
+            button.type = "button";
+            button.setAttribute("aria-label", `Show Surah ${item.surah ?? ""}, verses ${range}`);
+            button.setAttribute("aria-current", index === currentVideoIndex ? "true" : "false");
+            button.title = item.filename || `Reel ${index + 1}`;
+            button.className = `shrink-0 max-w-56 truncate rounded-md border px-3 py-2 text-xs font-semibold ${index === currentVideoIndex ? "border-amber-400 bg-amber-500/15 text-amber-200" : "border-slate-700 bg-slate-950 text-slate-300 hover:border-slate-500"}`;
+            button.textContent = `Surah ${item.surah ?? ""} · ${range}`;
+            button.addEventListener("click", () => {
+                currentVideoIndex = index;
+                renderCurrentVideo();
+            });
+            return button;
+        }));
+    }
+    if (previewBox) previewBox.setAttribute("aria-label", `Reel ${currentVideoIndex + 1} of ${generatedVideos.length}`);
+}
+
+function showPreviousVideo() {
+    if (currentVideoIndex <= 0) return;
+    currentVideoIndex -= 1;
+    renderCurrentVideo();
+}
+
+function showNextVideo() {
+    if (currentVideoIndex >= generatedVideos.length - 1) return;
+    currentVideoIndex += 1;
+    renderCurrentVideo();
+}
+
+document.addEventListener("keydown", (event) => {
+    if (event.altKey || event.ctrlKey || event.metaKey || event.target.matches("input, textarea, select, video, [contenteditable='true']")) return;
+    if (event.key === "ArrowLeft") showPreviousVideo();
+    if (event.key === "ArrowRight") showNextVideo();
+});
 
 function setMode(mode) {
     const allowedMode = ["pick", "picks", "random"].includes(mode) ? mode : "pick";
@@ -189,7 +302,13 @@ async function handleFormSubmit(event) {
     await generateVideo(event);
 }
 
-function copyCaption() {
-    navigator.clipboard.writeText("Generated with Noor ul Quran Auto Reel Maker #QuranReels #IslamicContent");
-    alert("Captions copied to clipboard!");
+async function copyCaption() {
+    const caption = generatedVideos[currentVideoIndex]?.caption || "Generated with Noor ul Quran Auto Reel Maker #QuranReels #IslamicContent";
+    try {
+        await navigator.clipboard.writeText(caption);
+        alert("Caption copied to clipboard!");
+    } catch (error) {
+        console.error("Clipboard error:", error);
+        alert("Could not copy the caption. Check browser clipboard permissions.");
+    }
 }
