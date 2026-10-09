@@ -10,13 +10,13 @@ The frontend is a static Vercel site. The Python/FFmpeg renderer runs as a Docke
    - `SUPABASE_URL`: the Supabase project URL.
    - `SUPABASE_ANON_KEY`: the Supabase publishable key. Never use the service-role key.
    - `API_BASE_URL`: set this after Render is deployed, using `https://YOUR_RENDER_SERVICE.onrender.com/api`.
-4. Re-run the updated `schema.sql` in the Supabase SQL Editor. It is idempotent and creates the private `noor-media` Storage bucket in addition to the role tables/RPCs.
+4. Re-run the updated `schema.sql` in the Supabase SQL Editor. It is idempotent and creates/updates the private `noor-media` Storage bucket for generated media, background clips, admin verse text overrides, and Arabic/Urdu audio.
 5. Create a Render Blueprint from the same repository and select `render.yaml`. It builds the `Dockerfile` and installs FFmpeg. Render Free's local filesystem is temporary; the app copies media to/from Supabase Storage.
 6. Render prompts for `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and `FRONTEND_ORIGINS`. Set `FRONTEND_ORIGINS` to the Vercel site's exact origin, such as `https://your-project.vercel.app`.
    - Enter the service-role/secret key only in Render's server environment. Never use it in Vercel or browser code, and never send it in chat.
 7. Copy the Render service URL into Vercel's `API_BASE_URL`, then redeploy the Vercel project.
 8. In Supabase Authentication URL Configuration, add the Vercel origin and `https://your-project.vercel.app/**` to the allowed redirect URLs. Keep the local `http://127.0.0.1:8000/**` redirect for local development if needed.
-9. Sign in as the seeded admin and use Admin Access to upload the MP4/MOV background clips. Generated videos and captions are stored in the private bucket and served with signed URLs.
+9. Sign in as the seeded admin and use Admin Access to upload MP4/MOV backgrounds, per-ayah Arabic/Urdu text overrides, and Arabic/Urdu audio. Generated videos and captions are stored in the private bucket and served with signed URLs.
 
 ## Hosting notes
 

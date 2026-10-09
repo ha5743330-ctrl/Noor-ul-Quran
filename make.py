@@ -4,6 +4,8 @@
    python make.py --picks picks.txt --max-dur 90  (Waqia/Long Reel up to 1m 30s)
 """
 import argparse, csv, json, os, random, re, shutil, subprocess, sys, time
+import hashlib
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont, features
 import requests
@@ -35,6 +37,10 @@ ROOT = Path(__file__).parent
 OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", ROOT / "output"))
 BACKGROUND_DIR = Path(os.getenv("BACKGROUNDS_DIR", ROOT / "backgrounds"))
 CACHE_DIR = Path(os.getenv("CACHE_DIR", ROOT / "cache"))
+ADMIN_CONTENT_FILE = ROOT / "data" / "admin_content.json"
+ADMIN_AUDIO_DIR = ROOT / "audio" / "admin"
+_admin_content = None
+_hardware_encoder = None
 
 def run(cmd, **kw):
     return subprocess.run(cmd, check=True, **kw)
@@ -43,6 +49,93 @@ def dur(path):
     r = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)],
                        capture_output=True, text=True, check=True)
     return float(r.stdout.strip())
+
+def detect_hardware_encoder():
+    global _hardware_encoder
+    if _hardware_encoder is not None:
+        return _hardware_encoder
+
+    for encoder in ("h264_nvenc", "h264_qsv", "h264_amf"):
+        try:
+            probe = subprocess.run(
+                [
+                    "ffmpeg", "-nostdin", "-hide_banner", "-v", "error",
+                    "-f", "lavfi", "-i", "color=c=black:s=64x64:d=0.1",
+                    "-frames:v", "1", "-c:v", encoder, "-f", "null", "-",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+        except subprocess.TimeoutExpired:
+            continue
+        if probe.returncode == 0:
+            _hardware_encoder = encoder
+            return encoder
+
+    _hardware_encoder = ""
+    return _hardware_encoder
+
+def encode_video(cmd, outfile):
+    encoder = detect_hardware_encoder()
+    audio_args = ["-c:a", "aac", "-b:a", "192k", str(outfile)]
+
+    if encoder == "h264_nvenc":
+        hardware_args = ["-c:v", encoder, "-preset", "p4", "-rc", "vbr", "-b:v", "650k", "-maxrate", "900k", "-bufsize", "1800k"]
+    elif encoder == "h264_qsv":
+        hardware_args = ["-c:v", encoder, "-preset", "veryfast", "-b:v", "650k", "-maxrate", "900k", "-bufsize", "1800k", "-look_ahead", "0"]
+    elif encoder == "h264_amf":
+        hardware_args = ["-c:v", encoder, "-quality", "speed", "-rc", "cqp", "-qp_i", "22", "-qp_p", "22"]
+    else:
+        hardware_args = []
+
+    if hardware_args:
+        result = subprocess.run(cmd + hardware_args + ["-pix_fmt", "yuv420p"] + audio_args, check=False)
+        if result.returncode == 0:
+            return
+        print(f"Hardware encoder {encoder} failed; retrying with CPU encoding.", file=sys.stderr)
+        Path(outfile).unlink(missing_ok=True)
+
+    run(
+        cmd
+        + ["-c:v", "libx264", "-preset", "superfast", "-crf", "22", "-pix_fmt", "yuv420p"]
+        + audio_args
+    )
+
+def background_playlist(bgs, total, rng):
+    unique, sizes = [], {}
+    for path in bgs:
+        sizes.setdefault(path.stat().st_size, []).append(path)
+
+    for same_size_paths in sizes.values():
+        if len(same_size_paths) == 1:
+            unique.extend(same_size_paths)
+            continue
+        digests = set()
+        for path in same_size_paths:
+            digest_builder = hashlib.sha256()
+            with path.open("rb") as clip_file:
+                for chunk in iter(lambda: clip_file.read(1024 * 1024), b""):
+                    digest_builder.update(chunk)
+            digest = digest_builder.digest()
+            if digest not in digests:
+                unique.append(path)
+                digests.add(digest)
+
+    playlist, remaining, previous = [], total, None
+    durations = {path: dur(path) for path in unique}
+    while remaining > 0.001:
+        choices = [path for path in unique if path != previous]
+        path = rng.choice(choices or unique)
+        clip_duration = durations[path]
+        segment_duration = min(clip_duration, remaining)
+        if segment_duration <= 0:
+            raise RuntimeError(f"Background video has invalid duration: {path}")
+        seek = rng.uniform(0, clip_duration - segment_duration) if clip_duration > segment_duration else 0
+        playlist.append((path, seek, segment_duration))
+        remaining -= segment_duration
+        previous = path
+    return playlist
 
 def urdu_digits(n): return str(n).translate(str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹"))
 def strip_harakat_surah(s): return re.sub("[\u064B-\u065F\u0670\u06D6-\u06ED]", "", s)
@@ -53,7 +146,22 @@ def remove_leading_bismillah(text):
     actual = [strip_harakat_surah(word).replace("ٱ", "ا") for word in words[:4]]
     return " ".join(words[4:]) if actual == expected else text
 
+def admin_content():
+    global _admin_content
+    if _admin_content is None:
+        if ADMIN_CONTENT_FILE.exists():
+            _admin_content = json.loads(ADMIN_CONTENT_FILE.read_text(encoding="utf-8"))
+        else:
+            _admin_content = {"verses": {}}
+    return _admin_content
+
 def fetch_ayah(kind, s, a):
+    verse = admin_content()["verses"].get(f"{s}:{a}", {})
+    custom_extension = verse.get("audio", {}).get(kind)
+    if custom_extension:
+        custom_path = ADMIN_AUDIO_DIR / f"{s:03d}{a:03d}_{kind}.{custom_extension}"
+        return custom_path if custom_path.exists() and custom_path.stat().st_size > 1000 else None
+
     p = ROOT / "audio" / kind / f"{s:03d}{a:03d}.mp3"
     if p.exists() and p.stat().st_size > 1000: return p
     folder = ARABIC_FOLDER if kind == "arabic" else URDU_FOLDER
@@ -150,13 +258,23 @@ def chunk_png(path, lines, font, spacing, base, is_arabic=False):
 def plan_reel(Q, s, a0, a1):
     items = []
     surah_data = Q["surahs"][str(s)]
+    audio_tasks = [
+        (kind, s, ayah)
+        for ayah in range(a0, a1 + 1)
+        for kind in (("arabic", "urdu") if INCLUDE_ARABIC_AUDIO else ("urdu",))
+    ]
+    if audio_tasks:
+        with ThreadPoolExecutor(max_workers=min(8, len(audio_tasks))) as executor:
+            list(executor.map(lambda task: fetch_ayah(*task), audio_tasks))
+
     for a in range(a0, a1 + 1):
         c = ayah_clip(s, a)
         if c is None: return None
-        ar_text = surah_data.get("arabic", {}).get(str(a), "")
+        override = admin_content()["verses"].get(f"{s}:{a}", {})
+        ar_text = override.get("arabic_text") or surah_data.get("arabic", {}).get(str(a), "")
         if a == 1 and s != 9:
             ar_text = remove_leading_bismillah(ar_text)
-        ur_text = surah_data["ayahs"][str(a)]
+        ur_text = override.get("urdu_text") or surah_data["ayahs"][str(a)]
         items.append(dict(c, ayah=a, text=ur_text, arabic=ar_text))
     return items
 
@@ -214,13 +332,30 @@ def build(Q, s, a0, a1, outfile, bgs, rng, tmp):
     rows.append(f"file '{(tmp / f'c{len(timeline)-1}.png').resolve().as_posix()}'")
     lst.write_text("\n".join(rows))
     
-    bg = rng.choice(bgs); bgd = dur(bg); ss = rng.uniform(0, max(0, bgd - total - 1)) if bgd > total + 2 else 0
-    cmd = ["ffmpeg", "-nostdin", "-y", "-v", "error", "-stream_loop", "-1", "-ss", f"{ss:.2f}", "-i", str(bg),
-           "-f", "concat", "-safe", "0", "-i", str(lst)]
-    fc = [f"[0:v]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},fps={FPS},eq=brightness={BRIGHTNESS},setsar=1[v0]",
-          f"[1:v]fps={FPS},format=rgba[ov]", "[v0][ov]overlay=shortest=1[v1]",
+    playlist = background_playlist(bgs, total, rng)
+    cmd = ["ffmpeg", "-nostdin", "-y", "-v", "error"]
+    for path, seek, segment_duration in playlist:
+        cmd += ["-ss", f"{seek:.3f}", "-t", f"{segment_duration:.3f}", "-i", str(path)]
+    overlay_input = len(playlist)
+    cmd += ["-f", "concat", "-safe", "0", "-i", str(lst)]
+
+    fc = []
+    background_labels = []
+    for idx, (_, _, segment_duration) in enumerate(playlist):
+        label = f"bg{idx}"
+        fc.append(
+            f"[{idx}:v]fps={FPS},scale={W}:{H}:force_original_aspect_ratio=increase,"
+            f"crop={W}:{H},eq=brightness={BRIGHTNESS},setsar=1,"
+            f"tpad=stop_mode=clone:stop_duration=1,trim=duration={segment_duration:.3f},"
+            f"setpts=PTS-STARTPTS[{label}]"
+        )
+        background_labels.append(f"[{label}]")
+    fc.append(
+        "".join(background_labels) + f"concat=n={len(playlist)}:v=1:a=0[vbg]"
+    )
+    fc += [f"[{overlay_input}:v]fps={FPS},format=rgba[ov]", "[vbg][ov]overlay=shortest=1[v1]",
           f"[v1]fade=t=in:d=0.6,fade=t=out:st={total-0.7:.2f}:d=0.7[vout]"]
-    idx, labels = 2, []
+    idx, labels = overlay_input + 1, []
     norm = ",loudnorm=I=-18:TP=-2:LRA=7" if NORMALIZE_AUDIO else ""
     for it in items:
         for f, d_seg, pad in it["segs"]:
@@ -229,9 +364,8 @@ def build(Q, s, a0, a1, outfile, bgs, rng, tmp):
                       f"asetpts=PTS-STARTPTS" + (f",apad=pad_dur={pad}" if pad else "") + f"[s{idx}]")
             labels.append(f"[s{idx}]"); idx += 1
     fc.append("".join(labels) + f"concat=n={len(labels)}:v=0:a=1,afade=t=in:d=0.2,afade=t=out:st={total-0.5:.2f}:d=0.5[aout]")
-    cmd += ["-filter_complex", ";".join(fc), "-map", "[vout]", "-map", "[aout]", "-t", f"{total:.2f}",
-            "-c:v", "libx264", "-preset", "veryfast", "-crf", "22", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k", str(outfile)]
-    run(cmd)
+    cmd += ["-filter_complex", ";".join(fc), "-map", "[vout]", "-map", "[aout]", "-t", f"{total:.2f}"]
+    encode_video(cmd, outfile)
     return S, total
 
 def parse_picks(f):

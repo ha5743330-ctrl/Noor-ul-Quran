@@ -20,6 +20,24 @@ STEP 1: INITIAL SETUP & ASSETS
 
 
 --------------------------------------------------
+LOCAL WEBSITE SERVER START / STOP (WINDOWS)
+--------------------------------------------------
+
+1. Project folder VS Code mein kholein aur Terminal > New Terminal chunein.
+2. Agar terminal project folder mein nahi hai to chalaein:
+  cd "C:\Users\Panda Gaming Store\OneDrive\Desktop\Noor-ul-Quran"
+3. Local server start karne ke liye:
+  .\venv\Scripts\python -m uvicorn main:app --host 127.0.0.1 --port 8000
+4. Browser mein yeh address kholein:
+  http://127.0.0.1:8000
+5. Server ko band karne ke liye usi terminal mein Ctrl+C dabayein.
+
+Server chalte waqt usi port par doosra server start na karein. Agar "only one usage of each socket address" error aaye to port 8000 pehle se use ho raha hai. Pehle purane server wale terminal par ja kar Ctrl+C karein; agar woh terminal mil nahi raha to pehle check karein ke http://127.0.0.1:8000/api/health open ho raha hai ya nahi. Unknown process ko force stop na karein.
+
+Har dafa reels banane ke liye website/server chalna zaroori hai; terminal band karne par local server band ho jata hai. Browser session pehle se khula ho to page refresh karein.
+
+
+--------------------------------------------------
 STEP 2: VIDEOS GENERATE KARNE KI COMMANDS
 --------------------------------------------------
 
@@ -97,7 +115,8 @@ ZAROORI HIDAYAT
 --------------------------------------------------
 
 1. Pehli 5 videos ko upload karne se pehle zaroor sunein taake audio aur Urdu text ki sync check ho sake.
-2. Long videos (jaise 18:9-15) render hone mein 15–30 seconds ka time leti hain, is liye terminal ko beech mein stop na karein (Ctrl+C na dabayein).
+2. Render time video ki length aur computer par depend karta hai. Pehli dafa audio download hone ki wajah se extra waqt lag sakta hai. Supported GPU encoder available ho to use hota hai; warna faster CPU encoding chalta hai. Render mukammal hone tak terminal ko stop na karein (Ctrl+C na dabayein).
+3. Reel ke dauran backgrounds randomly change karne ke liye backgrounds/ mein kam az kam 2 alag videos rakhein. Har clip ke khatam hone par doosri clip aati hai; agar sirf 1 unique clip ho to usi ko repeat karna padega.
 
 
 --------------------------------------------------
@@ -111,3 +130,16 @@ USER LOGIN & ADMIN ACCESS (ONE-TIME SETUP)
 5. Admin Portal mein registered user ke Premium checkbox se bulk/custom/random access grant ya revoke karein.
 
 Naye users email confirmation ke baad sign in karenge. Free users single-pick mode use kar sakte hain; premium access custom list, random reels aur 60 seconds se lambi videos unlock karta hai.
+
+--------------------------------------------------
+ADMIN: BACKGROUND, TEXT & AUDIO ADD KARNA
+--------------------------------------------------
+
+1. Admin account se sign in karke Admin Portal kholein.
+2. "Background clips" mein MP4/MOV video upload karein (50 MB maximum).
+3. "Urdu / Arabic text and audio" mein Surah number aur Ayah number select karke Load verse dabayein.
+4. Arabic text aur Urdu tarjuma update karke Save text dabayein. Khali text ka matlab Quran data ka default text use hoga.
+5. Arabic recitation ya Urdu translation audio select karein, MP3/M4A/AAC/WAV file choose karein, phir Upload audio dabayein (50 MB maximum).
+6. Nayi reel banate waqt custom text/audio usi Surah:Ayah par use honge; jahan custom audio upload nahi ki, wahan default EveryAyah audio use hogi.
+
+Local use mein custom text/audio data/admin_content.json aur audio/admin/ mein save hota hai. Hosted Render deployment mein private Supabase Storage persistence ke liye schema.sql dobara run karein; service-role key sirf backend host ke environment mein honi chahiye.

@@ -26,7 +26,16 @@ MEDIA_BUCKET = os.getenv("SUPABASE_MEDIA_BUCKET", "noor-media")
 OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", BASE_DIR / "output"))
 BACKGROUND_DIR = Path(os.getenv("BACKGROUNDS_DIR", BASE_DIR / "backgrounds"))
 CACHE_DIR = Path(os.getenv("CACHE_DIR", BASE_DIR / "cache"))
+ADMIN_CONTENT_FILE = BASE_DIR / "data" / "admin_content.json"
+ADMIN_AUDIO_DIR = BASE_DIR / "audio" / "admin"
 MAX_BACKGROUND_BYTES = 50 * 1024 * 1024
+MAX_TEXT_LENGTH = 5000
+ALLOWED_AUDIO_TYPES = {
+    ".mp3": "audio/mpeg",
+    ".m4a": "audio/mp4",
+    ".aac": "audio/aac",
+    ".wav": "audio/wav",
+}
 
 # 2. FastAPI App Initialize Karein
 app = FastAPI(title="Noor ul Quran API Engine")
@@ -62,6 +71,48 @@ class GenerateRequest(BaseModel):
 
 class PremiumAccessRequest(BaseModel):
     enabled: bool
+
+
+class VerseContentRequest(BaseModel):
+    arabic_text: str = ""
+    urdu_text: str = ""
+
+
+def _load_admin_content():
+    if not ADMIN_CONTENT_FILE.exists():
+        return {"verses": {}}
+    try:
+        content = json.loads(ADMIN_CONTENT_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=500, detail="Admin verse content could not be read.") from exc
+    if not isinstance(content, dict) or not isinstance(content.get("verses"), dict):
+        raise HTTPException(status_code=500, detail="Admin verse content has an invalid format.")
+    return content
+
+
+def _save_admin_content(content):
+    ADMIN_CONTENT_FILE.parent.mkdir(parents=True, exist_ok=True)
+    ADMIN_CONTENT_FILE.write_text(
+        json.dumps(content, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    if SUPABASE_SERVICE_KEY:
+        _upload_media_file(ADMIN_CONTENT_FILE, "content/ayah-overrides.json", "application/json")
+
+
+def _get_verse_content(surah: int, ayah: int):
+    content = _load_admin_content()
+    verse = content["verses"].get(f"{surah}:{ayah}", {})
+    audio = verse.get("audio", {})
+    result = {
+        "surah": surah,
+        "ayah": ayah,
+        "arabic_text": verse.get("arabic_text", ""),
+        "urdu_text": verse.get("urdu_text", ""),
+        "arabic_audio": bool(audio.get("arabic")),
+        "urdu_audio": bool(audio.get("urdu")),
+    }
+    return result
 
 
 def _supabase_request(method: str, path: str, token: str, **kwargs):
@@ -186,8 +237,19 @@ def _prepare_ephemeral_media():
     for object_path, local_path in (
         ("metadata/captions.csv", OUTPUT_DIR / "captions.csv"),
         ("state/used.json", CACHE_DIR / "used.json"),
+        ("content/ayah-overrides.json", ADMIN_CONTENT_FILE),
     ):
         if _media_object_exists(object_path):
+            _download_media_file(object_path, local_path)
+
+    for item in _list_media_objects("content/audio"):
+        object_name = item.get("name", "")
+        filename = Path(object_name).name
+        if not filename:
+            continue
+        object_path = object_name if object_name.startswith("content/audio/") else f"content/audio/{filename}"
+        local_path = ADMIN_AUDIO_DIR / filename
+        if not local_path.exists():
             _download_media_file(object_path, local_path)
 
 
@@ -332,6 +394,114 @@ async def upload_background(request: Request, user=Depends(require_admin)):
     return {"filename": stored_name, "size": total}
 
 
+def _validate_verse(surah: int, ayah: int):
+    if not 1 <= surah <= 114:
+        raise HTTPException(status_code=400, detail="Surah must be between 1 and 114.")
+    quran_file = BASE_DIR / "data" / "quran.json"
+    if not quran_file.exists():
+        raise HTTPException(status_code=503, detail="Quran data is unavailable on the server.")
+    try:
+        quran = json.loads(quran_file.read_text(encoding="utf-8"))
+        verse_count = int(quran["surahs"][str(surah)]["n"])
+    except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=500, detail="Quran data could not be read.") from exc
+    if not 1 <= ayah <= verse_count:
+        raise HTTPException(status_code=400, detail=f"Ayah must be between 1 and {verse_count} for this surah.")
+
+
+@app.get("/api/admin/verses/{surah}/{ayah}")
+def get_admin_verse_content(surah: int, ayah: int, user=Depends(require_admin)):
+    _validate_verse(surah, ayah)
+    return _get_verse_content(surah, ayah)
+
+
+@app.put("/api/admin/verses/{surah}/{ayah}")
+def update_admin_verse_content(
+    surah: int,
+    ayah: int,
+    req: VerseContentRequest,
+    user=Depends(require_admin),
+):
+    _validate_verse(surah, ayah)
+    if len(req.arabic_text) > MAX_TEXT_LENGTH or len(req.urdu_text) > MAX_TEXT_LENGTH:
+        raise HTTPException(status_code=400, detail=f"Text must be {MAX_TEXT_LENGTH} characters or fewer.")
+
+    content = _load_admin_content()
+    key = f"{surah}:{ayah}"
+    verse = content["verses"].setdefault(key, {})
+    verse["arabic_text"] = req.arabic_text.strip()
+    verse["urdu_text"] = req.urdu_text.strip()
+    verse.setdefault("audio", {})
+    if not verse["arabic_text"] and not verse["urdu_text"] and not any(verse["audio"].values()):
+        del content["verses"][key]
+    _save_admin_content(content)
+    return _get_verse_content(surah, ayah)
+
+
+@app.post("/api/admin/verses/{surah}/{ayah}/audio/{language}")
+async def upload_admin_verse_audio(
+    surah: int,
+    ayah: int,
+    language: str,
+    request: Request,
+    user=Depends(require_admin),
+):
+    _validate_verse(surah, ayah)
+    if language not in {"arabic", "urdu"}:
+        raise HTTPException(status_code=400, detail="Audio language must be arabic or urdu.")
+    original_name = request.query_params.get("filename", "")
+    extension = Path(original_name).suffix.lower()
+    if extension not in ALLOWED_AUDIO_TYPES:
+        raise HTTPException(status_code=400, detail="Upload MP3, M4A, AAC, or WAV audio.")
+
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            if int(content_length) > MAX_BACKGROUND_BYTES:
+                raise HTTPException(status_code=413, detail="Audio file must be 50 MB or smaller.")
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="Invalid content length.") from exc
+
+    filename = f"{surah:03d}{ayah:03d}_{language}{extension}"
+    ADMIN_AUDIO_DIR.mkdir(parents=True, exist_ok=True)
+    destination = ADMIN_AUDIO_DIR / filename
+    total = 0
+    try:
+        with destination.open("wb") as output_file:
+            async for chunk in request.stream():
+                total += len(chunk)
+                if total > MAX_BACKGROUND_BYTES:
+                    raise HTTPException(status_code=413, detail="Audio file must be 50 MB or smaller.")
+                output_file.write(chunk)
+    except Exception:
+        destination.unlink(missing_ok=True)
+        raise
+
+    if total == 0:
+        destination.unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail="The uploaded audio file is empty.")
+
+    if SUPABASE_SERVICE_KEY:
+        _upload_media_file(
+            destination,
+            f"content/audio/{filename}",
+            ALLOWED_AUDIO_TYPES[extension],
+        )
+
+    content = _load_admin_content()
+    verse = content["verses"].setdefault(f"{surah}:{ayah}", {})
+    audio = verse.setdefault("audio", {})
+    previous_extension = audio.get(language)
+    audio[language] = extension.lstrip(".")
+    _save_admin_content(content)
+
+    if previous_extension and previous_extension != extension.lstrip("."):
+        previous_file = ADMIN_AUDIO_DIR / f"{surah:03d}{ayah:03d}_{language}.{previous_extension}"
+        previous_file.unlink(missing_ok=True)
+
+    return _get_verse_content(surah, ayah)
+
+
 @app.get("/config.js", include_in_schema=False)
 def frontend_config():
     config = {
@@ -339,7 +509,11 @@ def frontend_config():
         "anonKey": SUPABASE_KEY,
         "apiBaseUrl": os.getenv("API_BASE_URL", "/api").rstrip("/"),
     }
-    script = f"window.NOOR_SUPABASE_CONFIG = {json.dumps(config)};"
+    script = (
+        f"window.NOOR_SUPABASE_CONFIG = {json.dumps({k: config[k] for k in ('url', 'anonKey')})};"
+        f"window.NOOR_SUPABASE_CONFIG.apiBaseUrl = {json.dumps(config['apiBaseUrl'])};"
+        f"window.NOOR_API_BASE_URL = {json.dumps(config['apiBaseUrl'])};"
+    )
     return Response(
         content=script,
         media_type="application/javascript",
@@ -364,6 +538,16 @@ def legacy_admin_page():
 
 @app.get("/auth", include_in_schema=False)
 def auth_page():
+    return RedirectResponse(url="/auth.html")
+
+
+@app.get("/signin", include_in_schema=False)
+def signin_page():
+    return RedirectResponse(url="/auth.html")
+
+
+@app.get("/signin.html", include_in_schema=False)
+def signin_html_page():
     return RedirectResponse(url="/auth.html")
 
 

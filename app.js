@@ -1,4 +1,4 @@
-const API_BASE_URL = (window.NOOR_API_BASE_URL || "/api").replace(/\/$/, "");
+const API_BASE_URL = (window.NOOR_API_BASE_URL || window.NOOR_SUPABASE_CONFIG?.apiBaseUrl || "/api").replace(/\/$/, "");
 window.userAccess = null;
 
 document.addEventListener("DOMContentLoaded", initializeStudio);

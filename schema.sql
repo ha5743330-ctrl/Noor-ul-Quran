@@ -130,7 +130,16 @@ values (
     'noor-media',
     false,
     52428800,
-    array['video/mp4', 'video/quicktime', 'text/csv', 'application/json']
+    array[
+        'video/mp4',
+        'video/quicktime',
+        'audio/mpeg',
+        'audio/mp4',
+        'audio/aac',
+        'audio/wav',
+        'text/csv',
+        'application/json'
+    ]
 )
 on conflict (id) do update
 set public = excluded.public,

@@ -1,6 +1,7 @@
 const adminMessage = document.getElementById("admin-message");
-const API_BASE_URL = (window.NOOR_API_BASE_URL || "/api").replace(/\/$/, "");
+const API_BASE_URL = (window.NOOR_API_BASE_URL || window.NOOR_SUPABASE_CONFIG?.apiBaseUrl || "/api").replace(/\/$/, "");
 let adminUsers = [];
+let loadedVerseKey = "";
 
 function showAdminMessage(message, isError = false) {
     adminMessage.textContent = message;
@@ -22,7 +23,15 @@ async function adminRequest(path, options = {}) {
             ...options.headers
         }
     });
-    const result = response.status === 204 ? null : await response.json();
+    const text = response.status === 204 ? "" : await response.text();
+    let result = null;
+    if (text) {
+        try {
+            result = JSON.parse(text);
+        } catch {
+            result = { detail: text };
+        }
+    }
     if (!response.ok) throw new Error(result?.detail || "Admin request failed.");
     return result;
 }
@@ -54,11 +63,26 @@ async function initializeAdmin() {
     }
 }
 
+function renderSummary() {
+    const totalUsers = adminUsers.length;
+    const premiumUsers = adminUsers.filter((user) => Boolean(user.premium_access)).length;
+    const totalUsersStat = document.getElementById("stat-total-users");
+    const premiumUsersStat = document.getElementById("stat-premium-users");
+    const backgroundsBadge = document.getElementById("stat-backgrounds-badge");
+    const backgroundCount = document.getElementById("stat-backgrounds");
+
+    if (totalUsersStat) totalUsersStat.textContent = String(totalUsers);
+    if (premiumUsersStat) premiumUsersStat.textContent = String(premiumUsers);
+    if (backgroundCount) backgroundCount.textContent = String(backgroundCount.dataset.count || "0");
+    if (backgroundsBadge) backgroundsBadge.textContent = `${backgroundCount?.dataset.count || 0} files`;
+}
+
 async function loadUsers() {
     const body = document.getElementById("users-table");
     body.innerHTML = '<tr><td colspan="4" class="px-3 py-8 text-center text-slate-500">Loading users...</td></tr>';
     try {
         adminUsers = await adminRequest("/admin/users");
+        renderSummary();
         renderUsers();
     } catch (error) {
         body.innerHTML = "";
@@ -130,8 +154,14 @@ async function updatePremium(user, checkbox) {
 
 async function loadBackgrounds() {
     const list = document.getElementById("background-list");
+    const countEl = document.getElementById("stat-backgrounds");
     try {
         const clips = await adminRequest("/admin/backgrounds");
+        if (countEl) {
+            countEl.dataset.count = String(clips.length);
+            countEl.textContent = String(clips.length);
+        }
+        document.getElementById("stat-backgrounds-badge")?.replaceChildren(document.createTextNode(`${clips.length} files`));
         list.replaceChildren();
         if (!clips.length) {
             const empty = document.createElement("li");
@@ -142,7 +172,7 @@ async function loadBackgrounds() {
         }
         for (const clip of clips) {
             const item = document.createElement("li");
-            item.className = "flex justify-between gap-4 py-3";
+            item.className = "flex items-center justify-between gap-4 py-3";
             const name = document.createElement("span");
             name.textContent = clip.filename;
             const size = document.createElement("span");
@@ -153,6 +183,107 @@ async function loadBackgrounds() {
         }
     } catch (error) {
         showAdminMessage(error.message, true);
+    }
+}
+
+function getSelectedVerse() {
+    const surah = Number(document.getElementById("verse-surah").value);
+    const ayah = Number(document.getElementById("verse-ayah").value);
+    if (!Number.isInteger(surah) || surah < 1 || surah > 114 || !Number.isInteger(ayah) || ayah < 1) {
+        throw new Error("Enter a valid Surah (1–114) and Ayah number.");
+    }
+    return { surah, ayah, key: `${surah}:${ayah}` };
+}
+
+function updateAudioStatuses(content) {
+    for (const language of ["arabic", "urdu"]) {
+        const status = document.getElementById(`${language}-audio-status`);
+        const uploaded = Boolean(content[`${language}_audio`]);
+        status.textContent = uploaded ? "Custom audio uploaded" : "Using default audio";
+        status.className = uploaded ? "text-emerald-400" : "text-slate-500";
+    }
+}
+
+async function loadVerseContent(event) {
+    event.preventDefault();
+    const button = document.getElementById("verse-load-button");
+    try {
+        const verse = getSelectedVerse();
+        button.disabled = true;
+        const content = await adminRequest(`/admin/verses/${verse.surah}/${verse.ayah}`);
+        loadedVerseKey = verse.key;
+        document.getElementById("verse-arabic-text").value = content.arabic_text || "";
+        document.getElementById("verse-urdu-text").value = content.urdu_text || "";
+        updateAudioStatuses(content);
+        showAdminMessage(`Loaded Surah ${verse.surah}, Ayah ${verse.ayah}.`);
+    } catch (error) {
+        showAdminMessage(error.message, true);
+    } finally {
+        button.disabled = false;
+    }
+}
+
+async function saveVerseContent(event) {
+    event.preventDefault();
+    const button = document.getElementById("verse-save-button");
+    try {
+        const verse = getSelectedVerse();
+        if (loadedVerseKey !== verse.key) {
+            throw new Error("Load this Surah and Ayah before saving, so text is saved to the right verse.");
+        }
+        button.disabled = true;
+        const content = await adminRequest(`/admin/verses/${verse.surah}/${verse.ayah}`, {
+            method: "PUT",
+            body: JSON.stringify({
+                arabic_text: document.getElementById("verse-arabic-text").value,
+                urdu_text: document.getElementById("verse-urdu-text").value
+            })
+        });
+        updateAudioStatuses(content);
+        showAdminMessage(`Text saved for Surah ${verse.surah}, Ayah ${verse.ayah}.`);
+    } catch (error) {
+        showAdminMessage(error.message, true);
+    } finally {
+        button.disabled = false;
+    }
+}
+
+async function uploadVerseAudio(event) {
+    event.preventDefault();
+    const input = document.getElementById("verse-audio-file");
+    const button = document.getElementById("verse-audio-upload-button");
+    const file = input.files[0];
+    if (!file) {
+        showAdminMessage("Choose an audio file first.", true);
+        return;
+    }
+    if (file.size > 50 * 1024 * 1024) {
+        showAdminMessage("Audio file must be 50 MB or smaller.", true);
+        return;
+    }
+
+    try {
+        const verse = getSelectedVerse();
+        const language = document.getElementById("verse-audio-language").value;
+        button.disabled = true;
+        button.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>Uploading';
+        const filename = encodeURIComponent(file.name);
+        const content = await adminRequest(
+            `/admin/verses/${verse.surah}/${verse.ayah}/audio/${language}?filename=${filename}`,
+            {
+                method: "POST",
+                body: file,
+                headers: { "Content-Type": file.type || "application/octet-stream" }
+            }
+        );
+        updateAudioStatuses(content);
+        input.value = "";
+        showAdminMessage(`${language === "arabic" ? "Arabic" : "Urdu"} audio uploaded for Surah ${verse.surah}, Ayah ${verse.ayah}.`);
+    } catch (error) {
+        showAdminMessage(error.message, true);
+    } finally {
+        button.disabled = false;
+        button.innerHTML = '<i class="fa-solid fa-upload mr-2"></i>Upload audio';
     }
 }
 
@@ -190,4 +321,7 @@ async function uploadBackground(event) {
 document.getElementById("refresh-users").addEventListener("click", loadUsers);
 document.getElementById("user-search").addEventListener("input", renderUsers);
 document.getElementById("background-upload-form").addEventListener("submit", uploadBackground);
+document.getElementById("verse-lookup-form").addEventListener("submit", loadVerseContent);
+document.getElementById("verse-content-form").addEventListener("submit", saveVerseContent);
+document.getElementById("verse-audio-form").addEventListener("submit", uploadVerseAudio);
 document.addEventListener("DOMContentLoaded", initializeAdmin);

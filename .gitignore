@@ -3,6 +3,9 @@ __pycache__/
 *.pyc
 venv/
 .vercel/
+node_modules/
+dist/
+build/
 
 # Heavy Media & Background Videos
 backgrounds/*.mp4
@@ -10,8 +13,10 @@ audio/
 output/
 cache/
 data/quran.json
+data/admin_content.json
 
 # Environment variables
 .env
 .env.*
 !.env.example
+LOCAL_DEPLOYMENT_PLAN.md
