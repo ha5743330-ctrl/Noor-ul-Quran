@@ -598,6 +598,14 @@ def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
 
     job_id = uuid4().hex
     with GENERATION_JOBS_LOCK:
+        if any(
+            job["owner_id"] == user["id"] and job["status"] in {"queued", "processing"}
+            for job in GENERATION_JOBS.values()
+        ):
+            raise HTTPException(
+                status_code=429,
+                detail="You already have a generation job queued or processing. Wait for it to finish before starting another.",
+            )
         if len(GENERATION_JOBS) >= 64:
             for old_job_id, old_job in list(GENERATION_JOBS.items()):
                 if old_job["status"] in {"completed", "partial", "failed"}:
