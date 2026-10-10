@@ -110,6 +110,13 @@
             <form id="reel-generator-form" onsubmit="handleFormSubmit(event)">
                 <!-- Active Mode Input Tracker -->
                 <input type="hidden" id="mode-select" value="pick">
+                <div class="mb-6">
+                    <label for="input-content-mode" class="block text-sm font-semibold text-slate-300 mb-2">Content mode:</label>
+                    <select id="input-content-mode" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-3.5 text-slate-100 focus:outline-none focus:border-amber-500 transition-colors">
+                        <option value="full">Arabic + Urdu (default)</option>
+                        <option value="urdu_only">Sirf Urdu text aur audio</option>
+                    </select>
+                </div>
 
                 <!-- Mode 1: Single Pick (Active in Free Mode) -->
                 <div id="mode-pick" class="space-y-6">

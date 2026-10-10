@@ -76,6 +76,7 @@ class GenerateRequest(BaseModel):
     random_count: int = 1
     max_duration: int = 60
     quality: str = "balanced"
+    content_mode: str = "full"
 
 
 class PremiumAccessRequest(BaseModel):
@@ -564,6 +565,8 @@ def signin_html_page():
 def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
     if req.mode not in {"pick", "picks", "random"}:
         raise HTTPException(status_code=400, detail="Invalid generation mode.")
+    if req.content_mode not in {"full", "urdu_only"}:
+        raise HTTPException(status_code=400, detail="Content mode must be full or urdu_only.")
     if req.mode != "pick" and not (user["is_admin"] or user["premium_access"]):
         raise HTTPException(status_code=403, detail="Premium access is required for custom and random generation.")
     if req.max_duration > 60 and not (user["is_admin"] or user["premium_access"]):
@@ -584,6 +587,8 @@ def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
         cmd.extend(["--random", str(req.random_count)])
     else:
         raise HTTPException(status_code=400, detail="Verse is required for single-pick generation.")
+    if req.content_mode == "urdu_only":
+        cmd.append("--urdu-only")
 
     batch_id = uuid4().hex[:10]
     work_dir = CACHE_DIR / "tmp" / batch_id

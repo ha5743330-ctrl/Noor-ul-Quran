@@ -493,6 +493,7 @@ def ensure_required_tools():
 
 
 def main():
+    global INCLUDE_ARABIC_AUDIO
     if not features.check("raqm") and not HAS_BIDI:
         sys.exit(
             "Arabic text support missing. Activate the project venv and run: "
@@ -507,12 +508,14 @@ def main():
     ap.add_argument("--min-dur", type=int, default=MIN_DUR)
     ap.add_argument("--max-dur", type=int, default=MAX_DUR)
     ap.add_argument("--quality", choices=("balanced", "high"), default="balanced")
+    ap.add_argument("--urdu-only", action="store_true", help="Use Urdu translation audio and text only.")
     ap.add_argument("--batch-id")
     ap.add_argument("--work-dir")
     ap.add_argument("--result-json")
     ap.add_argument("--check", nargs="*", type=int)
     ap.add_argument("--dry", action="store_true")
     a = ap.parse_args()
+    INCLUDE_ARABIC_AUDIO = not a.urdu_only
     set_video_quality(a.quality)
     
     qf = ROOT / "data/quran.json"

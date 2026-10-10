@@ -114,7 +114,8 @@ async function generateVideo(event) {
                 verse: verse,
                 max_duration: parseInt(duration, 10),
                 random_count: parseInt(document.getElementById("input-random-count")?.value || "1", 10),
-                quality: document.getElementById("input-quality")?.value || "balanced"
+                quality: document.getElementById("input-quality")?.value || "balanced",
+                content_mode: document.getElementById("input-content-mode")?.value || "full"
             })
         });
 
