@@ -4,9 +4,24 @@
    python make.py --picks picks.txt --max-dur 90  (Waqia/Long Reel up to 1m 30s)
 """
 import argparse, csv, json, os, random, re, shutil, subprocess, sys, time
+import ctypes
 import hashlib
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+
+_DLL_DIRECTORY_HANDLES = []
+if os.name == "nt":
+    dll_directory = Path(sys.executable).parent
+    _DLL_DIRECTORY_HANDLES.append(os.add_dll_directory(str(dll_directory)))
+    for dll_name in ("fribidi-0.dll", "libfribidi-0.dll"):
+        dll_path = dll_directory / dll_name
+        if dll_path.is_file():
+            try:
+                _DLL_DIRECTORY_HANDLES.append(ctypes.WinDLL(str(dll_path)))
+                break
+            except OSError:
+                continue
+
 from PIL import Image, ImageDraw, ImageFont, features
 import requests
 
@@ -34,6 +49,14 @@ URDU_FOLDER = "translations/urdu_shamshad_ali_khan_46kbps"
 BISMILLAH = "بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ"
 # --------------------------------------------------
 ROOT = Path(__file__).parent
+FONTS = {
+    "amiri_regular": ROOT / "fonts" / "Amiri-Regular.ttf",
+    "amiri_bold": ROOT / "fonts" / "Amiri-Bold.ttf",
+    "naskh_regular": ROOT / "fonts" / "NotoNaskhArabic-Regular.ttf",
+    "naskh_bold": ROOT / "fonts" / "NotoNaskhArabic-Bold.ttf",
+    "nastaliq_regular": ROOT / "fonts" / "NotoNastaliqUrdu-Regular.ttf",
+    "nastaliq_bold": ROOT / "fonts" / "NotoNastaliqUrdu-Bold.ttf",
+}
 OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", ROOT / "output"))
 BACKGROUND_DIR = Path(os.getenv("BACKGROUNDS_DIR", ROOT / "backgrounds"))
 CACHE_DIR = Path(os.getenv("CACHE_DIR", ROOT / "cache"))
@@ -203,10 +226,13 @@ def ayah_clip(s, a):
     _clip_cache[(s, a)] = c
     return c
 
-def find_font():
-    fs = sorted(p for p in (ROOT / "fonts").glob("*") if p.suffix.lower() in (".ttf", ".otf"))
-    if not fs: sys.exit("fonts/ folder mein font daalo")
-    return fs[0]
+def load_font(name, size):
+    path = FONTS[name]
+    if not path.is_file():
+        raise SystemExit(f"Required font file missing: {path}")
+    if name.startswith("nastaliq") and not features.check("raqm"):
+        raise SystemExit("Noto Nastaliq Urdu requires Pillow RAQM text shaping. Install FriBiDi (libfribidi-0.dll) beside the virtualenv Python on Windows.")
+    return ImageFont.truetype(str(path), size)
 
 def shape_text(text):
     if not features.check("raqm") and HAS_BIDI:
@@ -233,16 +259,16 @@ def put(d, xy, text, font, fill=(255, 255, 255, 255), stroke=3):
     kw = {"direction": "rtl", "language": "ur"} if use_raqm else {}
     d.text(xy, st, font=font, fill=fill, anchor="ma", stroke_width=stroke, stroke_fill=(0, 0, 0, 230), **kw)
 
-def base_overlay(path, surah, label, show_bismillah, fpath):
+def base_overlay(path, surah, label, show_bismillah):
     im = Image.new("RGBA", (W, H), (0, 0, 0, 0)); d = ImageDraw.Draw(im)
     ov = ROOT / "public" / "assets" / "overlay.png"
     if ov.exists():
         im.alpha_composite(Image.open(ov).convert("RGBA").resize((W, H)))
     else:
-        if show_bismillah: put(d, (W // 2, 170), BISMILLAH, ImageFont.truetype(str(fpath), 64))
-        put(d, (W // 2, 330), surah, ImageFont.truetype(str(fpath), 92), (255, 224, 140, 255))
-        put(d, (W // 2, 480), label, ImageFont.truetype(str(fpath), 54))
-        put(d, (W // 2, H - 220), CHANNEL, ImageFont.truetype(str(fpath), 50), (255, 255, 255, 220), 2)
+        if show_bismillah: put(d, (W // 2, 170), BISMILLAH, load_font("amiri_bold", 64))
+        put(d, (W // 2, 330), surah, load_font("amiri_bold", 92), (255, 224, 140, 255))
+        put(d, (W // 2, 480), label, load_font("amiri_bold", 54))
+        put(d, (W // 2, H - 220), CHANNEL, load_font("amiri_bold", 50), (255, 255, 255, 220), 2)
     im.save(path)
 
 def chunk_png(path, lines, font, spacing, base, is_arabic=False):
@@ -289,14 +315,20 @@ def build(Q, s, a0, a1, outfile, bgs, rng, tmp):
     items = plan_reel(Q, s, a0, a1)
     if items is None: return None
     total = sum(i["len"] for i in items)
-    fpath = find_font(); spacing = 1.8 if "nastaliq" in fpath.name.lower() else 1.45
+    arabic_font_key = "amiri_bold"
+    urdu_font_key = "nastaliq_regular"
     allowed = max(len(items), int(total / SECONDS_PER_CHUNK))
     
     for size in FONT_SIZES:
-        font = ImageFont.truetype(str(fpath), size)
-        wrapped_ur = [wrap(i["text"], font, W - 200) for i in items]
-        wrapped_ar = [wrap(i["arabic"], font, W - 200) if i.get("arabic") else [] for i in items]
+        urdu_font = load_font(urdu_font_key, size)
+        wrapped_ur = [wrap(item["text"], urdu_font, W - 200) for item in items]
         chunks = sum(-(-len(w) // LINES_PER_CHUNK) for w in wrapped_ur)
+        if chunks <= allowed: break
+
+    for size in FONT_SIZES:
+        arabic_font = load_font(arabic_font_key, size)
+        wrapped_ar = [wrap(item["arabic"], arabic_font, W - 200) if item.get("arabic") else [] for item in items]
+        chunks = sum(-(-len(lines) // LINES_PER_CHUNK) for lines in wrapped_ar)
         if chunks <= allowed: break
         
     timeline, off = [], 0.0
@@ -328,11 +360,14 @@ def build(Q, s, a0, a1, outfile, bgs, rng, tmp):
 
     S = Q["surahs"][str(s)]
     label = f"آیت {urdu_digits(a0)}" if a0 == a1 else f"آیات {urdu_digits(a0)} تا {urdu_digits(a1)}"
-    base_p = tmp / "base.png"; base_overlay(base_p, "سورۃ " + strip_harakat_surah(S["name"]).replace("سورة", "").strip(), label, s != 9, fpath)
+    base_p = tmp / "base.png"; base_overlay(base_p, "سورۃ " + strip_harakat_surah(S["name"]).replace("سورة", "").strip(), label, s != 9)
     lst = tmp / "list.txt"; rows = []
     
     for k, (st, en, lines_group, is_arabic) in enumerate(timeline):
         p = tmp / f"c{k}.png"
+        font = arabic_font if is_arabic else urdu_font
+        font_key = arabic_font_key if is_arabic else urdu_font_key
+        spacing = 1.8 if "nastaliq" in font_key else 1.45
         chunk_png(p, lines_group, font, spacing, base_p, is_arabic=is_arabic)
         rows.append(f"file '{p.resolve().as_posix()}'\nduration {en - st:.3f}")
         
