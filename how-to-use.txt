@@ -124,7 +124,7 @@ USER LOGIN & ADMIN ACCESS (ONE-TIME SETUP)
 --------------------------------------------------
 
 1. Supabase Dashboard mein apna project kholein aur SQL Editor par jaein.
-2. Project ke root mein schema.sql ka poora content SQL Editor mein paste karke Run karein. Is se secure role tables/RPCs banenge aur admin UID 56580c99-404f-4efd-a3bc-624214a0306e ko admin access milega.
+2. Pehle Supabase Dashboard > Authentication > Users se apni user UUID copy karein. schema.sql mein <YOUR_ADMIN_USER_ID> ko us UUID se replace karein, phir poora SQL Supabase SQL Editor mein paste karke Run karein. Is se secure role tables/RPCs banenge aur aapke account ko admin access milega.
 3. Local project .env mein SUPABASE_URL aur SUPABASE_ANON_KEY set karein; values Supabase Project Settings > API se lein. Service-role key kabhi browser ya .env ke SUPABASE_ANON_KEY mein na daalein.
 4. Uvicorn server restart karke /auth.html par sign in karein. Admin account ko Admin Portal dikhai dega.
 5. Admin Portal mein registered user ke Premium checkbox se bulk/custom/random access grant ya revoke karein.

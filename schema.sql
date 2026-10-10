@@ -121,7 +121,7 @@ grant execute on function public.noor_admin_list_users() to authenticated;
 grant execute on function public.noor_admin_set_premium(uuid, boolean) to authenticated;
 
 insert into public.noor_admins (user_id)
-values ('56580c99-404f-4efd-a3bc-624214a0306e')
+values ('<YOUR_ADMIN_USER_ID>')
 on conflict (user_id) do nothing;
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
