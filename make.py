@@ -168,13 +168,13 @@ def background_playlist(bgs, total, rng):
     return playlist
 
 def urdu_digits(n): return str(n).translate(str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹"))
-def strip_harakat_surah(s): return re.sub("[\u064B-\u065F\u0670\u06D6-\u06ED]", "", s)
+def strip_harakat_surah(s): return re.sub("[\u0640\u064B-\u065F\u0670\u06D6-\u06ED]", "", s)
 
 def remove_leading_bismillah(text):
-    words = text.split()
+    words = text.lstrip("\ufeff").split()
     expected = ["بسم", "الله", "الرحمن", "الرحيم"]
     actual = [strip_harakat_surah(word).replace("ٱ", "ا") for word in words[:4]]
-    return " ".join(words[4:]) if actual == expected else text
+    return " ".join(words[4:]) if actual == expected and len(words) > 4 else text
 
 def admin_content():
     global _admin_content
