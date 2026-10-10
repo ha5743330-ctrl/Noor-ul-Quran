@@ -1,9 +1,69 @@
 const API_BASE_URL = (window.NOOR_API_BASE_URL || window.NOOR_SUPABASE_CONFIG?.apiBaseUrl || "/api").replace(/\/$/, "");
 window.userAccess = null;
+window.videoStyles = {};
 let generatedVideos = [];
 let currentVideoIndex = 0;
 
-document.addEventListener("DOMContentLoaded", initializeStudio);
+const VIDEO_STYLE_LABELS = {
+    bismillah: "Bismillah",
+    surah: "Surah Name",
+    label: "Ayat Range",
+    arabic: "Arabic Ayaat",
+    urdu: "Urdu Tarjuma",
+    channel: "Channel Name"
+};
+const VIDEO_STYLE_FONT_LABELS = {
+    amiri_regular: "Amiri Regular",
+    amiri_bold: "Amiri Bold",
+    naskh_regular: "Naskh Regular",
+    naskh_bold: "Naskh Bold",
+    nastaliq_regular: "Nastaliq Regular",
+    nastaliq_bold: "Nastaliq Bold"
+};
+
+document.addEventListener("DOMContentLoaded", () => {
+    initializeVideoStyleControls();
+    initializeStudio();
+});
+
+function renderAppliedVideoStyles() {
+    const list = document.getElementById("applied-video-styles");
+    if (!list) return;
+    list.replaceChildren();
+    Object.entries(window.videoStyles).forEach(([element, style]) => {
+        const item = document.createElement("li");
+        item.textContent = `${VIDEO_STYLE_LABELS[element]}: ${style.color} · ${VIDEO_STYLE_FONT_LABELS[style.font]}`;
+        list.appendChild(item);
+    });
+    list.classList.toggle("hidden", Object.keys(window.videoStyles).length === 0);
+}
+
+function renderGenerationWarnings(warnings) {
+    const list = document.getElementById("generation-warnings");
+    if (!list) return;
+    const uniqueWarnings = [...new Set(Array.isArray(warnings) ? warnings : [])];
+    list.replaceChildren(...uniqueWarnings.map((warning) => {
+        const item = document.createElement("li");
+        item.textContent = warning;
+        return item;
+    }));
+    list.classList.toggle("hidden", uniqueWarnings.length === 0);
+}
+
+function initializeVideoStyleControls() {
+    document.getElementById("apply-video-style")?.addEventListener("click", () => {
+        const element = document.getElementById("video-style-element")?.value;
+        const color = document.getElementById("video-style-color")?.value;
+        const font = document.getElementById("video-style-font")?.value;
+        if (!element || !color || !font) return;
+        window.videoStyles[element] = { color, font };
+        renderAppliedVideoStyles();
+    });
+    document.getElementById("reset-video-styles")?.addEventListener("click", () => {
+        window.videoStyles = {};
+        renderAppliedVideoStyles();
+    });
+}
 
 async function initializeStudio() {
     const client = window.supabaseClient;
@@ -96,6 +156,7 @@ async function generateVideo(event) {
         statusBox.innerText = "⏳ Request sent! Rendering started in background...";
         statusBox.style.color = "#d97706";
     }
+    renderGenerationWarnings([]);
 
     try {
         const { data: { session } } = await window.supabaseClient.auth.getSession();
@@ -115,7 +176,8 @@ async function generateVideo(event) {
                 max_duration: parseInt(duration, 10),
                 random_count: parseInt(document.getElementById("input-random-count")?.value || "1", 10),
                 quality: document.getElementById("input-quality")?.value || "balanced",
-                content_mode: document.getElementById("input-content-mode")?.value || "full"
+                content_mode: document.getElementById("input-content-mode")?.value || "full",
+                styles: window.videoStyles
             })
         });
 
@@ -134,6 +196,7 @@ async function generateVideo(event) {
                 statusBox.style.color = result.status === "partial" ? "#d97706" : "#059669";
             }
             const videos = Array.isArray(result.videos) ? result.videos : result.filename ? [result] : [];
+            renderGenerationWarnings(result.warnings || videos.flatMap((video) => video.warnings || []));
             showGeneratedVideos(videos);
         } else {
             if (result.videos?.length) showGeneratedVideos(result.videos);
@@ -175,6 +238,7 @@ async function waitForGeneration(jobId, accessToken, statusBox, logMsg, statusPe
         if (!response.ok) throw new Error(job.detail || job.error || "Could not read generation status.");
 
         const videos = Array.isArray(job.videos) ? job.videos : [];
+        renderGenerationWarnings(job.warnings || videos.flatMap((video) => video.warnings || []));
         if (videos.length) showGeneratedVideos(videos);
         if (videos.length !== lastVideoCount) {
             lastVideoCount = videos.length;

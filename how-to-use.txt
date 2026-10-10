@@ -15,8 +15,12 @@ STEP 1: INITIAL SETUP & ASSETS
 
 3. Fonts Aur Backgrounds Add Karein:
    - Urdu/Arabic Font: fonts/ folder mein official Quranic font (maslan Amiri-Regular.ttf ya ScheherazadeNew-Regular.ttf) daalein.
-   - Background Videos: 1080x1920 (Vertical) HD videos (Pexels / Pixabay se) backgrounds/ folder mein daalein.
-  - (Optional) Frame Overlay: Apna transparent PNG design public/assets/overlay.png mein rakh sakte hain.
+   - Background Videos: Sirf original, text-free vertical scenery videos backgrounds/ folder mein daalein. Generated Quran reels ko yahan na rakhein; unka text aglay video mein ghost/duplicate ho sakta hai.
+   - (Optional) Frame Overlay: Apna transparent PNG design public/assets/overlay.png mein rakh sakte hain.
+
+4. Urdu Nastaliq ke liye Pillow RAQM zaroori hai:
+   .\venv\Scripts\python.exe -c "import make; from PIL import features; print(features.check('raqm'))"
+   Is project-aware command ka result True hona chahiye. make.py Pillow import se pehle venv\Scripts se libfribidi-0.dll load karta hai; sirf `from PIL import features` wala standalone check is DLL setup ko apply nahi karta.
 
 
 --------------------------------------------------
@@ -116,7 +120,7 @@ ZAROORI HIDAYAT
 
 1. Pehli 5 videos ko upload karne se pehle zaroor sunein taake audio aur Urdu text ki sync check ho sake.
 2. Render time video ki length aur computer par depend karta hai. Pehli dafa audio download hone ki wajah se extra waqt lag sakta hai. Supported GPU encoder available ho to use hota hai; warna faster CPU encoding chalta hai. Render mukammal hone tak terminal ko stop na karein (Ctrl+C na dabayein).
-3. Reel ke dauran backgrounds randomly change karne ke liye backgrounds/ mein kam az kam 2 alag videos rakhein. Har clip ke khatam hone par doosri clip aati hai; agar sirf 1 unique clip ho to usi ko repeat karna padega.
+3. Har reel ke liye backgrounds/ se ek original background video randomly select hoti hai aur poori reel ke dauran loop hoti hai. Agar har reel mein clouds chahiye hon to backgrounds/ mein sirf apni pasandeeda clouds video rakhein.
 
 
 --------------------------------------------------

@@ -152,6 +152,7 @@
                     <div>
                         <label class="block text-sm font-semibold text-slate-300 mb-2">Maximum Video Duration:</label>
                         <select id="input-max-dur" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-3.5 text-slate-100 focus:outline-none focus:border-amber-500 transition-colors">
+                            <option value="30">30 Seconds</option>
                             <option value="60">60 Seconds (1 Min - Standard Reel)</option>
                             <option value="90">90 Seconds (1.5 Min - Story/Waqia Mode)</option>
                             <option value="120">120 Seconds (2 Min - Extended)</option>
@@ -175,6 +176,52 @@
                     </div>
                 </div>
 
+                <section class="mt-8 pt-6 border-t border-slate-800/80" aria-labelledby="video-style-heading">
+                    <h4 id="video-style-heading" class="text-lg font-semibold text-slate-100 mb-4">Video Style</h4>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div>
+                            <label for="video-style-element" class="block text-sm font-semibold text-slate-300 mb-2">Element:</label>
+                            <select id="video-style-element" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-3 text-slate-100 focus:outline-none focus:border-amber-500 transition-colors">
+                                <option value="bismillah">Bismillah</option>
+                                <option value="surah">Surah Name</option>
+                                <option value="label">Ayat Range</option>
+                                <option value="arabic">Arabic Ayaat</option>
+                                <option value="urdu">Urdu Tarjuma</option>
+                                <option value="channel">Channel Name</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="video-style-color" class="block text-sm font-semibold text-slate-300 mb-2">Color:</label>
+                            <select id="video-style-color" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-3 text-slate-100 focus:outline-none focus:border-amber-500 transition-colors">
+                                <option value="#FFFFFF">White</option>
+                                <option value="#FFD700">Gold</option>
+                                <option value="#FFFF00">Yellow</option>
+                                <option value="#00C853">Green</option>
+                                <option value="#00E5FF">Cyan</option>
+                                <option value="#FF4081">Pink</option>
+                                <option value="#FF9100">Orange</option>
+                                <option value="#FF1744">Red</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="video-style-font" class="block text-sm font-semibold text-slate-300 mb-2">Font:</label>
+                            <select id="video-style-font" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-3 text-slate-100 focus:outline-none focus:border-amber-500 transition-colors">
+                                <option value="amiri_regular">Amiri Regular</option>
+                                <option value="amiri_bold">Amiri Bold</option>
+                                <option value="naskh_regular">Naskh Regular</option>
+                                <option value="naskh_bold">Naskh Bold</option>
+                                <option value="nastaliq_regular">Nastaliq Regular</option>
+                                <option value="nastaliq_bold">Nastaliq Bold</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mt-4 flex flex-wrap gap-3">
+                        <button id="apply-video-style" type="button" class="rounded-lg bg-amber-500 px-5 py-2.5 font-semibold text-slate-950 hover:bg-amber-400 transition-colors">Apply</button>
+                        <button id="reset-video-styles" type="button" class="rounded-lg border border-slate-600 px-5 py-2.5 font-semibold text-slate-200 hover:bg-slate-800 transition-colors">Reset</button>
+                    </div>
+                    <ul id="applied-video-styles" class="hidden mt-4 space-y-1 text-sm text-slate-300" aria-live="polite"></ul>
+                </section>
+
                 <!-- Generate CTA -->
                 <div class="mt-10">
                     <button id="generate-button" type="submit" class="w-full bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 text-slate-950 font-bold py-4 rounded-xl shadow-lg shadow-amber-500/20 hover:scale-[1.005] active:scale-[0.995] transition-all flex items-center justify-center gap-3 text-lg">
@@ -192,6 +239,7 @@
                 </div>
                 <p id="log-message" class="text-amber-300/90">> Preparing rendering queue...</p>
                 <div id="status-box" class="text-xs font-bold mt-2"></div>
+                <ul id="generation-warnings" class="hidden mt-2 list-disc pl-5 text-xs font-semibold text-amber-300" aria-live="polite"></ul>
             </div>
             <!-- Video Preview Container (Hidden by default) -->
 <div id="video-preview-box" class="mt-8 p-4 sm:p-6 bg-slate-900/90 rounded-2xl border border-amber-500/30 text-center space-y-4 hidden">
@@ -312,6 +360,6 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="/config.js"></script>
     <script src="/auth.js?v=7"></script>
-    <script src="/app.js?v=6"></script>
+    <script src="/app.js?v=7"></script>
 </body>
 </html>

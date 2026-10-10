@@ -1,12 +1,13 @@
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from threading import Lock
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 from urllib.parse import quote
 from uuid import UUID, uuid4
 
@@ -16,7 +17,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 # 1. Environment Variables Load Karein
 BASE_DIR = Path(__file__).resolve().parent
@@ -34,6 +35,15 @@ ADMIN_CONTENT_FILE = BASE_DIR / "data" / "admin_content.json"
 ADMIN_AUDIO_DIR = BASE_DIR / "audio" / "admin"
 MAX_BACKGROUND_BYTES = 50 * 1024 * 1024
 MAX_TEXT_LENGTH = 5000
+VIDEO_STYLE_ELEMENTS = {"bismillah", "surah", "label", "arabic", "urdu", "channel"}
+VIDEO_STYLE_FONTS = {
+    "amiri_regular",
+    "amiri_bold",
+    "naskh_regular",
+    "naskh_bold",
+    "nastaliq_regular",
+    "nastaliq_bold",
+}
 ALLOWED_AUDIO_TYPES = {
     ".mp3": "audio/mpeg",
     ".m4a": "audio/mp4",
@@ -77,6 +87,7 @@ class GenerateRequest(BaseModel):
     max_duration: int = 60
     quality: str = "balanced"
     content_mode: str = "full"
+    styles: Any = Field(default_factory=dict)
 
 
 class PremiumAccessRequest(BaseModel):
@@ -86,6 +97,25 @@ class PremiumAccessRequest(BaseModel):
 class VerseContentRequest(BaseModel):
     arabic_text: str = ""
     urdu_text: str = ""
+
+def validate_video_styles(styles):
+    if not isinstance(styles, dict):
+        raise HTTPException(status_code=400, detail="Styles must be an object.")
+    for element, style in styles.items():
+        if element not in VIDEO_STYLE_ELEMENTS or not isinstance(style, dict):
+            raise HTTPException(status_code=400, detail="Invalid video style element.")
+        if any(field not in {"color", "font"} for field in style):
+            raise HTTPException(status_code=400, detail="Invalid video style field.")
+        color = style.get("color")
+        if color is not None and (
+            not isinstance(color, str) or re.fullmatch(r"#[0-9A-Fa-f]{6}", color) is None
+        ):
+            raise HTTPException(status_code=400, detail="Style colors must use #RRGGBB format.")
+        font = style.get("font")
+        if font is not None and (
+            not isinstance(font, str) or font not in VIDEO_STYLE_FONTS
+        ):
+            raise HTTPException(status_code=400, detail="Invalid video style font.")
 
 
 def _load_admin_content():
@@ -573,10 +603,11 @@ def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Premium access is required for videos longer than 60 seconds.")
     if req.random_count < 1 or req.random_count > 25:
         raise HTTPException(status_code=400, detail="Random count must be between 1 and 25.")
-    if req.max_duration < 20 or req.max_duration > 600:
-        raise HTTPException(status_code=400, detail="Maximum duration must be between 20 and 600 seconds.")
+    if req.max_duration < 30 or req.max_duration > 180:
+        raise HTTPException(status_code=400, detail="Maximum duration must be between 30 and 180 seconds.")
     if req.quality not in {"balanced", "high"}:
         raise HTTPException(status_code=400, detail="Quality must be balanced or high.")
+    validate_video_styles(req.styles)
 
     cmd = [sys.executable, str(BASE_DIR / "make.py")]
     if req.mode == "pick" and req.verse:
@@ -593,6 +624,9 @@ def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
     batch_id = uuid4().hex[:10]
     work_dir = CACHE_DIR / "tmp" / batch_id
     manifest_path = CACHE_DIR / f"batch-{batch_id}.json"
+    if req.styles:
+        style_path = work_dir / "style.json"
+        cmd.extend(["--style-json", str(style_path)])
     cmd.extend([
         "--max-dur", str(req.max_duration),
         "--quality", req.quality,
@@ -626,6 +660,7 @@ def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
             "quality": req.quality,
             "error": None,
             "videos": [],
+            "warnings": [],
             "manifest_path": str(manifest_path),
         }
     GENERATION_EXECUTOR.submit(
@@ -635,6 +670,7 @@ def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
         req.mode,
         manifest_path,
         work_dir,
+        req.styles,
     )
     return {
         "job_id": job_id,
@@ -651,13 +687,19 @@ def _read_generation_manifest(manifest_path: Path):
         return []
 
 
-def _run_generation_job(job_id, cmd, mode, manifest_path, work_dir):
+def _run_generation_job(job_id, cmd, mode, manifest_path, work_dir, styles=None):
     with GENERATION_JOBS_LOCK:
         job = GENERATION_JOBS.get(job_id)
         if job:
             job["status"] = "processing"
     try:
         with GENERATION_LOCK:
+            if styles:
+                work_dir.mkdir(parents=True, exist_ok=True)
+                (work_dir / "style.json").write_text(
+                    json.dumps(styles, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
             _prepare_ephemeral_media()
             completed = subprocess.run(cmd, cwd=str(BASE_DIR), capture_output=True, text=True)
             videos = _read_generation_manifest(manifest_path)
@@ -686,6 +728,11 @@ def _run_generation_job(job_id, cmd, mode, manifest_path, work_dir):
             job = GENERATION_JOBS.get(job_id)
             if job:
                 job["videos"] = videos
+                job["warnings"] = list(dict.fromkeys(
+                    warning
+                    for video in videos
+                    for warning in video.get("warnings", [])
+                ))
                 job["status"] = "completed" if completed.returncode == 0 else "partial"
                 job["message"] = "All reels are ready." if completed.returncode == 0 else "Some reels could not be rendered; completed reels are ready."
     except Exception as exc:
@@ -715,6 +762,11 @@ def generation_status(job_id: str, user=Depends(get_current_user)):
 
     for video in response["videos"]:
         video.setdefault("url", f"/output/{quote(video['filename'], safe='')}")
+    response["warnings"] = list(dict.fromkeys(
+        warning
+        for video in response["videos"]
+        for warning in video.get("warnings", [])
+    )) or response.get("warnings", [])
     response["job_id"] = job_id
     return response
 

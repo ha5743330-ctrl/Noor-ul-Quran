@@ -1,7 +1,5 @@
 pillow>=10
 requests
-arabic-reshaper
-python-bidi
 fastapi
 uvicorn
 python-dotenv

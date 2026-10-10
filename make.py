@@ -8,6 +8,7 @@ import ctypes
 import hashlib
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Lock
 
 _DLL_DIRECTORY_HANDLES = []
 if os.name == "nt":
@@ -25,12 +26,7 @@ if os.name == "nt":
 from PIL import Image, ImageDraw, ImageFont, features
 import requests
 
-try:
-    import arabic_reshaper
-    from bidi.algorithm import get_display
-    HAS_BIDI = True
-except ImportError:
-    HAS_BIDI = False
+RAQM_AVAILABLE = features.check("raqm")
 
 # ---------------- DEFAULT SETTINGS ----------------
 W, H, FPS = 1080, 1920, 30
@@ -42,6 +38,7 @@ FONT_SIZES = [72, 64, 56, 48, 42]
 BRIGHTNESS = -0.18
 INCLUDE_ARABIC_AUDIO = True
 GAP_AFTER_ARABIC = 0.35
+DURATION_TOLERANCE = 0.15
 NORMALIZE_AUDIO = True
 BASE_URL = "https://everyayah.com/data/"
 ARABIC_FOLDER = "Alafasy_128kbps"
@@ -57,13 +54,17 @@ FONTS = {
     "nastaliq_regular": ROOT / "fonts" / "NotoNastaliqUrdu-Regular.ttf",
     "nastaliq_bold": ROOT / "fonts" / "NotoNastaliqUrdu-Bold.ttf",
 }
+STYLE_ELEMENTS = {"bismillah", "surah", "label", "arabic", "urdu", "channel"}
 OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", ROOT / "output"))
 BACKGROUND_DIR = Path(os.getenv("BACKGROUNDS_DIR", ROOT / "backgrounds"))
 CACHE_DIR = Path(os.getenv("CACHE_DIR", ROOT / "cache"))
 ADMIN_CONTENT_FILE = ROOT / "data" / "admin_content.json"
 ADMIN_AUDIO_DIR = ROOT / "audio" / "admin"
+DURATION_CACHE_FILE = ROOT / "data" / "ayah_durations.json"
 _admin_content = None
 _hardware_encoder = None
+_duration_cache = None
+_duration_cache_lock = Lock()
 
 def run(cmd, **kw):
     return subprocess.run(cmd, check=True, **kw)
@@ -72,6 +73,60 @@ def dur(path):
     r = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)],
                        capture_output=True, text=True, check=True)
     return float(r.stdout.strip())
+
+def _read_duration_cache():
+    try:
+        raw = json.loads(DURATION_CACHE_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    return {
+        key: {
+            kind: float(value[kind])
+            for kind in ("arabic", "urdu")
+            if isinstance(value, dict)
+            and isinstance(value.get(kind), (int, float))
+            and value[kind] > 0
+        }
+        for key, value in raw.items()
+        if isinstance(key, str) and isinstance(value, dict)
+    }
+
+def load_duration_cache():
+    global _duration_cache
+    with _duration_cache_lock:
+        if _duration_cache is None:
+            _duration_cache = _read_duration_cache()
+        return _duration_cache
+
+def save_ayah_duration(surah, ayah, kind, seconds):
+    global _duration_cache
+    if kind not in {"arabic", "urdu"} or seconds <= 0:
+        raise ValueError("Invalid ayah audio duration.")
+    with _duration_cache_lock:
+        cache = _read_duration_cache()
+        if _duration_cache:
+            for key, values in _duration_cache.items():
+                cache.setdefault(key, {}).update(values)
+        entry = cache.setdefault(f"{surah}:{ayah}", {})
+        entry[kind] = round(float(seconds), 6)
+        DURATION_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        temp_path = DURATION_CACHE_FILE.with_suffix(".json.tmp")
+        temp_path.write_text(json.dumps(cache, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        temp_path.replace(DURATION_CACHE_FILE)
+        _duration_cache = cache
+
+def cached_ayah_duration(surah, ayah, kind):
+    return load_duration_cache().get(f"{surah}:{ayah}", {}).get(kind)
+
+def measure_ayah_audio(surah, ayah, kind):
+    audio_path = fetch_ayah(kind, surah, ayah)
+    if audio_path is None:
+        return None
+    seconds = dur(audio_path)
+    save_ayah_duration(surah, ayah, kind, seconds)
+    return seconds
 
 def detect_hardware_encoder():
     global _hardware_encoder
@@ -152,29 +207,128 @@ def background_playlist(bgs, total, rng):
                 unique.append(path)
                 digests.add(digest)
 
-    playlist, remaining, previous = [], total, None
-    durations = {path: dur(path) for path in unique}
-    while remaining > 0.001:
-        choices = [path for path in unique if path != previous]
-        path = rng.choice(choices or unique)
-        clip_duration = durations[path]
-        segment_duration = min(clip_duration, remaining)
-        if segment_duration <= 0:
+    if total <= 0:
+        return []
+    if not unique:
+        raise RuntimeError("No unique background videos are available.")
+    if len(unique) == 1:
+        print("Only one background clip is available; looping it for the full reel.", file=sys.stderr)
+        path = unique[0]
+        if dur(path) <= 0:
             raise RuntimeError(f"Background video has invalid duration: {path}")
+        return [(path, 0.0, total)]
+    if total < 8.0:
+        path = rng.choice(unique)
+        if dur(path) <= 0:
+            raise RuntimeError(f"Background video has invalid duration: {path}")
+        return [(path, 0.0, total)]
+
+    xfade_duration = 0.5
+    min_contribution = 8.0 - xfade_duration
+    max_contribution = 15.0 - xfade_duration
+    segment_counts = [
+        count for count in range(1, int(total / min_contribution) + 2)
+        if 8.0 + (count - 1) * min_contribution <= total
+        <= 15.0 + (count - 1) * max_contribution
+    ]
+    if not segment_counts:
+        segment_counts = [1] if total <= 15.0 else [2]
+    segment_count = rng.choice(segment_counts)
+    contributions = []
+    remaining = total
+    for index in range(segment_count):
+        min_duration = 8.0 if index == 0 else min_contribution
+        max_duration = 15.0 if index == 0 else max_contribution
+        remaining_count = segment_count - index - 1
+        lower = max(min_duration, remaining - remaining_count * max_contribution)
+        upper = min(max_duration, remaining - remaining_count * min_contribution)
+        contribution = rng.uniform(lower, upper) if upper > lower else lower
+        contributions.append(contribution)
+        remaining -= contribution
+    contributions[-1] += remaining
+
+    playlist, bag, previous = [], [], None
+    durations = {path: dur(path) for path in unique}
+    while len(playlist) < segment_count:
+        if not bag:
+            bag = list(unique)
+            rng.shuffle(bag)
+            if bag[0] == previous:
+                swap_index = next(index for index, candidate in enumerate(bag) if candidate != previous)
+                bag[0], bag[swap_index] = bag[swap_index], bag[0]
+        path = bag.pop(0)
+        if durations[path] <= 0:
+            raise RuntimeError(f"Background video has invalid duration: {path}")
+        index = len(playlist)
+        segment_duration = contributions[index] + (xfade_duration if index else 0.0)
+        clip_duration = durations[path]
         seek = rng.uniform(0, clip_duration - segment_duration) if clip_duration > segment_duration else 0
         playlist.append((path, seek, segment_duration))
-        remaining -= segment_duration
         previous = path
     return playlist
 
 def urdu_digits(n): return str(n).translate(str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹"))
 def strip_harakat_surah(s): return re.sub("[\u0640\u064B-\u065F\u0670\u06D6-\u06ED]", "", s)
 
+def is_generated_reel(path):
+    return re.fullmatch(
+        r"(?:[A-Za-z0-9_-]+_)?\d{3}_s\d+_\d+-\d+(?:_\d+)?",
+        path.stem,
+        re.IGNORECASE,
+    ) is not None
+
 def remove_leading_bismillah(text):
     words = text.lstrip("\ufeff").split()
     expected = ["بسم", "الله", "الرحمن", "الرحيم"]
     actual = [strip_harakat_surah(word).replace("ٱ", "ا") for word in words[:4]]
     return " ".join(words[4:]) if actual == expected and len(words) > 4 else text
+
+def load_video_styles(path):
+    if path is None:
+        return {}
+    try:
+        styles = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SystemExit(f"Could not read video styles from {path}: {exc}") from exc
+    if not isinstance(styles, dict):
+        raise SystemExit("Video styles must be a JSON object.")
+    for element, style in styles.items():
+        if element not in STYLE_ELEMENTS or not isinstance(style, dict):
+            raise SystemExit(f"Invalid video style element: {element}")
+        if any(field not in {"color", "font"} for field in style):
+            raise SystemExit(f"Invalid style field for {element}.")
+        color = style.get("color")
+        if color is not None and (
+            not isinstance(color, str) or re.fullmatch(r"#[0-9A-Fa-f]{6}", color) is None
+        ):
+            raise SystemExit(f"Invalid style color for {element}; use #RRGGBB.")
+        font = style.get("font")
+        if font is not None and (not isinstance(font, str) or font not in FONTS):
+            raise SystemExit(f"Invalid style font for {element}: {font}")
+    return styles
+
+def styled_font(styles, element, default):
+    return styles.get(element, {}).get("font", default)
+
+def styled_color(styles, element, default):
+    color = styles.get(element, {}).get("color")
+    if color is None:
+        return default
+    return tuple(int(color[offset:offset + 2], 16) for offset in (1, 3, 5)) + (default[3],)
+
+def resolve_font_name(name, fallback):
+    if name in FONTS and FONTS[name].is_file():
+        return name
+    if fallback in FONTS and FONTS[fallback].is_file():
+        return fallback
+    raise SystemExit(f"Required default font file missing: {FONTS.get(fallback, fallback)}")
+
+def require_raqm():
+    if not RAQM_AVAILABLE:
+        raise SystemExit(
+            "Pillow RAQM text shaping is unavailable. A libfribidi-0.dll beside "
+            "Python is not sufficient; use a Pillow build with libraqm enabled."
+        )
 
 def admin_content():
     global _admin_content
@@ -190,62 +344,65 @@ def fetch_ayah(kind, s, a):
     custom_extension = verse.get("audio", {}).get(kind)
     if custom_extension:
         custom_path = ADMIN_AUDIO_DIR / f"{s:03d}{a:03d}_{kind}.{custom_extension}"
-        return custom_path if custom_path.exists() and custom_path.stat().st_size > 1000 else None
+        if not custom_path.exists() or custom_path.stat().st_size <= 1000:
+            return None
+        audio_path = custom_path
+    else:
+        audio_path = ROOT / "audio" / kind / f"{s:03d}{a:03d}.mp3"
+        if not audio_path.exists() or audio_path.stat().st_size <= 1000:
+            folder = ARABIC_FOLDER if kind == "arabic" else URDU_FOLDER
+            url = f"{BASE_URL}{folder}/{s:03d}{a:03d}.mp3"
+            audio_path.parent.mkdir(parents=True, exist_ok=True)
+            for _ in range(3):
+                try:
+                    response = requests.get(url, timeout=60)
+                    if response.status_code == 200 and len(response.content) > 1000:
+                        audio_path.write_bytes(response.content)
+                        break
+                    if response.status_code == 404:
+                        return None
+                except requests.RequestException:
+                    time.sleep(2)
+            else:
+                return None
 
-    p = ROOT / "audio" / kind / f"{s:03d}{a:03d}.mp3"
-    if p.exists() and p.stat().st_size > 1000: return p
-    folder = ARABIC_FOLDER if kind == "arabic" else URDU_FOLDER
-    url = f"{BASE_URL}{folder}/{s:03d}{a:03d}.mp3"
-    p.parent.mkdir(parents=True, exist_ok=True)
-    for _ in range(3):
-        try:
-            r = requests.get(url, timeout=60)
-            if r.status_code == 200 and len(r.content) > 1000:
-                p.write_bytes(r.content); return p
-            if r.status_code == 404: return None
-        except requests.RequestException:
-            time.sleep(2)
-    return None
+    if cached_ayah_duration(s, a, kind) is None:
+        save_ayah_duration(s, a, kind, dur(audio_path))
+    return audio_path
 
 _clip_cache = {}
-def ayah_clip(s, a):
-    if (s, a) in _clip_cache: return _clip_cache[(s, a)]
-    ur = fetch_ayah("urdu", s, a); ar = fetch_ayah("arabic", s, a) if INCLUDE_ARABIC_AUDIO else None
-    if ur is None or (INCLUDE_ARABIC_AUDIO and ar is None):
+def ayah_clip(s, a, content_mode=None):
+    content_mode = content_mode or ("full" if INCLUDE_ARABIC_AUDIO else "urdu_only")
+    cache_key = (s, a, content_mode)
+    if cache_key in _clip_cache: return _clip_cache[cache_key]
+    include_arabic = content_mode == "full"
+    ur = fetch_ayah("urdu", s, a)
+    ar = fetch_ayah("arabic", s, a) if include_arabic else None
+    if ur is None or (include_arabic and ar is None):
         c = None
     else:
         segs, u0 = [], 0.0
-        da = 0.0
-        if ar: 
-            da = dur(ar)
+        da = cached_ayah_duration(s, a, "arabic") if ar else 0.0
+        du = cached_ayah_duration(s, a, "urdu")
+        if ar:
             segs.append((str(ar), da, GAP_AFTER_ARABIC))
             u0 = da + GAP_AFTER_ARABIC
-        du = dur(ur)
         segs.append((str(ur), du, 0.0))
         c = {"segs": segs, "ar_dur": da, "u0": u0, "ur_dur": du, "len": u0 + du}
-    _clip_cache[(s, a)] = c
+    _clip_cache[cache_key] = c
     return c
 
-def load_font(name, size):
+def load_font(name, size, fallback="amiri_bold"):
+    name = resolve_font_name(name, fallback)
     path = FONTS[name]
-    if not path.is_file():
-        raise SystemExit(f"Required font file missing: {path}")
-    if name.startswith("nastaliq") and not features.check("raqm"):
-        raise SystemExit("Noto Nastaliq Urdu requires Pillow RAQM text shaping. Install FriBiDi (libfribidi-0.dll) beside the virtualenv Python on Windows.")
-    return ImageFont.truetype(str(path), size)
-
-def shape_text(text):
-    if not features.check("raqm") and HAS_BIDI:
-        return get_display(arabic_reshaper.reshape(text))
-    return text
+    require_raqm()
+    return ImageFont.truetype(str(path), size, layout_engine=ImageFont.Layout.RAQM)
 
 def wrap(text, font, maxw):
     lines, cur = [], ""
-    use_raqm = features.check("raqm")
     for w in text.split():
         t = (cur + " " + w).strip()
-        st = shape_text(t)
-        w_len = font.getlength(st, direction="rtl", language="ur") if use_raqm else font.getlength(st)
+        w_len = font.getlength(t, direction="rtl", language="ur")
         if cur and w_len > maxw:
             lines.append(cur)
             cur = w
@@ -254,12 +411,20 @@ def wrap(text, font, maxw):
     return lines + ([cur] if cur else [])
 
 def put(d, xy, text, font, fill=(255, 255, 255, 255), stroke=3):
-    use_raqm = features.check("raqm")
-    st = shape_text(text)
-    kw = {"direction": "rtl", "language": "ur"} if use_raqm else {}
-    d.text(xy, st, font=font, fill=fill, anchor="ma", stroke_width=stroke, stroke_fill=(0, 0, 0, 230), **kw)
+    d.text(
+        xy,
+        text,
+        font=font,
+        fill=fill,
+        anchor="ma",
+        stroke_width=stroke,
+        stroke_fill=(0, 0, 0, 230),
+        direction="rtl",
+        language="ur",
+    )
 
-def base_overlay(path, surah, label, show_bismillah):
+def base_overlay(path, surah, label, show_bismillah, styles=None):
+    styles = styles or {}
     scale = W / 1080
     im = Image.new("RGBA", (W, H), (0, 0, 0, 0)); d = ImageDraw.Draw(im)
     ov = ROOT / "public" / "assets" / "overlay.png"
@@ -267,13 +432,21 @@ def base_overlay(path, surah, label, show_bismillah):
         im.alpha_composite(Image.open(ov).convert("RGBA").resize((W, H)))
     else:
         if show_bismillah:
-            put(d, (W // 2, int(round(170 * scale))), BISMILLAH, load_font("amiri_bold", int(round(64 * scale))), stroke=int(round(3 * scale)))
-        put(d, (W // 2, int(round(330 * scale))), surah, load_font("amiri_bold", int(round(92 * scale))), (255, 224, 140, 255), int(round(3 * scale)))
-        put(d, (W // 2, int(round(480 * scale))), label, load_font("amiri_bold", int(round(54 * scale))), stroke=int(round(3 * scale)))
-        put(d, (W // 2, H - int(round(220 * scale))), CHANNEL, load_font("amiri_bold", int(round(50 * scale))), (255, 255, 255, 220), int(round(2 * scale)))
+            bismillah_color = styled_color(styles, "bismillah", (255, 255, 255, 255))
+            bismillah_font = load_font(styled_font(styles, "bismillah", "amiri_bold"), int(round(64 * scale)))
+            put(d, (W // 2, int(round(170 * scale))), BISMILLAH, bismillah_font, bismillah_color, stroke=int(round(3 * scale)))
+        surah_color = styled_color(styles, "surah", (255, 224, 140, 255))
+        surah_font = load_font(styled_font(styles, "surah", "amiri_bold"), int(round(92 * scale)))
+        put(d, (W // 2, int(round(330 * scale))), surah, surah_font, surah_color, int(round(3 * scale)))
+        label_color = styled_color(styles, "label", (255, 255, 255, 255))
+        label_font = load_font(styled_font(styles, "label", "amiri_bold"), int(round(54 * scale)))
+        put(d, (W // 2, int(round(480 * scale))), label, label_font, label_color, int(round(3 * scale)))
+        channel_color = styled_color(styles, "channel", (255, 255, 255, 220))
+        channel_font = load_font(styled_font(styles, "channel", "amiri_bold"), int(round(50 * scale)))
+        put(d, (W // 2, H - int(round(220 * scale))), CHANNEL, channel_font, channel_color, int(round(2 * scale)))
     im.save(path)
 
-def chunk_png(path, lines, font, spacing, base, is_arabic=False):
+def chunk_png(path, lines, font, spacing, base, is_arabic=False, color=None):
     scale = W / 1080
     im = Image.open(base).convert("RGBA"); d = ImageDraw.Draw(im)
     lh = int(font.size * spacing)
@@ -286,7 +459,8 @@ def chunk_png(path, lines, font, spacing, base, is_arabic=False):
     d.rounded_rectangle((margin, cy - box_h // 2, W - margin, cy + box_h // 2), radius, fill=(0, 0, 0, 115))
     y = cy - box_h // 2 + padding
     
-    fill_color = (255, 224, 140, 255) if is_arabic else (255, 255, 255, 255)
+    default_color = (255, 224, 140, 255) if is_arabic else (255, 255, 255, 255)
+    fill_color = color or default_color
     
     for ln in lines:
         put(d, (W // 2, y), ln, font, fill=fill_color, stroke=int(round(3 * scale)))
@@ -294,50 +468,109 @@ def chunk_png(path, lines, font, spacing, base, is_arabic=False):
         
     im.save(path)
 
-def plan_reel(Q, s, a0, a1):
-    items = []
-    surah_data = Q["surahs"][str(s)]
-    audio_tasks = [
-        (kind, s, ayah)
-        for ayah in range(a0, a1 + 1)
-        for kind in (("arabic", "urdu") if INCLUDE_ARABIC_AUDIO else ("urdu",))
-    ]
-    if audio_tasks:
-        with ThreadPoolExecutor(max_workers=min(8, len(audio_tasks))) as executor:
-            list(executor.map(lambda task: fetch_ayah(*task), audio_tasks))
+def plan_duration(s, start, end, length_limit, content_mode, Q=None):
+    if content_mode not in {"full", "urdu_only"}:
+        raise ValueError("Content mode must be full or urdu_only.")
+    if Q is None:
+        quran_path = ROOT / "data" / "quran.json"
+        Q = json.loads(quran_path.read_text(encoding="utf-8"))
+    if str(s) not in Q["surahs"]:
+        raise ValueError("Surah must be between 1 and 114.")
+    verse_count = int(Q["surahs"][str(s)]["n"])
+    if not 1 <= start <= end <= verse_count:
+        raise ValueError(f"Ayah range must be between 1 and {verse_count} for this surah.")
+    length_limit = min(max(float(length_limit), 1.0), 180.0)
 
-    for a in range(a0, a1 + 1):
-        c = ayah_clip(s, a)
-        if c is None: return None
+    items = []
+    for ayah in range(start, end + 1):
+        clip = ayah_clip(s, ayah, content_mode)
+        if clip is None:
+            raise RuntimeError(f"Audio duration could not be measured for ayah {s}:{ayah}.")
+        items.append({**clip, "ayah": ayah})
+
+    requested_seconds = sum(item["len"] for item in items)
+    tolerance_limit = min(length_limit * (1 + DURATION_TOLERANCE), 180.0)
+    fit_items, tolerance_items = [], []
+    fit_seconds = tolerance_seconds = 0.0
+    for item in items:
+        seconds = item["len"]
+        if fit_items and fit_seconds + seconds <= length_limit:
+            fit_items.append(item)
+            fit_seconds += seconds
+        elif not fit_items and seconds > length_limit:
+            fit_items.append(item)
+            fit_seconds += seconds
+        else:
+            break
+    for item in items:
+        if tolerance_items and tolerance_seconds + item["len"] > tolerance_limit:
+            break
+        if not tolerance_items and item["len"] > tolerance_limit:
+            tolerance_items.append(item)
+            tolerance_seconds += item["len"]
+            break
+        tolerance_items.append(item)
+        tolerance_seconds += item["len"]
+
+    return {
+        "items": items,
+        "fit_items": fit_items,
+        "estimated_seconds": requested_seconds,
+        "fits_up_to": fit_items[-1]["ayah"] if fit_items else start - 1,
+        "fit_seconds": fit_seconds,
+        "tolerance_fits_up_to": tolerance_items[-1]["ayah"] if tolerance_items else start - 1,
+        "total_count": len(items),
+    }
+
+def plan_reel(Q, s, a0, a1, length_limit, content_mode):
+    plan = plan_duration(s, a0, a1, length_limit, content_mode, Q)
+    items = plan["fit_items"]
+    surah_data = Q["surahs"][str(s)]
+    for item in items:
+        a = item["ayah"]
         override = admin_content()["verses"].get(f"{s}:{a}", {})
         ar_text = override.get("arabic_text") or surah_data.get("arabic", {}).get(str(a), "")
         if a == 1 and s != 9:
             ar_text = remove_leading_bismillah(ar_text)
         ur_text = override.get("urdu_text") or surah_data["ayahs"][str(a)]
-        items.append(dict(c, ayah=a, text=ur_text, arabic=ar_text))
-    return items
+        item.update(text=ur_text, arabic=ar_text)
+    plan["items"] = items
+    return plan
 
-def build(Q, s, a0, a1, outfile, bgs, rng, tmp):
-    items = plan_reel(Q, s, a0, a1)
-    if items is None: return None
+def build(Q, s, a0, a1, outfile, bgs, rng, tmp, styles=None, max_duration=MAX_DUR, content_mode="full"):
+    require_raqm()
+    styles = styles or {}
+    plan = plan_reel(Q, s, a0, a1, max_duration, content_mode)
+    items = plan["items"]
+    total = plan["fit_seconds"]
+    used_a1 = plan["fits_up_to"]
+    warnings = []
+    if used_a1 < a1:
+        warnings.append(
+            f"Range {a0}-{a1} thi, {max_duration}s mein sirf {a0}-{used_a1} fit hui."
+        )
+    if items[0]["len"] > max_duration:
+        warnings.append(
+            f"Ayat {a0} ki audio {total:.0f}s ki hai; poori ayat rakhi gayi."
+        )
     scale = W / 1080
-    total = sum(i["len"] for i in items)
-    arabic_font_key = "amiri_bold"
-    urdu_font_key = "nastaliq_regular"
+    arabic_font_key = resolve_font_name(styled_font(styles, "arabic", "amiri_bold"), "amiri_bold")
+    urdu_font_key = resolve_font_name(styled_font(styles, "urdu", "nastaliq_regular"), "nastaliq_regular")
+    label_font_key = resolve_font_name(styled_font(styles, "label", "amiri_bold"), "amiri_bold")
     allowed = max(len(items), int(total / SECONDS_PER_CHUNK))
     font_sizes = [max(1, int(round(size * scale))) for size in FONT_SIZES]
     wrap_width = int(round(W - 200 * scale))
-    label = f"آیت {urdu_digits(a0)}" if a0 == a1 else f"آیات {urdu_digits(a0)} تا {urdu_digits(a1)}"
-    label_font = load_font("amiri_bold", int(round(54 * scale)))
+    ayah_label = f"آیت {urdu_digits(a0)}" if a0 == used_a1 else f"آیات {urdu_digits(a0)} تا {urdu_digits(used_a1)}"
+    label_font = load_font(label_font_key, int(round(54 * scale)), "amiri_bold")
     label_draw = ImageDraw.Draw(Image.new("RGBA", (W, H)))
-    label_kwargs = {"direction": "rtl", "language": "ur"} if features.check("raqm") else {}
     label_bounds = label_draw.textbbox(
         (W // 2, int(round(480 * scale))),
-        shape_text(label),
+        ayah_label,
         font=label_font,
         anchor="ma",
         stroke_width=int(round(3 * scale)),
-        **label_kwargs,
+        direction="rtl",
+        language="ur",
     )
     minimum_chunk_top = label_bounds[3] + int(round(20 * scale))
     chunk_center = H // 2 + int(round(60 * scale))
@@ -353,11 +586,12 @@ def build(Q, s, a0, a1, outfile, bgs, rng, tmp):
         return True
 
     urdu_font = None
+    urdu_spacing = 1.8 if "nastaliq" in urdu_font_key else 1.45
     for size in font_sizes:
-        candidate_font = load_font(urdu_font_key, size)
+        candidate_font = load_font(urdu_font_key, size, urdu_font_key)
         candidate_wrapped = [wrap(item["text"], candidate_font, wrap_width) for item in items]
         chunks = sum(-(-len(lines) // LINES_PER_CHUNK) for lines in candidate_wrapped)
-        if chunks <= allowed and chunks_clear_label(candidate_wrapped, candidate_font, 1.8):
+        if chunks <= allowed and chunks_clear_label(candidate_wrapped, candidate_font, urdu_spacing):
             urdu_font = candidate_font
             wrapped_ur = candidate_wrapped
             break
@@ -365,11 +599,12 @@ def build(Q, s, a0, a1, outfile, bgs, rng, tmp):
         raise SystemExit("Urdu text cannot fit below the ayah label at the selected render resolution.")
 
     arabic_font = None
+    arabic_spacing = 1.8 if "nastaliq" in arabic_font_key else 1.45
     for size in font_sizes:
-        candidate_font = load_font(arabic_font_key, size)
+        candidate_font = load_font(arabic_font_key, size, arabic_font_key)
         candidate_wrapped = [wrap(item["arabic"], candidate_font, wrap_width) if item.get("arabic") else [] for item in items]
         chunks = sum(-(-len(lines) // LINES_PER_CHUNK) for lines in candidate_wrapped)
-        if chunks <= allowed and chunks_clear_label(candidate_wrapped, candidate_font, 1.45):
+        if chunks <= allowed and chunks_clear_label(candidate_wrapped, candidate_font, arabic_spacing):
             arabic_font = candidate_font
             wrapped_ar = candidate_wrapped
             break
@@ -404,15 +639,19 @@ def build(Q, s, a0, a1, outfile, bgs, rng, tmp):
         off += d_i
 
     S = Q["surahs"][str(s)]
-    base_p = tmp / "base.png"; base_overlay(base_p, "سورۃ " + strip_harakat_surah(S["name"]).replace("سورة", "").strip(), label, s != 9)
+    used_label = f"آیت {urdu_digits(a0)}" if a0 == used_a1 else f"آیات {urdu_digits(a0)} تا {urdu_digits(used_a1)}"
+    base_p = tmp / "base.png"; base_overlay(base_p, "سورۃ " + strip_harakat_surah(S["name"]).replace("سورة", "").strip(), used_label, s != 9, styles)
     lst = tmp / "list.txt"; rows = []
     
     for k, (st, en, lines_group, is_arabic) in enumerate(timeline):
         p = tmp / f"c{k}.png"
         font = arabic_font if is_arabic else urdu_font
         font_key = arabic_font_key if is_arabic else urdu_font_key
-        spacing = 1.8 if "nastaliq" in font_key else 1.45
-        chunk_png(p, lines_group, font, spacing, base_p, is_arabic=is_arabic)
+        spacing = arabic_spacing if is_arabic else urdu_spacing
+        element = "arabic" if is_arabic else "urdu"
+        default_color = (255, 224, 140, 255) if is_arabic else (255, 255, 255, 255)
+        color = styled_color(styles, element, default_color)
+        chunk_png(p, lines_group, font, spacing, base_p, is_arabic=is_arabic, color=color)
         rows.append(f"file '{p.resolve().as_posix()}'\nduration {en - st:.3f}")
         
     rows.append(f"file '{(tmp / f'c{len(timeline)-1}.png').resolve().as_posix()}'")
@@ -421,24 +660,36 @@ def build(Q, s, a0, a1, outfile, bgs, rng, tmp):
     playlist = background_playlist(bgs, total, rng)
     cmd = ["ffmpeg", "-nostdin", "-y", "-v", "error"]
     for path, seek, segment_duration in playlist:
-        cmd += ["-ss", f"{seek:.3f}", "-t", f"{segment_duration:.3f}", "-i", str(path)]
+        cmd += ["-stream_loop", "-1", "-ss", f"{seek:.3f}", "-t", f"{segment_duration:.3f}", "-i", str(path)]
     overlay_input = len(playlist)
     cmd += ["-f", "concat", "-safe", "0", "-i", str(lst)]
 
     fc = []
     background_labels = []
     for idx, (_, _, segment_duration) in enumerate(playlist):
-        label = f"bg{idx}"
+        background_label = f"bg{idx}"
         fc.append(
             f"[{idx}:v]fps={FPS},scale={W}:{H}:force_original_aspect_ratio=increase,"
-            f"crop={W}:{H},eq=brightness={BRIGHTNESS},setsar=1,"
+            f"crop={W}:{H},eq=brightness={BRIGHTNESS},setsar=1,format=yuv420p,settb=AVTB,"
             f"tpad=stop_mode=clone:stop_duration=1,trim=duration={segment_duration:.3f},"
-            f"setpts=PTS-STARTPTS[{label}]"
+            f"setpts=PTS-STARTPTS[{background_label}]"
         )
-        background_labels.append(f"[{label}]")
-    fc.append(
-        "".join(background_labels) + f"concat=n={len(playlist)}:v=1:a=0[vbg]"
-    )
+        background_labels.append(f"[{background_label}]")
+    if len(playlist) == 1:
+        fc.append(f"{background_labels[0]}null[vbg]")
+    else:
+        previous_label = background_labels[0]
+        elapsed = playlist[0][2]
+        for idx in range(1, len(playlist)):
+            mixed_label = f"bgmix{idx}"
+            offset = elapsed - 0.5
+            fc.append(
+                f"{previous_label}{background_labels[idx]}"
+                f"xfade=transition=fade:duration=0.5:offset={max(0, offset):.3f}[{mixed_label}]"
+            )
+            previous_label = f"[{mixed_label}]"
+            elapsed += playlist[idx][2] - 0.5
+        fc.append(f"{previous_label}null[vbg]")
     fc += [f"[{overlay_input}:v]fps={FPS},format=rgba[ov]", "[vbg][ov]overlay=shortest=1[v1]",
           f"[v1]fade=t=in:d=0.6,fade=t=out:st={total-0.7:.2f}:d=0.7[vout]"]
     idx, labels = overlay_input + 1, []
@@ -451,8 +702,19 @@ def build(Q, s, a0, a1, outfile, bgs, rng, tmp):
             labels.append(f"[s{idx}]"); idx += 1
     fc.append("".join(labels) + f"concat=n={len(labels)}:v=0:a=1,afade=t=in:d=0.2,afade=t=out:st={total-0.5:.2f}:d=0.5[aout]")
     cmd += ["-filter_complex", ";".join(fc), "-map", "[vout]", "-map", "[aout]", "-t", f"{total:.2f}"]
-    encode_video(cmd, outfile)
-    return S, total
+    try:
+        encode_video(cmd, outfile)
+    except subprocess.CalledProcessError:
+        if len(playlist) < 2:
+            raise
+        print("Background xfade failed; retrying with hard cuts.", file=sys.stderr)
+        fc = [entry for entry in fc if "xfade=transition=" not in entry]
+        fc = [entry for entry in fc if not re.search(r"\[bgmix\d+\]null\[vbg\]", entry)]
+        fc.append("".join(background_labels) + f"concat=n={len(background_labels)}:v=1:a=0[vbg]")
+        fallback_cmd = cmd[:cmd.index("-filter_complex")]
+        fallback_cmd += ["-filter_complex", ";".join(fc)] + cmd[cmd.index("-map"):]
+        encode_video(fallback_cmd, outfile)
+    return S, total, used_a1, warnings
 
 def parse_picks(f):
     out = []
@@ -473,8 +735,11 @@ def pick_random(Q, count, rng, min_dur, max_dur):
             if f"{s}:{a}" in used: ok = False; break
             c = ayah_clip(s, a)
             if c is None: ok = False; break
+            if t and t + c["len"] > max_dur:
+                break
             t += c["len"]; a += 1
-            if t > max_dur: ok = False; break
+            if t > max_dur:
+                break
         a1 = a - 1
         if ok and a1 >= a0 and (t >= min_dur or (a1 == n and t >= min_dur * .7)):
             picks.append((s, a0, a1)); used.update(f"{s}:{x}" for x in range(a0, a1 + 1))
@@ -494,11 +759,6 @@ def ensure_required_tools():
 
 def main():
     global INCLUDE_ARABIC_AUDIO
-    if not features.check("raqm") and not HAS_BIDI:
-        sys.exit(
-            "Arabic text support missing. Activate the project venv and run: "
-            "pip install -r requirements.txt"
-        )
     ensure_required_tools()
     ap = argparse.ArgumentParser()
     ap.add_argument("--picks")
@@ -512,9 +772,13 @@ def main():
     ap.add_argument("--batch-id")
     ap.add_argument("--work-dir")
     ap.add_argument("--result-json")
+    ap.add_argument("--style-json")
     ap.add_argument("--check", nargs="*", type=int)
     ap.add_argument("--dry", action="store_true")
     a = ap.parse_args()
+    a.max_dur = min(max(1, a.max_dur), 180)
+    a.min_dur = min(max(1, a.min_dur), a.max_dur)
+    styles = load_video_styles(a.style_json)
     INCLUDE_ARABIC_AUDIO = not a.urdu_only
     set_video_quality(a.quality)
     
@@ -529,14 +793,25 @@ def main():
             print(f"Surah {s}: pehli {len(got)} ayaat mein se {ok} ki audio mili", end="")
             print("  [" + ", ".join(f"{c['len']:.1f}s" for c in got if c) + "]" if ok else "  -> internet/link check karo")
         return
+
+    if not a.dry:
+        require_raqm()
         
     if a.pick:
         m = re.match(r"\s*(\d+)\s*:\s*(\d+)(?:\s*-\s*(\d+))?", a.pick)
         picks = [(int(m[1]), int(m[2]), int(m[3] or m[2]))] if m else []
     else:
         picks = parse_picks(a.picks) if a.picks else pick_random(Q, a.random, rng, a.min_dur, a.max_dur) if a.random else sys.exit("--picks, --pick ya --random do")
-    bgs = [p for p in BACKGROUND_DIR.glob("*") if p.suffix.lower() in (".mp4", ".mov")]
-    if not bgs: sys.exit("backgrounds/ folder mein mp4 clips daalo")
+    background_files = [p for p in BACKGROUND_DIR.glob("*") if p.suffix.lower() in (".mp4", ".mov")]
+    generated_reels = [p for p in background_files if is_generated_reel(p)]
+    bgs = [p for p in background_files if not is_generated_reel(p)]
+    if generated_reels:
+        print(
+            "Ignoring generated reel(s) in backgrounds/: "
+            + ", ".join(path.name for path in generated_reels),
+            file=sys.stderr,
+        )
+    if not bgs: sys.exit("backgrounds/ folder mein original MP4/MOV footage daalo; generated reels cannot be used as backgrounds")
     out = OUTPUT_DIR; out.mkdir(exist_ok=True, parents=True)
     tmp = Path(a.work_dir) if a.work_dir else CACHE_DIR / "tmp"
     tmp.mkdir(exist_ok=True, parents=True)
@@ -562,19 +837,20 @@ def main():
                 suffix += 1
             name = outfile.name
             print(f"[{i}/{len(picks)}] Surah {s}:{a0}-{a1}", end=" ")
-            res = build(Q, s, a0, a1, outfile, bgs, rng, tmp)
+            res = build(Q, s, a0, a1, outfile, bgs, rng, tmp, styles, a.max_dur)
             if res is None: print("SKIP (audio download nahi hui)"); continue
-            S, total = res
+            S, total, used_a1, warnings = res
             print(f"-> {name} ({total:.0f}s)")
-            caption = f"Surah {S['english']} ({s}) | Ayat {a0}" + (f"-{a1}" if a1 != a0 else "") + f"\n#Quran #Islam #{S['english'].replace(' ', '').replace('-', '')}"
+            caption = f"Surah {S['english']} ({s}) | Ayat {a0}" + (f"-{used_a1}" if used_a1 != a0 else "") + f"\n#Quran #Islam #{S['english'].replace(' ', '').replace('-', '')}"
             w.writerow([name, caption])
             generated.append({
                 "filename": name,
                 "caption": caption,
                 "surah": s,
                 "start_ayah": a0,
-                "end_ayah": a1,
+                "end_ayah": used_a1,
                 "duration": round(total, 2),
+                "warnings": warnings,
             })
             if result_path:
                 result_path.parent.mkdir(exist_ok=True, parents=True)
