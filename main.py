@@ -311,7 +311,7 @@ def _latest_generated_video() -> Optional[str]:
 
 
 # 6. API Endpoints
-@app.get("/api/health")
+@app.api_route("/api/health", methods=["GET", "HEAD"])
 def health_check():
     return {"status": "online", "system": "Noor ul Quran Engine"}
 
@@ -511,7 +511,7 @@ async def upload_admin_verse_audio(
     return _get_verse_content(surah, ayah)
 
 
-@app.get("/config.js", include_in_schema=False)
+@app.api_route("/config.js", methods=["GET", "HEAD"], include_in_schema=False)
 def frontend_config():
     config = {
         "url": SUPABASE_URL,
@@ -530,7 +530,7 @@ def frontend_config():
     )
 
 
-@app.get("/favicon.ico", include_in_schema=False)
+@app.api_route("/favicon.ico", methods=["GET", "HEAD"], include_in_schema=False)
 def favicon():
     return FileResponse(PUBLIC_DIR / "assets" / "logo.png", media_type="image/png")
 
