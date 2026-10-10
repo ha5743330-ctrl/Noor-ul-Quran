@@ -16,7 +16,7 @@ STEP 1: INITIAL SETUP & ASSETS
 3. Fonts Aur Backgrounds Add Karein:
    - Urdu/Arabic Font: fonts/ folder mein official Quranic font (maslan Amiri-Regular.ttf ya ScheherazadeNew-Regular.ttf) daalein.
    - Background Videos: 1080x1920 (Vertical) HD videos (Pexels / Pixabay se) backgrounds/ folder mein daalein.
-   - (Optional) Frame Overlay: Apna transparent PNG design assets/overlay.png mein rakh sakte hain.
+  - (Optional) Frame Overlay: Apna transparent PNG design public/assets/overlay.png mein rakh sakte hain.
 
 
 --------------------------------------------------

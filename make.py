@@ -235,7 +235,7 @@ def put(d, xy, text, font, fill=(255, 255, 255, 255), stroke=3):
 
 def base_overlay(path, surah, label, show_bismillah, fpath):
     im = Image.new("RGBA", (W, H), (0, 0, 0, 0)); d = ImageDraw.Draw(im)
-    ov = ROOT / "assets/overlay.png"
+    ov = ROOT / "public" / "assets" / "overlay.png"
     if ov.exists():
         im.alpha_composite(Image.open(ov).convert("RGBA").resize((W, H)))
     else:

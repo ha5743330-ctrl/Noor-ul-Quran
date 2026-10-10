@@ -20,6 +20,7 @@ from pydantic import BaseModel
 
 # 1. Environment Variables Load Karein
 BASE_DIR = Path(__file__).resolve().parent
+PUBLIC_DIR = BASE_DIR / "public"
 load_dotenv(BASE_DIR / ".env")
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
@@ -531,7 +532,7 @@ def frontend_config():
 
 @app.get("/favicon.ico", include_in_schema=False)
 def favicon():
-    return FileResponse(BASE_DIR / "assets" / "logo.png", media_type="image/png")
+    return FileResponse(PUBLIC_DIR / "assets" / "logo.png", media_type="image/png")
 
 
 @app.get("/admin.html", include_in_schema=False)
@@ -706,4 +707,4 @@ def generation_status(job_id: str, user=Depends(get_current_user)):
 
 
 # 7. Static Web Files Serve Karein (MUST BE AT THE VERY BOTTOM)
-app.mount("/", StaticFiles(directory=str(BASE_DIR), html=True), name="static")
+app.mount("/", StaticFiles(directory=str(PUBLIC_DIR), html=True), name="static")
