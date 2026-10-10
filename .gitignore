@@ -20,3 +20,7 @@ data/admin_content.json
 .env.*
 !.env.example
 LOCAL_DEPLOYMENT_PLAN.md
+
+
+
+noor-wip.zip
