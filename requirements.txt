@@ -5,4 +5,3 @@ python-bidi
 fastapi
 uvicorn
 python-dotenv
-supabase
