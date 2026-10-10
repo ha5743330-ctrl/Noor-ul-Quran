@@ -1,21 +1,25 @@
 import json
+import hashlib
+import hmac
 import os
 import re
+import secrets
 import shutil
 import subprocess
 import sys
+import time
 from concurrent.futures import ThreadPoolExecutor
 from threading import Lock
 from pathlib import Path
 from typing import Any, Optional
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 from uuid import UUID, uuid4
 
 import requests
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -31,6 +35,9 @@ MEDIA_BUCKET = os.getenv("SUPABASE_MEDIA_BUCKET", "noor-media")
 OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", BASE_DIR / "output"))
 BACKGROUND_DIR = Path(os.getenv("BACKGROUNDS_DIR", BASE_DIR / "backgrounds"))
 CACHE_DIR = Path(os.getenv("CACHE_DIR", BASE_DIR / "cache"))
+VIDEO_URL_SECRET = os.getenv("VIDEO_URL_SECRET") or secrets.token_urlsafe(32)
+VIDEO_URL_TTL_SECONDS = 10 * 60
+VIDEO_FILENAME_PATTERN = re.compile(r"[A-Za-z0-9_.-]+\.mp4\Z")
 ADMIN_CONTENT_FILE = BASE_DIR / "data" / "admin_content.json"
 ADMIN_AUDIO_DIR = BASE_DIR / "audio" / "admin"
 MAX_BACKGROUND_BYTES = 50 * 1024 * 1024
@@ -77,8 +84,6 @@ app.add_middleware(
 # 4. Output Directory Mount Karein (Rendered Videos Access karne ke liye)
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 BACKGROUND_DIR.mkdir(parents=True, exist_ok=True)
-app.mount("/output", StaticFiles(directory=str(OUTPUT_DIR)), name="output")
-
 # 5. Request Body Schema
 class GenerateRequest(BaseModel):
     mode: str  # 'pick', 'picks', 'random'
@@ -345,6 +350,108 @@ def _latest_generated_video() -> Optional[str]:
 @app.api_route("/api/health", methods=["GET", "HEAD"])
 def health_check():
     return {"status": "online", "system": "Noor ul Quran Engine"}
+
+
+def _local_video_path(filename: str) -> Path:
+    if not VIDEO_FILENAME_PATTERN.fullmatch(filename):
+        raise HTTPException(status_code=400, detail="Invalid video filename.")
+    output_root = OUTPUT_DIR.resolve()
+    video_path = (output_root / filename).resolve()
+    if not video_path.is_relative_to(output_root):
+        raise HTTPException(status_code=400, detail="Invalid video filename.")
+    if not video_path.is_file():
+        raise HTTPException(status_code=404, detail="Video not found.")
+    return video_path
+
+
+def _video_signature(filename: str, expires: int) -> str:
+    payload = f"{filename}\n{expires}".encode("utf-8")
+    return hmac.new(VIDEO_URL_SECRET.encode("utf-8"), payload, hashlib.sha256).hexdigest()
+
+
+@app.get("/api/video-url/{filename}")
+def create_video_url(filename: str, user=Depends(get_current_user)):
+    _local_video_path(filename)
+    expires = int(time.time()) + VIDEO_URL_TTL_SECONDS
+    signature = _video_signature(filename, expires)
+    query = urlencode({"exp": expires, "sig": signature})
+    return {"url": f"/api/video/{quote(filename, safe='')}?{query}", "expires_at": expires}
+
+
+def _file_chunks(video_path: Path, start: int, remaining: int):
+    with video_path.open("rb") as video_file:
+        video_file.seek(start)
+        while remaining:
+            chunk = video_file.read(min(1024 * 1024, remaining))
+            if not chunk:
+                break
+            remaining -= len(chunk)
+            yield chunk
+
+
+@app.get("/api/video/{filename}")
+def serve_signed_video(
+    filename: str,
+    exp: Optional[str] = None,
+    sig: Optional[str] = None,
+    range_header: Optional[str] = Header(default=None, alias="Range"),
+):
+    video_path = _local_video_path(filename)
+    if exp is None or sig is None or re.fullmatch(r"[0-9]{1,12}", exp) is None:
+        raise HTTPException(status_code=403, detail="Invalid or expired video link.")
+    expires = int(exp)
+    if expires <= int(time.time()) or not hmac.compare_digest(sig, _video_signature(filename, expires)):
+        raise HTTPException(status_code=403, detail="Invalid or expired video link.")
+
+    file_size = video_path.stat().st_size
+    start, end = 0, max(0, file_size - 1)
+    status_code = 200
+    headers = {
+        "Accept-Ranges": "bytes",
+        "Cache-Control": "private, no-store",
+        "Content-Disposition": f'inline; filename="{filename}"',
+        "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "no-referrer",
+    }
+    if range_header:
+        match = re.fullmatch(r"bytes=(\d*)-(\d*)", range_header.strip())
+        if not match or (not match.group(1) and not match.group(2)) or file_size == 0:
+            raise HTTPException(
+                status_code=416,
+                detail="Requested byte range is not satisfiable.",
+                headers={"Content-Range": f"bytes */{file_size}"},
+            )
+        first, last = match.groups()
+        if first:
+            start = int(first)
+            end = int(last) if last else file_size - 1
+        else:
+            suffix_length = int(last)
+            if suffix_length <= 0:
+                raise HTTPException(
+                    status_code=416,
+                    detail="Requested byte range is not satisfiable.",
+                    headers={"Content-Range": f"bytes */{file_size}"},
+                )
+            start = max(0, file_size - suffix_length)
+            end = file_size - 1
+        if start >= file_size or start > end:
+            raise HTTPException(
+                status_code=416,
+                detail="Requested byte range is not satisfiable.",
+                headers={"Content-Range": f"bytes */{file_size}"},
+            )
+        end = min(end, file_size - 1)
+        status_code = 206
+        headers["Content-Range"] = f"bytes {start}-{end}/{file_size}"
+    content_length = max(0, end - start + 1)
+    headers["Content-Length"] = str(content_length)
+    return StreamingResponse(
+        _file_chunks(video_path, start, content_length),
+        status_code=status_code,
+        media_type="video/mp4",
+        headers=headers,
+    )
 
 
 @app.get("/api/access")
@@ -760,7 +867,6 @@ def _run_generation_job(job_id, cmd, mode, manifest_path, work_dir, styles=None)
                 raise RuntimeError("No video output was generated.")
 
             for video in videos:
-                video["url"] = f"/output/{quote(video['filename'], safe='')}"
                 if SUPABASE_SERVICE_KEY:
                     video_path = OUTPUT_DIR / video["filename"]
                     stored_video = f"videos/{uuid4().hex}_{video['filename']}"
@@ -811,8 +917,6 @@ def generation_status(job_id: str, user=Depends(get_current_user)):
     if response["status"] in {"queued", "processing"}:
         response["videos"] = _read_generation_manifest(manifest_path)
 
-    for video in response["videos"]:
-        video.setdefault("url", f"/output/{quote(video['filename'], safe='')}")
     response["warnings"] = list(dict.fromkeys(
         warning
         for video in response["videos"]

@@ -411,23 +411,48 @@ async function waitForGeneration(jobId, accessToken, statusBox, logMsg, statusPe
 function showGeneratedVideos(videos) {
     const wasEmpty = generatedVideos.length === 0;
     const selectedFilename = generatedVideos[currentVideoIndex]?.filename;
-    generatedVideos = videos;
+    const previousUrls = new Map(
+        generatedVideos
+            .filter((video) => video.filename && video.url)
+            .map((video) => [video.filename, video.url])
+    );
+    const previousCount = generatedVideos.length;
+    generatedVideos = videos.map((video) => ({
+        ...video,
+        url: video.url || previousUrls.get(video.filename)
+    }));
     const selectedIndex = generatedVideos.findIndex((video) => video.filename === selectedFilename);
     currentVideoIndex = selectedIndex >= 0 ? selectedIndex : Math.min(currentVideoIndex, generatedVideos.length - 1);
     const previewBox = document.getElementById("video-preview-box");
     if (!generatedVideos.length || !previewBox) return;
     previewBox.classList.remove("hidden");
-    renderCurrentVideo();
+    if (previousCount !== generatedVideos.length || selectedIndex < 0) renderCurrentVideo();
     if (wasEmpty) previewBox.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
-function renderCurrentVideo() {
+async function resolveVideoUrl(video) {
+    if (video.url) {
+        const currentUrl = new URL(video.url, window.location.origin);
+        const apiPath = new URL(API_BASE_URL, window.location.origin).pathname.replace(/\/$/, "");
+        if (!currentUrl.pathname.startsWith(`${apiPath}/video/`)) return video.url;
+        const expiry = Number(currentUrl.searchParams.get("exp"));
+        if (expiry > Date.now() / 1000 + 30) return video.url;
+    }
+    if (!video.filename) throw new Error("Generated video filename is missing.");
+    const { data: { session } } = await window.supabaseClient.auth.getSession();
+    if (!session) throw new Error("Sign in again to play or download this video.");
+    const response = await fetch(`${API_BASE_URL}/video-url/${encodeURIComponent(video.filename)}`, {
+        headers: { Authorization: `Bearer ${session.access_token}` }
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.detail || "Could not create a secure video link.");
+    return new URL(result.url, new URL(API_BASE_URL, window.location.origin).origin).href;
+}
+
+async function renderCurrentVideo() {
     const video = generatedVideos[currentVideoIndex];
     if (!video) return;
     const player = document.getElementById("rendered-video-player");
-    const apiOrigin = new URL(API_BASE_URL, window.location.origin).origin;
-    const fallbackUrl = `/output/${encodeURIComponent(video.filename)}`;
-    const videoUrl = new URL(video.url || fallbackUrl, apiOrigin);
     const previewBox = document.getElementById("video-preview-box");
     const filename = document.getElementById("preview-filename");
     const counter = document.getElementById("preview-counter");
@@ -437,17 +462,11 @@ function renderCurrentVideo() {
     const nextButton = document.getElementById("preview-next");
     const gallery = document.getElementById("video-gallery");
 
-    if (player) {
-        player.pause();
-        player.src = videoUrl.href;
-        player.load();
-    }
+    if (player) player.pause();
+    if (downloadButton) downloadButton.removeAttribute("href");
     if (filename) filename.textContent = video.filename || `Reel ${currentVideoIndex + 1}`;
     if (counter) counter.textContent = `${currentVideoIndex + 1} / ${generatedVideos.length}`;
-    if (downloadButton) {
-        downloadButton.href = videoUrl.href;
-        downloadButton.download = video.filename || "noor-ul-quran-reel.mp4";
-    }
+    if (downloadButton) downloadButton.download = video.filename || "noor-ul-quran-reel.mp4";
     if (caption) caption.textContent = video.caption || "";
     if (previousButton) previousButton.disabled = currentVideoIndex === 0;
     if (nextButton) nextButton.disabled = currentVideoIndex === generatedVideos.length - 1;
@@ -471,6 +490,20 @@ function renderCurrentVideo() {
         }));
     }
     if (previewBox) previewBox.setAttribute("aria-label", `Reel ${currentVideoIndex + 1} of ${generatedVideos.length}`);
+
+    try {
+        const videoUrl = await resolveVideoUrl(video);
+        if (generatedVideos[currentVideoIndex] !== video) return;
+        if (player) {
+            player.src = videoUrl;
+            player.load();
+        }
+        if (downloadButton) downloadButton.href = videoUrl;
+    } catch (error) {
+        if (generatedVideos[currentVideoIndex] !== video) return;
+        console.error("Secure video URL error:", error);
+        if (filename) filename.textContent = `${video.filename || "Video"} — ${error.message}`;
+    }
 }
 
 function showPreviousVideo() {
