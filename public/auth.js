@@ -62,8 +62,6 @@ async function handleSignIn(event) {
             showResendConfirmation(error.code === "email_not_confirmed" || /email not confirmed/i.test(error.message));
         } else {
             showResendConfirmation(false);
-            sessionStorage.setItem("access_token", data.session.access_token);
-            sessionStorage.setItem("user_email", data.user.email);
             showAlert("Login Successful! Redirecting...", false);
             setTimeout(() => { window.location.href = "index.html"; }, 1000);
         }
