@@ -260,30 +260,36 @@ def put(d, xy, text, font, fill=(255, 255, 255, 255), stroke=3):
     d.text(xy, st, font=font, fill=fill, anchor="ma", stroke_width=stroke, stroke_fill=(0, 0, 0, 230), **kw)
 
 def base_overlay(path, surah, label, show_bismillah):
+    scale = W / 1080
     im = Image.new("RGBA", (W, H), (0, 0, 0, 0)); d = ImageDraw.Draw(im)
     ov = ROOT / "public" / "assets" / "overlay.png"
     if ov.exists():
         im.alpha_composite(Image.open(ov).convert("RGBA").resize((W, H)))
     else:
-        if show_bismillah: put(d, (W // 2, 170), BISMILLAH, load_font("amiri_bold", 64))
-        put(d, (W // 2, 330), surah, load_font("amiri_bold", 92), (255, 224, 140, 255))
-        put(d, (W // 2, 480), label, load_font("amiri_bold", 54))
-        put(d, (W // 2, H - 220), CHANNEL, load_font("amiri_bold", 50), (255, 255, 255, 220), 2)
+        if show_bismillah:
+            put(d, (W // 2, int(round(170 * scale))), BISMILLAH, load_font("amiri_bold", int(round(64 * scale))), stroke=int(round(3 * scale)))
+        put(d, (W // 2, int(round(330 * scale))), surah, load_font("amiri_bold", int(round(92 * scale))), (255, 224, 140, 255), int(round(3 * scale)))
+        put(d, (W // 2, int(round(480 * scale))), label, load_font("amiri_bold", int(round(54 * scale))), stroke=int(round(3 * scale)))
+        put(d, (W // 2, H - int(round(220 * scale))), CHANNEL, load_font("amiri_bold", int(round(50 * scale))), (255, 255, 255, 220), int(round(2 * scale)))
     im.save(path)
 
 def chunk_png(path, lines, font, spacing, base, is_arabic=False):
+    scale = W / 1080
     im = Image.open(base).convert("RGBA"); d = ImageDraw.Draw(im)
     lh = int(font.size * spacing)
-    box_h = lh * len(lines) + 90
-    cy = H // 2 + 60
+    box_h = lh * len(lines) + int(round(90 * scale))
+    cy = H // 2 + int(round(60 * scale))
+    margin = int(round(50 * scale))
+    radius = int(round(40 * scale))
+    padding = int(round(45 * scale))
     
-    d.rounded_rectangle((50, cy - box_h // 2, W - 50, cy + box_h // 2), 40, fill=(0, 0, 0, 115))
-    y = cy - box_h // 2 + 45
+    d.rounded_rectangle((margin, cy - box_h // 2, W - margin, cy + box_h // 2), radius, fill=(0, 0, 0, 115))
+    y = cy - box_h // 2 + padding
     
     fill_color = (255, 224, 140, 255) if is_arabic else (255, 255, 255, 255)
     
     for ln in lines:
-        put(d, (W // 2, y), ln, font, fill=fill_color)
+        put(d, (W // 2, y), ln, font, fill=fill_color, stroke=int(round(3 * scale)))
         y += lh
         
     im.save(path)
@@ -314,22 +320,61 @@ def plan_reel(Q, s, a0, a1):
 def build(Q, s, a0, a1, outfile, bgs, rng, tmp):
     items = plan_reel(Q, s, a0, a1)
     if items is None: return None
+    scale = W / 1080
     total = sum(i["len"] for i in items)
     arabic_font_key = "amiri_bold"
     urdu_font_key = "nastaliq_regular"
     allowed = max(len(items), int(total / SECONDS_PER_CHUNK))
-    
-    for size in FONT_SIZES:
-        urdu_font = load_font(urdu_font_key, size)
-        wrapped_ur = [wrap(item["text"], urdu_font, W - 200) for item in items]
-        chunks = sum(-(-len(w) // LINES_PER_CHUNK) for w in wrapped_ur)
-        if chunks <= allowed: break
+    font_sizes = [max(1, int(round(size * scale))) for size in FONT_SIZES]
+    wrap_width = int(round(W - 200 * scale))
+    label = f"آیت {urdu_digits(a0)}" if a0 == a1 else f"آیات {urdu_digits(a0)} تا {urdu_digits(a1)}"
+    label_font = load_font("amiri_bold", int(round(54 * scale)))
+    label_draw = ImageDraw.Draw(Image.new("RGBA", (W, H)))
+    label_kwargs = {"direction": "rtl", "language": "ur"} if features.check("raqm") else {}
+    label_bounds = label_draw.textbbox(
+        (W // 2, int(round(480 * scale))),
+        shape_text(label),
+        font=label_font,
+        anchor="ma",
+        stroke_width=int(round(3 * scale)),
+        **label_kwargs,
+    )
+    minimum_chunk_top = label_bounds[3] + int(round(20 * scale))
+    chunk_center = H // 2 + int(round(60 * scale))
+    chunk_padding = int(round(90 * scale))
 
-    for size in FONT_SIZES:
-        arabic_font = load_font(arabic_font_key, size)
-        wrapped_ar = [wrap(item["arabic"], arabic_font, W - 200) if item.get("arabic") else [] for item in items]
-        chunks = sum(-(-len(lines) // LINES_PER_CHUNK) for lines in wrapped_ar)
-        if chunks <= allowed: break
+    def chunks_clear_label(wrapped_items, font, spacing):
+        for lines in wrapped_items:
+            for start in range(0, len(lines), LINES_PER_CHUNK):
+                line_count = len(lines[start:start + LINES_PER_CHUNK])
+                box_height = int(font.size * spacing) * line_count + chunk_padding
+                if chunk_center - box_height // 2 < minimum_chunk_top:
+                    return False
+        return True
+
+    urdu_font = None
+    for size in font_sizes:
+        candidate_font = load_font(urdu_font_key, size)
+        candidate_wrapped = [wrap(item["text"], candidate_font, wrap_width) for item in items]
+        chunks = sum(-(-len(lines) // LINES_PER_CHUNK) for lines in candidate_wrapped)
+        if chunks <= allowed and chunks_clear_label(candidate_wrapped, candidate_font, 1.8):
+            urdu_font = candidate_font
+            wrapped_ur = candidate_wrapped
+            break
+    if urdu_font is None:
+        raise SystemExit("Urdu text cannot fit below the ayah label at the selected render resolution.")
+
+    arabic_font = None
+    for size in font_sizes:
+        candidate_font = load_font(arabic_font_key, size)
+        candidate_wrapped = [wrap(item["arabic"], candidate_font, wrap_width) if item.get("arabic") else [] for item in items]
+        chunks = sum(-(-len(lines) // LINES_PER_CHUNK) for lines in candidate_wrapped)
+        if chunks <= allowed and chunks_clear_label(candidate_wrapped, candidate_font, 1.45):
+            arabic_font = candidate_font
+            wrapped_ar = candidate_wrapped
+            break
+    if arabic_font is None:
+        raise SystemExit("Arabic text cannot fit below the ayah label at the selected render resolution.")
         
     timeline, off = [], 0.0
     for it, u_lines, ar_lines in zip(items, wrapped_ur, wrapped_ar):
@@ -359,7 +404,6 @@ def build(Q, s, a0, a1, outfile, bgs, rng, tmp):
         off += d_i
 
     S = Q["surahs"][str(s)]
-    label = f"آیت {urdu_digits(a0)}" if a0 == a1 else f"آیات {urdu_digits(a0)} تا {urdu_digits(a1)}"
     base_p = tmp / "base.png"; base_overlay(base_p, "سورۃ " + strip_harakat_surah(S["name"]).replace("سورة", "").strip(), label, s != 9)
     lst = tmp / "list.txt"; rows = []
     
