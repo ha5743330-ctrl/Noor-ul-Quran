@@ -8,7 +8,7 @@ import ctypes
 import hashlib
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from threading import Lock
+from threading import Lock, get_ident
 
 _DLL_DIRECTORY_HANDLES = []
 if os.name == "nt":
@@ -112,10 +112,34 @@ def save_ayah_duration(surah, ayah, kind, seconds):
         entry = cache.setdefault(f"{surah}:{ayah}", {})
         entry[kind] = round(float(seconds), 6)
         DURATION_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        temp_path = DURATION_CACHE_FILE.with_suffix(".json.tmp")
+        temp_path = DURATION_CACHE_FILE.with_name(
+            f"{DURATION_CACHE_FILE.stem}.{os.getpid()}.{get_ident()}.tmp"
+        )
         temp_path.write_text(json.dumps(cache, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         temp_path.replace(DURATION_CACHE_FILE)
         _duration_cache = cache
+
+def invalidate_ayah_duration(surah, ayah, kind):
+    global _duration_cache
+    with _duration_cache_lock:
+        cache = _read_duration_cache()
+        if _duration_cache:
+            for key, values in _duration_cache.items():
+                cache.setdefault(key, {}).update(values)
+        entry = cache.get(f"{surah}:{ayah}")
+        if entry:
+            entry.pop(kind, None)
+            if not entry:
+                cache.pop(f"{surah}:{ayah}", None)
+        DURATION_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        temp_path = DURATION_CACHE_FILE.with_name(
+            f"{DURATION_CACHE_FILE.stem}.{os.getpid()}.{get_ident()}.tmp"
+        )
+        temp_path.write_text(json.dumps(cache, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        temp_path.replace(DURATION_CACHE_FILE)
+        _duration_cache = cache
+        for content_mode in ("full", "urdu_only"):
+            _clip_cache.pop((surah, ayah, content_mode), None)
 
 def cached_ayah_duration(surah, ayah, kind):
     return load_duration_cache().get(f"{surah}:{ayah}", {}).get(kind)
@@ -124,9 +148,7 @@ def measure_ayah_audio(surah, ayah, kind):
     audio_path = fetch_ayah(kind, surah, ayah)
     if audio_path is None:
         return None
-    seconds = dur(audio_path)
-    save_ayah_duration(surah, ayah, kind, seconds)
-    return seconds
+    return cached_ayah_duration(surah, ayah, kind)
 
 def detect_hardware_encoder():
     global _hardware_encoder
@@ -483,10 +505,24 @@ def plan_duration(s, start, end, length_limit, content_mode, Q=None):
 
     items = []
     for ayah in range(start, end + 1):
-        clip = ayah_clip(s, ayah, content_mode)
-        if clip is None:
+        urdu_seconds = cached_ayah_duration(s, ayah, "urdu")
+        if urdu_seconds is None:
+            urdu_seconds = measure_ayah_audio(s, ayah, "urdu")
+        arabic_seconds = 0.0
+        if content_mode == "full":
+            arabic_seconds = cached_ayah_duration(s, ayah, "arabic")
+            if arabic_seconds is None:
+                arabic_seconds = measure_ayah_audio(s, ayah, "arabic")
+        if urdu_seconds is None or (content_mode == "full" and arabic_seconds is None):
             raise RuntimeError(f"Audio duration could not be measured for ayah {s}:{ayah}.")
-        items.append({**clip, "ayah": ayah})
+        urdu_start = arabic_seconds + GAP_AFTER_ARABIC if content_mode == "full" else 0.0
+        items.append({
+            "ayah": ayah,
+            "ar_dur": arabic_seconds,
+            "u0": urdu_start,
+            "ur_dur": urdu_seconds,
+            "len": urdu_start + urdu_seconds,
+        })
 
     requested_seconds = sum(item["len"] for item in items)
     tolerance_limit = min(length_limit * (1 + DURATION_TOLERANCE), 180.0)
@@ -494,10 +530,10 @@ def plan_duration(s, start, end, length_limit, content_mode, Q=None):
     fit_seconds = tolerance_seconds = 0.0
     for item in items:
         seconds = item["len"]
-        if fit_items and fit_seconds + seconds <= length_limit:
+        if not fit_items:
             fit_items.append(item)
             fit_seconds += seconds
-        elif not fit_items and seconds > length_limit:
+        elif fit_seconds + seconds <= length_limit:
             fit_items.append(item)
             fit_seconds += seconds
         else:
@@ -506,8 +542,6 @@ def plan_duration(s, start, end, length_limit, content_mode, Q=None):
         if tolerance_items and tolerance_seconds + item["len"] > tolerance_limit:
             break
         if not tolerance_items and item["len"] > tolerance_limit:
-            tolerance_items.append(item)
-            tolerance_seconds += item["len"]
             break
         tolerance_items.append(item)
         tolerance_seconds += item["len"]
@@ -515,7 +549,8 @@ def plan_duration(s, start, end, length_limit, content_mode, Q=None):
     return {
         "items": items,
         "fit_items": fit_items,
-        "estimated_seconds": requested_seconds,
+        "estimated_seconds": fit_seconds,
+        "range_seconds": requested_seconds,
         "fits_up_to": fit_items[-1]["ayah"] if fit_items else start - 1,
         "fit_seconds": fit_seconds,
         "tolerance_fits_up_to": tolerance_items[-1]["ayah"] if tolerance_items else start - 1,
@@ -524,16 +559,21 @@ def plan_duration(s, start, end, length_limit, content_mode, Q=None):
 
 def plan_reel(Q, s, a0, a1, length_limit, content_mode):
     plan = plan_duration(s, a0, a1, length_limit, content_mode, Q)
-    items = plan["fit_items"]
+    items = []
     surah_data = Q["surahs"][str(s)]
-    for item in items:
+    for item in plan["fit_items"]:
         a = item["ayah"]
+        clip = ayah_clip(s, a, content_mode)
+        if clip is None:
+            raise RuntimeError(f"Audio could not be prepared for ayah {s}:{a}.")
+        item.update(clip)
         override = admin_content()["verses"].get(f"{s}:{a}", {})
         ar_text = override.get("arabic_text") or surah_data.get("arabic", {}).get(str(a), "")
         if a == 1 and s != 9:
             ar_text = remove_leading_bismillah(ar_text)
         ur_text = override.get("urdu_text") or surah_data["ayahs"][str(a)]
         item.update(text=ur_text, arabic=ar_text)
+        items.append(item)
     plan["items"] = items
     return plan
 
@@ -730,17 +770,25 @@ def pick_random(Q, count, rng, min_dur, max_dur):
     while len(picks) < count and tries < 3000:
         tries += 1
         s = rng.choices(range(1, 115), weights=ns)[0]; n = ns[s - 1]; a0 = rng.randint(1, n)
-        a, t, ok = a0, 0.0, True
+        a, t, ok, selected_end = a0, 0.0, True, a0 - 1
         while a <= n and t < min_dur:
             if f"{s}:{a}" in used: ok = False; break
-            c = ayah_clip(s, a)
-            if c is None: ok = False; break
-            if t and t + c["len"] > max_dur:
+            plan = plan_duration(
+                s,
+                a0,
+                a,
+                max_dur,
+                "full" if INCLUDE_ARABIC_AUDIO else "urdu_only",
+                Q,
+            )
+            selected_end = plan["fits_up_to"]
+            t = plan["fit_seconds"]
+            if selected_end < a:
                 break
-            t += c["len"]; a += 1
+            a = selected_end + 1
             if t > max_dur:
                 break
-        a1 = a - 1
+        a1 = selected_end
         if ok and a1 >= a0 and (t >= min_dur or (a1 == n and t >= min_dur * .7)):
             picks.append((s, a0, a1)); used.update(f"{s}:{x}" for x in range(a0, a1 + 1))
             print(f"   chuna: {s}:{a0}-{a1} ({t:.0f}s)")
@@ -837,7 +885,10 @@ def main():
                 suffix += 1
             name = outfile.name
             print(f"[{i}/{len(picks)}] Surah {s}:{a0}-{a1}", end=" ")
-            res = build(Q, s, a0, a1, outfile, bgs, rng, tmp, styles, a.max_dur)
+            content_mode = "urdu_only" if a.urdu_only else "full"
+            res = build(
+                Q, s, a0, a1, outfile, bgs, rng, tmp, styles, a.max_dur, content_mode
+            )
             if res is None: print("SKIP (audio download nahi hui)"); continue
             S, total, used_a1, warnings = res
             print(f"-> {name} ({total:.0f}s)")

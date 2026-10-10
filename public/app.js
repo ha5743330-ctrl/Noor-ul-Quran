@@ -3,6 +3,9 @@ window.userAccess = null;
 window.videoStyles = {};
 let generatedVideos = [];
 let currentVideoIndex = 0;
+let estimateTimer = null;
+let estimateRequestId = 0;
+let lastEstimateRangeSeconds = 0;
 
 const VIDEO_STYLE_LABELS = {
     bismillah: "Bismillah",
@@ -23,8 +26,160 @@ const VIDEO_STYLE_FONT_LABELS = {
 
 document.addEventListener("DOMContentLoaded", () => {
     initializeVideoStyleControls();
+    initializeDurationEstimate();
     initializeStudio();
 });
+
+function formatDuration(seconds) {
+    const rounded = Math.max(0, Math.round(Number(seconds) || 0));
+    return `${Math.floor(rounded / 60)}:${String(rounded % 60).padStart(2, "0")}`;
+}
+
+function currentEstimateRange() {
+    return {
+        surah: Number(document.getElementById("estimate-surah")?.value),
+        start: Number(document.getElementById("estimate-start")?.value),
+        end: Number(document.getElementById("estimate-end")?.value)
+    };
+}
+
+function syncRangeText() {
+    const { surah, start, end } = currentEstimateRange();
+    const rangeInput = document.getElementById("input-pick");
+    if (rangeInput && surah && start && end) rangeInput.value = `${surah}:${start}-${end}`;
+}
+
+function syncRangeControls() {
+    const rangeInput = document.getElementById("input-pick");
+    const match = rangeInput?.value.trim().match(/^(\d+)\s*:\s*(\d+)(?:\s*-\s*(\d+))?$/);
+    if (!match) return false;
+    const surah = document.getElementById("estimate-surah");
+    const start = document.getElementById("estimate-start");
+    const end = document.getElementById("estimate-end");
+    if (surah) surah.value = match[1];
+    if (start) start.value = match[2];
+    if (end) end.value = match[3] || match[2];
+    return true;
+}
+
+function scheduleDurationEstimate() {
+    window.clearTimeout(estimateTimer);
+    const mode = document.getElementById("mode-select")?.value || "pick";
+    const panel = document.getElementById("duration-estimate-panel");
+    if (panel) panel.classList.toggle("hidden", mode !== "pick");
+    if (mode !== "pick") return;
+    estimateTimer = window.setTimeout(requestDurationEstimate, 400);
+}
+
+async function requestDurationEstimate() {
+    const text = document.getElementById("duration-estimate-text");
+    const warning = document.getElementById("duration-estimate-warning");
+    const chooseButton = document.getElementById("choose-estimated-length");
+    const { surah, start, end } = currentEstimateRange();
+    const length = Number(document.getElementById("input-max-dur")?.value || 60);
+    const contentMode = document.getElementById("input-content-mode")?.value || "full";
+    const currentRequestId = ++estimateRequestId;
+
+    if (!Number.isInteger(surah) || !Number.isInteger(start) || !Number.isInteger(end) || start < 1 || end < start) {
+        if (text) {
+            text.textContent = "Surah aur ayat range durust enter karein.";
+            text.className = "text-sm font-semibold text-red-400";
+        }
+        if (warning) warning.classList.add("hidden");
+        if (chooseButton) chooseButton.classList.add("hidden");
+        return;
+    }
+    if (text) {
+        text.textContent = "Hisaab ho raha hai...";
+        text.className = "text-sm font-semibold text-slate-300";
+    }
+    if (warning) warning.classList.add("hidden");
+    if (chooseButton) chooseButton.classList.add("hidden");
+
+    try {
+        const { data: { session } } = await window.supabaseClient.auth.getSession();
+        if (!session) throw new Error("Sign in to estimate reel duration.");
+        const params = new URLSearchParams({
+            surah: String(surah),
+            start: String(start),
+            end: String(end),
+            mode: contentMode,
+            length_limit: String(length)
+        });
+        const response = await fetch(`${API_BASE_URL}/estimate?${params}`, {
+            headers: { Authorization: `Bearer ${session.access_token}` }
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.detail || "Duration estimate failed.");
+        if (currentRequestId !== estimateRequestId) return;
+
+        lastEstimateRangeSeconds = Number(result.range_seconds || result.estimated_seconds);
+        const allFit = result.fits_up_to >= end && result.estimated_seconds <= length;
+        const withinTolerance = result.within_tolerance;
+        if (text) {
+            text.textContent = `Anumaan: ${formatDuration(result.estimated_seconds)} (ayat ${start}-${result.fits_up_to}) | Selected: ${formatDuration(length)}`;
+            text.className = `text-sm font-semibold ${allFit ? "text-green-400" : withinTolerance ? "text-amber-300" : "text-red-400"}`;
+        }
+        if (warning && result.fits_up_to < end) {
+            warning.textContent = `Sirf ayat ${start}-${result.fits_up_to} fit hongi. Length badhayein ya range chhoti karein.`;
+            warning.classList.remove("hidden");
+        }
+        if (warning && result.fits_up_to >= end && result.estimated_seconds > length) {
+            warning.textContent = `Ayat ${start} ki poori audio selected length se lambi hai; poori ayat render hogi.`;
+            warning.classList.remove("hidden");
+        }
+        if (chooseButton && (result.fits_up_to < end || result.estimated_seconds > length)) {
+            chooseButton.classList.remove("hidden");
+        }
+    } catch (error) {
+        if (currentRequestId !== estimateRequestId) return;
+        if (text) {
+            text.textContent = error.message || "Duration estimate failed.";
+            text.className = "text-sm font-semibold text-red-400";
+        }
+        if (warning) warning.classList.add("hidden");
+    }
+}
+
+function initializeDurationEstimate() {
+    const surah = document.getElementById("estimate-surah");
+    if (surah) {
+        for (let number = 2; number <= 114; number += 1) {
+            const option = document.createElement("option");
+            option.value = String(number);
+            option.textContent = `Surah ${number}`;
+            surah.appendChild(option);
+        }
+    }
+    surah?.addEventListener("change", () => {
+        syncRangeText();
+        scheduleDurationEstimate();
+    });
+    ["estimate-start", "estimate-end"].forEach((id) => {
+        document.getElementById(id)?.addEventListener("input", () => {
+            syncRangeText();
+            scheduleDurationEstimate();
+        });
+    });
+    document.getElementById("input-pick")?.addEventListener("input", () => {
+        if (syncRangeControls()) scheduleDurationEstimate();
+    });
+    document.getElementById("input-max-dur")?.addEventListener("change", scheduleDurationEstimate);
+    document.getElementById("input-content-mode")?.addEventListener("change", scheduleDurationEstimate);
+    document.getElementById("choose-estimated-length")?.addEventListener("click", () => {
+        const lengthSelect = document.getElementById("input-max-dur");
+        if (!lengthSelect) return;
+        const available = [...lengthSelect.options]
+            .filter((option) => !option.disabled)
+            .map((option) => Number(option.value))
+            .sort((a, b) => a - b);
+        const recommended = available.find((value) => value >= lastEstimateRangeSeconds);
+        lengthSelect.value = String(recommended || available[available.length - 1]);
+        scheduleDurationEstimate();
+    });
+    syncRangeText();
+    scheduleDurationEstimate();
+}
 
 function renderAppliedVideoStyles() {
     const list = document.getElementById("applied-video-styles");

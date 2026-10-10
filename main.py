@@ -357,6 +357,54 @@ def get_access(user=Depends(get_current_user)):
     }
 
 
+@app.get("/api/estimate")
+def estimate_reel(
+    surah: Optional[str] = None,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    mode: Optional[str] = None,
+    length_limit: Optional[str] = "60",
+    user=Depends(get_current_user),
+):
+    try:
+        surah_number = int(surah)
+        start_ayah = int(start)
+        end_ayah = int(end)
+        selected_length = int(length_limit)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="Surah, ayah range, and length are required.") from exc
+    if start_ayah > end_ayah:
+        raise HTTPException(status_code=400, detail="Start ayah must not exceed end ayah.")
+    if mode not in {"full", "urdu_only"}:
+        raise HTTPException(status_code=400, detail="Mode must be full or urdu_only.")
+    if not 30 <= selected_length <= 180:
+        raise HTTPException(status_code=400, detail="Length must be between 30 and 180 seconds.")
+    _validate_verse(surah_number, start_ayah)
+    _validate_verse(surah_number, end_ayah)
+
+    import make as renderer
+
+    try:
+        plan = renderer.plan_duration(
+            surah_number,
+            start_ayah,
+            end_ayah,
+            selected_length,
+            mode,
+        )
+    except (OSError, RuntimeError, requests.RequestException) as exc:
+        raise HTTPException(status_code=502, detail="Ayah audio durations could not be measured.") from exc
+
+    return {
+        "estimated_seconds": round(plan["estimated_seconds"], 6),
+        "fits_up_to": plan["fits_up_to"],
+        "tolerance_fits_up_to": plan["tolerance_fits_up_to"],
+        "within_tolerance": plan["tolerance_fits_up_to"] >= end_ayah,
+        "total_count": plan["total_count"],
+        "range_seconds": round(plan["range_seconds"], 6),
+    }
+
+
 @app.get("/api/admin/users")
 def list_users(user=Depends(require_admin)):
     response = _supabase_request(
@@ -534,6 +582,9 @@ async def upload_admin_verse_audio(
     previous_extension = audio.get(language)
     audio[language] = extension.lstrip(".")
     _save_admin_content(content)
+    import make as renderer
+
+    renderer.invalidate_ayah_duration(surah, ayah, language)
 
     if previous_extension and previous_extension != extension.lstrip("."):
         previous_file = ADMIN_AUDIO_DIR / f"{surah:03d}{ayah:03d}_{language}.{previous_extension}"

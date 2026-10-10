@@ -121,9 +121,32 @@
                 <!-- Mode 1: Single Pick (Active in Free Mode) -->
                 <div id="mode-pick" class="space-y-6">
                     <div>
-                        <label class="block text-sm font-semibold text-slate-300 mb-2">Select Surah and Verses:</label>
-                        <input type="text" id="input-pick" placeholder="e.g. 55:1-8  or  18:9-15" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-3.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 transition-colors font-mono">
-                        <p class="text-xs text-slate-500 mt-2">Format: <code class="text-amber-400 font-mono">Surah_Number : Start_Ayah - End_Ayah</code></p>
+                            <label class="block text-sm font-semibold text-slate-300 mb-2">Select Surah and Ayat:</label>
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                <div>
+                                    <label for="estimate-surah" class="block text-xs text-slate-400 mb-1">Surah number</label>
+                                    <select id="estimate-surah" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-3 text-slate-100 focus:outline-none focus:border-amber-500">
+                                        <option value="1">Surah 1</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label for="estimate-start" class="block text-xs text-slate-400 mb-1">Start ayat</label>
+                                    <input id="estimate-start" type="number" min="1" value="1" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-3 text-slate-100 focus:outline-none focus:border-amber-500">
+                                </div>
+                                <div>
+                                    <label for="estimate-end" class="block text-xs text-slate-400 mb-1">End ayat</label>
+                                    <input id="estimate-end" type="number" min="1" value="1" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-3 text-slate-100 focus:outline-none focus:border-amber-500">
+                                </div>
+                            </div>
+                            <label for="input-pick" class="block text-xs text-slate-400 mt-3 mb-1">Direct range entry</label>
+                            <input type="text" id="input-pick" value="1:1-1" placeholder="e.g. 55:1-8" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 transition-colors font-mono">
+                            <p class="text-xs text-slate-500 mt-2">Format: <code class="text-amber-400 font-mono">Surah_Number : Start_Ayah - End_Ayah</code></p>
+                        </div>
+                        <div id="duration-estimate-panel" class="rounded-xl border border-slate-700 bg-slate-900/70 p-4" aria-live="polite">
+                            <p id="duration-estimate-text" class="text-sm font-semibold text-slate-300">Hisaab ho raha hai...</p>
+                            <p id="duration-estimate-warning" class="hidden mt-2 text-sm text-red-400"></p>
+                            <button id="choose-estimated-length" type="button" class="hidden mt-3 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-amber-400">Munasib length chunein</button>
+                        </div>
                     </div>
                 </div>
 
@@ -156,6 +179,8 @@
                             <option value="60">60 Seconds (1 Min - Standard Reel)</option>
                             <option value="90">90 Seconds (1.5 Min - Story/Waqia Mode)</option>
                             <option value="120">120 Seconds (2 Min - Extended)</option>
+                            <option value="150">150 Seconds (2.5 Min - Extended)</option>
+                            <option value="180">180 Seconds (3 Min - Maximum)</option>
                         </select>
                     </div>
                     <div>
