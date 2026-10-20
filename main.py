@@ -57,6 +57,7 @@ ALLOWED_AUDIO_TYPES = {
     ".aac": "audio/aac",
     ".wav": "audio/wav",
 }
+MUSIC_FILE_EXTENSIONS = {".mp3", ".mpeg", ".wav", ".aac", ".m4a"}
 
 # 2. FastAPI App Initialize Karein
 app = FastAPI(title="Noor ul Quran API Engine")
@@ -84,6 +85,7 @@ app.add_middleware(
 # 4. Output Directory Mount Karein (Rendered Videos Access karne ke liye)
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 BACKGROUND_DIR.mkdir(parents=True, exist_ok=True)
+
 # 5. Request Body Schema
 class GenerateRequest(BaseModel):
     mode: str  # 'pick', 'picks', 'random'
@@ -93,6 +95,7 @@ class GenerateRequest(BaseModel):
     quality: str = "balanced"
     content_mode: str = "full"
     styles: Any = Field(default_factory=dict)
+    music: Optional[str] = None  # Background music filename (e.g. "soft_tone.mp3")
 
 
 class PremiumAccessRequest(BaseModel):
@@ -102,6 +105,7 @@ class PremiumAccessRequest(BaseModel):
 class VerseContentRequest(BaseModel):
     arabic_text: str = ""
     urdu_text: str = ""
+
 
 def validate_video_styles(styles):
     if not isinstance(styles, dict):
@@ -350,6 +354,33 @@ def _latest_generated_video() -> Optional[str]:
 @app.api_route("/api/health", methods=["GET", "HEAD"])
 def health_check():
     return {"status": "online", "system": "Noor ul Quran Engine"}
+
+
+# Background music ki files list karne ke liye endpoint:
+@app.get("/api/admin/music")
+@app.get("/api/music-list")
+def list_background_music(user=Depends(get_current_user)):
+    music_dir = BACKGROUND_DIR / "music"
+    music_dir.mkdir(parents=True, exist_ok=True)
+
+    if SUPABASE_SERVICE_KEY:
+        try:
+            objects = _list_media_objects("backgrounds/music")
+            files = [
+                item["name"].split("/")[-1]
+                for item in objects
+                if Path(item.get("name", "")).suffix.lower() in MUSIC_FILE_EXTENSIONS
+            ]
+            if files:
+                return {"music_files": files}
+        except Exception:
+            pass
+
+    clips = sorted(
+        [p.name for p in music_dir.iterdir() if p.is_file() and p.suffix.lower() in MUSIC_FILE_EXTENSIONS],
+        key=lambda name: name.lower(),
+    )
+    return {"music_files": clips}
 
 
 def _local_video_path(filename: str) -> Path:
@@ -778,6 +809,10 @@ def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
         raise HTTPException(status_code=400, detail="Verse is required for single-pick generation.")
     if req.content_mode == "urdu_only":
         cmd.append("--urdu-only")
+
+    # Background music argument agar select kiya gaya ho (yeh ab bilkul theek jagah par hai):
+    if req.music and req.music != "None" and req.music != "none":
+        cmd.extend(["--music", req.music])
 
     batch_id = uuid4().hex[:10]
     work_dir = CACHE_DIR / "tmp" / batch_id

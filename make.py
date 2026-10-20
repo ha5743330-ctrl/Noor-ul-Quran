@@ -577,7 +577,7 @@ def plan_reel(Q, s, a0, a1, length_limit, content_mode):
     plan["items"] = items
     return plan
 
-def build(Q, s, a0, a1, outfile, bgs, rng, tmp, styles=None, max_duration=MAX_DUR, content_mode="full"):
+def build(Q, s, a0, a1, outfile, bgs, rng, tmp, styles=None, max_duration=MAX_DUR, content_mode="full", music_filename=None):
     require_raqm()
     styles = styles or {}
     plan = plan_reel(Q, s, a0, a1, max_duration, content_mode)
@@ -732,6 +732,7 @@ def build(Q, s, a0, a1, outfile, bgs, rng, tmp, styles=None, max_duration=MAX_DU
         fc.append(f"{previous_label}null[vbg]")
     fc += [f"[{overlay_input}:v]fps={FPS},format=rgba[ov]", "[vbg][ov]overlay=shortest=1[v1]",
           f"[v1]fade=t=in:d=0.6,fade=t=out:st={total-0.7:.2f}:d=0.7[vout]"]
+    
     idx, labels = overlay_input + 1, []
     norm = ",loudnorm=I=-18:TP=-2:LRA=7" if NORMALIZE_AUDIO else ""
     for it in items:
@@ -740,7 +741,36 @@ def build(Q, s, a0, a1, outfile, bgs, rng, tmp, styles=None, max_duration=MAX_DU
             fc.append(f"[{idx}:a]aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo{norm},"
                       f"asetpts=PTS-STARTPTS" + (f",apad=pad_dur={pad}" if pad else "") + f"[s{idx}]")
             labels.append(f"[s{idx}]"); idx += 1
-    fc.append("".join(labels) + f"concat=n={len(labels)}:v=0:a=1,afade=t=in:d=0.2,afade=t=out:st={total-0.5:.2f}:d=0.5[aout]")
+            
+    # Check if background music file is provided and exists
+    music_path = None
+    if music_filename and music_filename != "None" and music_filename != "none":
+        candidate_path = BACKGROUND_DIR / "music" / music_filename
+        if candidate_path.exists():
+            music_path = candidate_path
+
+    music_input_index = None
+    if music_path:
+        cmd += ["-stream_loop", "-1", "-i", str(music_path)]
+        music_input_index = idx
+        idx += 1
+
+    # Concatenate main Quran recitation audio segments
+    fc.append("".join(labels) + f"concat=n={len(labels)}:v=0:a=1[rec_audio]")
+
+    # Mix background music softly if present, otherwise just output recitation audio with fades
+    if music_input_index is not None:
+        fc.append(
+            f"[{music_input_index}:a]aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo,"
+            f"volume=0.12,atrim=duration={total:.2f},asetpts=PTS-STARTPTS[bgm]"
+        )
+        fc.append(
+            f"[rec_audio][bgm]amix=inputs=2:duration=first:dropout_transition=2,"
+            f"afade=t=in:d=0.2,afade=t=out:st={total-0.5:.2f}:d=0.5[aout]"
+        )
+    else:
+        fc.append(f"[rec_audio]afade=t=in:d=0.2,afade=t=out:st={total-0.5:.2f}:d=0.5[aout]")
+
     cmd += ["-filter_complex", ";".join(fc), "-map", "[vout]", "-map", "[aout]", "-t", f"{total:.2f}"]
     try:
         encode_video(cmd, outfile)
@@ -823,6 +853,7 @@ def main():
     ap.add_argument("--style-json")
     ap.add_argument("--check", nargs="*", type=int)
     ap.add_argument("--dry", action="store_true")
+    ap.add_argument("--music", help="Background music filename from backgrounds/music/")
     a = ap.parse_args()
     a.max_dur = min(max(1, a.max_dur), 180)
     a.min_dur = min(max(1, a.min_dur), a.max_dur)
@@ -887,7 +918,7 @@ def main():
             print(f"[{i}/{len(picks)}] Surah {s}:{a0}-{a1}", end=" ")
             content_mode = "urdu_only" if a.urdu_only else "full"
             res = build(
-                Q, s, a0, a1, outfile, bgs, rng, tmp, styles, a.max_dur, content_mode
+                Q, s, a0, a1, outfile, bgs, rng, tmp, styles, a.max_dur, content_mode, a.music
             )
             if res is None: print("SKIP (audio download nahi hui)"); continue
             S, total, used_a1, warnings = res

@@ -220,6 +220,47 @@ function initializeVideoStyleControls() {
     });
 }
 
+// Background Music List Load Karne Ka Function
+async function loadMusicList() {
+    try {
+        const { data: { session } } = await window.supabaseClient.auth.getSession();
+        if (!session) {
+            console.warn("No Supabase session found for loading music list.");
+            return;
+        }
+        const response = await fetch(`${API_BASE_URL}/admin/music`, {
+            headers: { Authorization: `Bearer ${session.access_token}` }
+        });
+        if (!response.ok) {
+            console.error("Failed to fetch music list:", response.status, response.statusText);
+            return;
+        }
+        const data = await response.json();
+        console.log("Loaded music files from server:", data);
+        
+        const select = document.getElementById("input-music");
+        if (!select) {
+            console.warn("Element #input-music not found in DOM!");
+            return;
+        }
+        
+        select.innerHTML = '<option value="">Koi music nahi (No background music)</option>';
+        if (data.music_files && data.music_files.length > 0) {
+            data.music_files.forEach(file => {
+                const opt = document.createElement("option");
+                opt.value = file;
+                opt.textContent = file;
+                select.appendChild(opt);
+            });
+            console.log("Music dropdown populated with:", data.music_files);
+        } else {
+            console.log("No music files found in backgrounds/music/");
+        }
+    } catch (e) {
+        console.error("Could not load music list error:", e);
+    }
+}
+
 async function initializeStudio() {
     const client = window.supabaseClient;
     if (!client) {
@@ -274,31 +315,31 @@ async function initializeStudio() {
         option.disabled = !hasPremium && Number(option.value) > 60;
     });
     setMode("pick");
+    
+    // Yahan loadMusicList ko call kar diya gaya hai taake dropdown mein music load ho jaye
+    await loadMusicList();
 }
-// 2. Video Generation Function with Preview Link
+
+// Video Generation Function with Preview Link & Music Parameter
 async function generateVideo(event) {
     if (event) event.preventDefault();
 
-    // Inputs
     const mode = document.getElementById("mode-select")?.value || "pick";
     const verse = document.getElementById("input-pick")?.value || document.getElementById("verse-input")?.value || "";
     const duration = document.getElementById("input-max-dur")?.value || document.getElementById("duration-input")?.value || 60;
 
-    // UI Elements
     const statusBox = document.getElementById("status-box");
     const outputBox = document.getElementById("output-box");
     const logMsg = document.getElementById("log-message");
     const statusPercent = document.getElementById("status-percent");
     const generateButton = document.getElementById("generate-button");
 
-    // Validation
     if (mode === "pick" && !verse) {
         alert("Please enter a Surah:Verse range (e.g., 55:1-8)");
         return;
     }
     if (generateButton?.disabled) return;
 
-    // Show Terminal Progress Box
     if (outputBox) outputBox.classList.remove("hidden");
     if (logMsg) logMsg.innerText = "> Sending request to Python FFmpeg Rendering Engine...";
     if (statusPercent) statusPercent.innerText = "Working";
@@ -332,7 +373,8 @@ async function generateVideo(event) {
                 random_count: parseInt(document.getElementById("input-random-count")?.value || "1", 10),
                 quality: document.getElementById("input-quality")?.value || "balanced",
                 content_mode: document.getElementById("input-content-mode")?.value || "full",
-                styles: window.videoStyles
+                styles: window.videoStyles,
+                music: document.getElementById("input-music")?.value || null // Background music value successfully passed
             })
         });
 
@@ -493,14 +535,16 @@ async function renderCurrentVideo() {
 
     try {
         const videoUrl = await resolveVideoUrl(video);
-        if (generatedVideos[currentVideoIndex] !== video) return;
+        const currentVideo = generatedVideos[currentVideoIndex];
+        if (!currentVideo || currentVideo.filename !== video.filename) return;
         if (player) {
             player.src = videoUrl;
             player.load();
         }
         if (downloadButton) downloadButton.href = videoUrl;
     } catch (error) {
-        if (generatedVideos[currentVideoIndex] !== video) return;
+        const currentVideo = generatedVideos[currentVideoIndex];
+        if (!currentVideo || currentVideo.filename !== video.filename) return;
         console.error("Secure video URL error:", error);
         if (filename) filename.textContent = `${video.filename || "Video"} — ${error.message}`;
     }
