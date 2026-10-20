@@ -364,6 +364,7 @@ async function initializeStudio() {
     
     // Yahan loadMusicList ko call kar diya gaya hai taake dropdown mein music load ho jaye
     await loadMusicList();
+    await refreshRecentVideos();
 }
 
 // Video Generation Function with Preview Link & Music Parameter
@@ -371,8 +372,8 @@ async function generateVideo(event) {
     if (event) event.preventDefault();
 
     const mode = document.getElementById("mode-select")?.value || "pick";
-    const verse = document.getElementById("input-pick")?.value || document.getElementById("verse-input")?.value || "";
-    const duration = document.getElementById("input-max-dur")?.value || document.getElementById("duration-input")?.value || 60;
+    const verse = document.getElementById("input-pick")?.value || "";
+    const duration = document.getElementById("input-max-dur")?.value || 60;
 
     const statusBox = document.getElementById("status-box");
     const outputBox = document.getElementById("output-box");
@@ -450,6 +451,7 @@ async function generateVideo(event) {
             const videos = Array.isArray(result.videos) ? result.videos : result.filename ? [result] : [];
             renderGenerationWarnings(result.warnings || videos.flatMap((video) => video.warnings || []));
             showGeneratedVideos(videos);
+            await refreshRecentVideos();
         } else {
             if (result.videos?.length) showGeneratedVideos(result.videos);
             const errorMessage = result.error || result.detail || "Generation failed.";
@@ -530,6 +532,14 @@ function showGeneratedVideos(videos) {
     currentVideoIndex = selectedIndex >= 0 ? selectedIndex : Math.min(currentVideoIndex, generatedVideos.length - 1);
     const previewBox = document.getElementById("video-preview-box");
     if (!generatedVideos.length || !previewBox) {
+        if (!generatedVideos.length) {
+            const player = document.getElementById("rendered-video-player");
+            if (player) {
+                player.pause();
+                player.removeAttribute("src");
+                player.load();
+            }
+        }
         if (previewBox) previewBox.classList.add("hidden");
         return;
     }
@@ -555,6 +565,176 @@ async function resolveVideoUrl(video) {
     const result = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(result.detail || "Could not create a secure video link.");
     return new URL(result.url, new URL(API_BASE_URL, window.location.origin).origin).href;
+}
+
+function setRecentVideosStatus(message) {
+    const status = document.getElementById("recent-videos-status");
+    if (!status) return;
+    status.textContent = message;
+    status.classList.toggle("hidden", !message);
+}
+
+function createHistoryBadge(label, tone = "slate") {
+    const badge = document.createElement("span");
+    const tones = {
+        slate: "border-slate-600 bg-slate-800 text-slate-200",
+        amber: "border-amber-400/40 bg-amber-400/10 text-amber-200",
+        green: "border-emerald-400/40 bg-emerald-400/10 text-emerald-200",
+        red: "border-red-400/40 bg-red-400/10 text-red-200"
+    };
+    badge.className = `inline-flex items-center rounded-full border px-2 py-1 text-[11px] font-semibold ${tones[tone] || tones.slate}`;
+    badge.textContent = label;
+    return badge;
+}
+
+function renderRecentVideos(videos) {
+    const list = document.getElementById("recent-videos-list");
+    const empty = document.getElementById("recent-videos-empty");
+    if (!list || !empty) return;
+    list.replaceChildren();
+    empty.classList.toggle("hidden", videos.length > 0);
+
+    videos.forEach((video) => {
+        const item = document.createElement("li");
+        item.className = "rounded-xl border border-slate-700 bg-slate-900/80 p-3";
+
+        const heading = document.createElement("div");
+        heading.className = "flex flex-wrap items-start justify-between gap-2";
+        const title = document.createElement("p");
+        title.className = "text-sm font-semibold text-white";
+        const range = video.start_ayah === video.end_ayah
+            ? `${video.start_ayah ?? ""}`
+            : `${video.start_ayah ?? ""}-${video.end_ayah ?? ""}`;
+        title.textContent = `Surah ${video.surah ?? ""} · Ayat ${range}`;
+        heading.appendChild(title);
+
+        const badges = document.createElement("div");
+        badges.className = "flex flex-wrap gap-1.5";
+        if (video.content_mode === "urdu_only") badges.appendChild(createHistoryBadge("Urdu-only", "amber"));
+        if (video.styled) badges.appendChild(createHistoryBadge("Styled", "amber"));
+        if (video.downloaded_at || Number(video.download_count) > 0) {
+            badges.appendChild(createHistoryBadge("Downloaded", "green"));
+        }
+        if (!video.has_file) badges.appendChild(createHistoryBadge("Expire", "red"));
+        heading.appendChild(badges);
+        item.appendChild(heading);
+
+        const createdAt = document.createElement("p");
+        createdAt.className = "mt-1 text-xs text-slate-300";
+        const date = new Date(video.created_at);
+        createdAt.textContent = Number.isNaN(date.getTime())
+            ? "Date unavailable" : date.toLocaleString();
+        item.appendChild(createdAt);
+
+        const actions = document.createElement("div");
+        actions.className = "mt-3 flex flex-wrap gap-2";
+        const playButton = document.createElement("button");
+        playButton.type = "button";
+        playButton.className = "min-h-9 rounded-lg bg-amber-400 px-3 py-2 text-xs font-bold text-slate-950 hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-50";
+        playButton.textContent = "Play";
+        playButton.disabled = !video.has_file;
+        playButton.addEventListener("click", () => playRecentVideo(video));
+
+        const downloadButton = document.createElement("button");
+        downloadButton.type = "button";
+        downloadButton.className = "min-h-9 rounded-lg border border-slate-500 px-3 py-2 text-xs font-semibold text-slate-100 hover:border-amber-300 hover:text-amber-200 disabled:cursor-not-allowed disabled:opacity-50";
+        downloadButton.textContent = "Download";
+        downloadButton.disabled = !video.has_file;
+        downloadButton.addEventListener("click", () => downloadRecentVideo(video));
+
+        const deleteButton = document.createElement("button");
+        deleteButton.type = "button";
+        deleteButton.className = "min-h-9 rounded-lg border border-red-400/50 px-3 py-2 text-xs font-semibold text-red-200 hover:bg-red-400/10";
+        deleteButton.textContent = "Delete";
+        deleteButton.addEventListener("click", () => deleteRecentVideo(video));
+
+        actions.append(playButton, downloadButton, deleteButton);
+        item.appendChild(actions);
+        list.appendChild(item);
+    });
+}
+
+async function refreshRecentVideos() {
+    const list = document.getElementById("recent-videos-list");
+    if (!list) return;
+    try {
+        const { data: { session }, error } = await window.supabaseClient.auth.getSession();
+        if (error) throw error;
+        if (!session) {
+            renderRecentVideos([]);
+            return;
+        }
+        const response = await fetch(`${API_BASE_URL}/history`, {
+            headers: { Authorization: `Bearer ${session.access_token}` }
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.detail || "Could not load recent videos.");
+        renderRecentVideos(Array.isArray(result.videos) ? result.videos : []);
+        setRecentVideosStatus("");
+    } catch (error) {
+        console.error("Recent video history error:", error);
+        setRecentVideosStatus(error.message || "Could not load recent videos.");
+    }
+}
+
+async function requestRecentVideoUrl(video, purpose) {
+    const { data: { session }, error } = await window.supabaseClient.auth.getSession();
+    if (error) throw error;
+    if (!session) throw new Error("Sign in again to access this video.");
+    const response = await fetch(
+        `${API_BASE_URL}/history/${encodeURIComponent(video.id)}/url?purpose=${purpose}`,
+        { headers: { Authorization: `Bearer ${session.access_token}` } }
+    );
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.detail || "Could not open this video.");
+    return new URL(result.url, new URL(API_BASE_URL, window.location.origin).origin).href;
+}
+
+async function playRecentVideo(video) {
+    if (!video.has_file) return;
+    try {
+        const url = await requestRecentVideoUrl(video, "play");
+        showGeneratedVideos([{ ...video, url }]);
+        setRecentVideosStatus("");
+    } catch (error) {
+        console.error("Recent video playback error:", error);
+        setRecentVideosStatus(error.message || "Could not play this video.");
+    }
+}
+
+async function downloadRecentVideo(video) {
+    if (!video.has_file) return;
+    try {
+        const url = await requestRecentVideoUrl(video, "download");
+        await refreshRecentVideos();
+        window.location.assign(url);
+    } catch (error) {
+        console.error("Recent video download error:", error);
+        setRecentVideosStatus(error.message || "Could not download this video.");
+    }
+}
+
+async function deleteRecentVideo(video) {
+    if (!window.confirm("Delete this video from Recent Videos and remove its local file?")) return;
+    try {
+        const { data: { session }, error } = await window.supabaseClient.auth.getSession();
+        if (error) throw error;
+        if (!session) throw new Error("Sign in again to delete this video.");
+        const response = await fetch(`${API_BASE_URL}/history/${encodeURIComponent(video.id)}`, {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${session.access_token}` }
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.detail || "Could not delete this video.");
+        if (generatedVideos.some((item) => item.filename === video.filename)) {
+            showGeneratedVideos(generatedVideos.filter((item) => item.filename !== video.filename));
+        }
+        setRecentVideosStatus("");
+        await refreshRecentVideos();
+    } catch (error) {
+        console.error("Recent video delete error:", error);
+        setRecentVideosStatus(error.message || "Could not delete this video.");
+    }
 }
 
 async function renderCurrentVideo() {

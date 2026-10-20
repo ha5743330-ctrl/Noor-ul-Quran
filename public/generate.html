@@ -326,6 +326,21 @@
                             </button>
                         </div>
                     </div>
+
+                    <section id="recent-videos-card" class="mt-5 rounded-xl border border-slate-700 bg-slate-950/70 p-4 sm:p-5" aria-labelledby="recent-videos-heading">
+                        <div class="mb-3 flex items-start justify-between gap-3">
+                            <div>
+                                <h3 id="recent-videos-heading" class="font-bold text-white">Recent Videos</h3>
+                                <p class="mt-1 text-xs leading-5 text-slate-300">Aap ki aakhri 5 generated videos, naye pehle.</p>
+                            </div>
+                            <i class="fa-solid fa-clock-rotate-left mt-1 text-amber-300" aria-hidden="true"></i>
+                        </div>
+                        <p id="recent-videos-status" class="mb-3 hidden text-sm text-amber-200" role="status" aria-live="polite"></p>
+                        <p id="recent-videos-empty" class="rounded-lg border border-dashed border-slate-700 px-4 py-5 text-center text-sm text-slate-300">
+                            Abhi koi recent video nahi.
+                        </p>
+                        <ul id="recent-videos-list" class="space-y-3"></ul>
+                    </section>
                 </section>
             </aside>
         </form>
@@ -338,6 +353,6 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="/config.js"></script>
     <script src="/auth.js?v=8"></script>
-    <script src="/app.js?v=9"></script>
+    <script src="/app.js?v=10"></script>
 </body>
 </html>
