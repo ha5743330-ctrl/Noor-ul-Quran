@@ -53,8 +53,9 @@ async function initializeLandingAuth() {
             return;
         }
         if (authButton) {
-            authButton.textContent = session.user.email || "Sign Out";
+            authButton.textContent = "Sign Out";
             authButton.href = "#";
+            authButton.title = session.user.email || "Sign Out";
             authButton.onclick = handleSignOut;
         }
 
@@ -349,8 +350,9 @@ async function initializeStudio() {
     if (statusTag) statusTag.textContent = window.userAccess.is_admin
         ? "Admin" : window.userAccess.premium_access ? "Premium" : "Free Tier";
     if (authButton) {
-        authButton.textContent = session.user.email || "Sign Out";
+        authButton.textContent = "Sign Out";
         authButton.href = "#";
+        authButton.title = session.user.email || "Sign Out";
         authButton.onclick = handleSignOut;
     }
     if (adminLink) adminLink.classList.toggle("hidden", !window.userAccess.is_admin);

@@ -34,6 +34,10 @@ LOCAL WEBSITE SERVER START / STOP (WINDOWS)
   .\venv\Scripts\python -m uvicorn main:app --host 127.0.0.1 --port 8000
 4. Browser mein yeh address kholein:
   http://127.0.0.1:8000
+   Yeh public landing page hai. Sign in ke baad "Video banayein" button ya
+   http://127.0.0.1:8000/generate.html se generator kholein; /generate shortcut
+   bhi isi page par le jata hai. Login ke bagair generator kholne par sign-in
+   ke baad wapas generator par bheja jayega.
 5. Server ko band karne ke liye usi terminal mein Ctrl+C dabayein.
 
 Server chalte waqt usi port par doosra server start na karein. Agar "only one usage of each socket address" error aaye to port 8000 pehle se use ho raha hai. Pehle purane server wale terminal par ja kar Ctrl+C karein; agar woh terminal mil nahi raha to pehle check karein ke http://127.0.0.1:8000/api/health open ho raha hai ya nahi. Unknown process ko force stop na karein.

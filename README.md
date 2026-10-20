@@ -87,6 +87,10 @@ From the project root:
 
 Open [http://127.0.0.1:8000](http://127.0.0.1:8000). Stop the server with `Ctrl+C`.
 
+The root URL is the public landing page. Sign in at `/auth.html`, then open the generator with **Video banayein**, `/generate.html`, or the `/generate` shortcut. If you open the generator while signed out, it sends you to sign in and returns you to the generator afterward.
+
+Free accounts can create single-pick reels up to 60 seconds. Custom picks, random batches, and durations above 60 seconds require Premium access granted by an administrator.
+
 You can check the reel plan without rendering with:
 ```powershell
 .\venv\Scripts\python make.py --pick 112:1-4 --dry
