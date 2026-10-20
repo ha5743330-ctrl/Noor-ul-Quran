@@ -376,6 +376,8 @@ async function generateVideo(event) {
     const outputBox = document.getElementById("output-box");
     const logMsg = document.getElementById("log-message");
     const statusPercent = document.getElementById("status-percent");
+    const statusHeading = document.getElementById("status-heading");
+    const statusSpinner = document.getElementById("status-spinner");
     const generateButton = document.getElementById("generate-button");
 
     if (mode === "pick" && !verse) {
@@ -396,6 +398,8 @@ async function generateVideo(event) {
         statusBox.innerText = "⏳ Request sent! Rendering started in background...";
         statusBox.style.color = "#d97706";
     }
+    if (statusHeading) statusHeading.textContent = "Status: rendering";
+    if (statusSpinner) statusSpinner.className = "fa-solid fa-spinner animate-spin text-xs text-amber-300";
     renderGenerationWarnings([]);
 
     try {
@@ -430,6 +434,11 @@ async function generateVideo(event) {
         if (response.ok && result.status !== "failed") {
             if (logMsg) logMsg.innerText = "✓ " + (result.message || "Video rendering completed.");
             if (statusPercent) statusPercent.innerText = "100%";
+            if (statusHeading) statusHeading.textContent = result.status === "partial"
+                ? "Status: completed with warnings" : "Status: complete";
+            if (statusSpinner) statusSpinner.className = result.status === "partial"
+                ? "fa-solid fa-triangle-exclamation text-xs text-amber-300"
+                : "fa-solid fa-circle-check text-xs text-emerald-300";
             if (statusBox) {
                 statusBox.innerText = result.status === "partial"
                     ? "⚠ Some reels could not be rendered. Completed reels are available below."
@@ -444,6 +453,8 @@ async function generateVideo(event) {
             const errorMessage = result.error || result.detail || "Generation failed.";
             if (logMsg) logMsg.innerText = "❌ Error: " + errorMessage;
             if (statusPercent) statusPercent.innerText = "0%";
+            if (statusHeading) statusHeading.textContent = "Status: failed";
+            if (statusSpinner) statusSpinner.className = "fa-solid fa-circle-exclamation text-xs text-red-300";
             if (statusBox) {
                 statusBox.innerText = "❌ Error: " + errorMessage;
                 statusBox.style.color = "#dc2626";
@@ -454,6 +465,8 @@ async function generateVideo(event) {
         const errorMessage = error.message || "Unable to connect to FastAPI Backend Server.";
         if (logMsg) logMsg.innerText = "❌ " + errorMessage;
         if (statusPercent) statusPercent.innerText = "0%";
+        if (statusHeading) statusHeading.textContent = "Status: failed";
+        if (statusSpinner) statusSpinner.className = "fa-solid fa-circle-exclamation text-xs text-red-300";
         if (statusBox) {
             statusBox.innerText = "❌ " + errorMessage;
             statusBox.style.color = "#dc2626";
@@ -484,6 +497,8 @@ async function waitForGeneration(jobId, accessToken, statusBox, logMsg, statusPe
         if (videos.length !== lastVideoCount) {
             lastVideoCount = videos.length;
             if (statusPercent) statusPercent.innerText = `${lastVideoCount} ready`;
+            const statusHeading = document.getElementById("status-heading");
+            if (statusHeading) statusHeading.textContent = `Status: rendering · ${lastVideoCount} ready`;
             if (logMsg) logMsg.innerText = `✓ ${lastVideoCount} reel(s) ready; remaining reels are still rendering.`;
             if (statusBox) {
                 statusBox.innerText = `✅ ${lastVideoCount} reel(s) ready. You can preview or download them while the batch continues.`;
@@ -507,10 +522,15 @@ function showGeneratedVideos(videos) {
         ...video,
         url: video.url || previousUrls.get(video.filename)
     }));
+    const emptyResults = document.getElementById("empty-results");
+    if (emptyResults) emptyResults.classList.toggle("hidden", generatedVideos.length > 0);
     const selectedIndex = generatedVideos.findIndex((video) => video.filename === selectedFilename);
     currentVideoIndex = selectedIndex >= 0 ? selectedIndex : Math.min(currentVideoIndex, generatedVideos.length - 1);
     const previewBox = document.getElementById("video-preview-box");
-    if (!generatedVideos.length || !previewBox) return;
+    if (!generatedVideos.length || !previewBox) {
+        if (previewBox) previewBox.classList.add("hidden");
+        return;
+    }
     previewBox.classList.remove("hidden");
     if (previousCount !== generatedVideos.length || selectedIndex < 0) renderCurrentVideo();
     if (wasEmpty) previewBox.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -607,7 +627,7 @@ function showNextVideo() {
 }
 
 document.addEventListener("keydown", (event) => {
-    if (event.altKey || event.ctrlKey || event.metaKey || event.target.matches("input, textarea, select, video, [contenteditable='true']")) return;
+    if (event.altKey || event.ctrlKey || event.metaKey || event.target?.matches?.("input, textarea, select, video, [contenteditable='true']")) return;
     if (event.key === "ArrowLeft") showPreviousVideo();
     if (event.key === "ArrowRight") showNextVideo();
 });
