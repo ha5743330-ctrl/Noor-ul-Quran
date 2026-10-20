@@ -9,6 +9,7 @@ import subprocess
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 from threading import Lock
 from pathlib import Path
 from typing import Any, Optional
@@ -33,6 +34,8 @@ SUPABASE_KEY = os.getenv("SUPABASE_ANON_KEY", "")
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 MEDIA_BUCKET = os.getenv("SUPABASE_MEDIA_BUCKET", "noor-media")
 OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", BASE_DIR / "output"))
+HISTORY_FILE = OUTPUT_DIR / "history.json"
+MAX_HISTORY_PER_USER = 5
 BACKGROUND_DIR = Path(os.getenv("BACKGROUNDS_DIR", BASE_DIR / "backgrounds"))
 CACHE_DIR = Path(os.getenv("CACHE_DIR", BASE_DIR / "cache"))
 VIDEO_URL_SECRET = os.getenv("VIDEO_URL_SECRET") or secrets.token_urlsafe(32)
@@ -63,6 +66,7 @@ MUSIC_FILE_EXTENSIONS = {".mp3", ".mpeg", ".wav", ".aac", ".m4a"}
 app = FastAPI(title="Noor ul Quran API Engine")
 GENERATION_LOCK = Lock()
 GENERATION_JOBS_LOCK = Lock()
+HISTORY_LOCK = Lock()
 GENERATION_JOBS = {}
 GENERATION_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="quran-render")
 
@@ -395,6 +399,123 @@ def _local_video_path(filename: str) -> Path:
     return video_path
 
 
+def _empty_video_history():
+    return {"users": {}}
+
+
+def _read_video_history_unlocked():
+    try:
+        history = json.loads(HISTORY_FILE.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return _empty_video_history()
+    if not isinstance(history, dict) or not isinstance(history.get("users"), dict):
+        return _empty_video_history()
+    return history
+
+
+def _write_video_history_unlocked(history):
+    HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = HISTORY_FILE.with_suffix(HISTORY_FILE.suffix + ".tmp")
+    try:
+        temporary_path.write_text(
+            json.dumps(history, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        temporary_path.replace(HISTORY_FILE)
+    finally:
+        try:
+            temporary_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+def _safe_history_video_path(filename):
+    if not isinstance(filename, str) or not VIDEO_FILENAME_PATTERN.fullmatch(filename):
+        return None
+    output_root = OUTPUT_DIR.resolve()
+    video_path = (output_root / filename).resolve()
+    if not video_path.is_relative_to(output_root):
+        return None
+    return video_path
+
+
+def _record_video_history(user_id, videos, content_mode, quality, styles):
+    expired_filenames = []
+    with HISTORY_LOCK:
+        history = _read_video_history_unlocked()
+        entries = history["users"].get(user_id, [])
+        if not isinstance(entries, list):
+            entries = []
+        entries = [entry for entry in entries if isinstance(entry, dict)]
+        new_entries = [
+            {
+                "id": uuid4().hex,
+                "filename": video["filename"],
+                "surah": video.get("surah"),
+                "start_ayah": video.get("start_ayah"),
+                "end_ayah": video.get("end_ayah"),
+                "caption": video.get("caption", ""),
+                "content_mode": content_mode,
+                "quality": quality,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "downloaded_at": None,
+                "download_count": 0,
+                "styled": bool(styles),
+            }
+            for video in reversed(videos)
+            if isinstance(video, dict) and isinstance(video.get("filename"), str)
+        ]
+        retained_entries = new_entries + entries
+        expired_entries = retained_entries[MAX_HISTORY_PER_USER:]
+        history["users"][user_id] = retained_entries[:MAX_HISTORY_PER_USER]
+        _write_video_history_unlocked(history)
+        retained_filenames = {
+            entry.get("filename")
+            for entry in history["users"][user_id]
+            if isinstance(entry.get("filename"), str)
+        }
+        expired_filenames = [
+            entry.get("filename")
+            for entry in expired_entries
+            if isinstance(entry, dict)
+            and isinstance(entry.get("filename"), str)
+            and entry.get("filename") not in retained_filenames
+        ]
+
+    for filename in expired_filenames:
+        video_path = _safe_history_video_path(filename)
+        if video_path is not None:
+            try:
+                video_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+
+def _user_owns_video(user_id, filename):
+    with HISTORY_LOCK:
+        history = _read_video_history_unlocked()
+        entries = history["users"].get(user_id, [])
+        if isinstance(entries, list) and any(
+            isinstance(entry, dict) and entry.get("filename") == filename
+            for entry in entries
+        ):
+            return True
+
+    with GENERATION_JOBS_LOCK:
+        for job in GENERATION_JOBS.values():
+            if job.get("owner_id") != user_id:
+                continue
+            manifest_path = Path(job["manifest_path"])
+            batch_id = manifest_path.stem.removeprefix("batch-")
+            if not batch_id or not filename.startswith(f"{batch_id}_"):
+                continue
+            videos = list(job.get("videos", []))
+            videos.extend(_read_generation_manifest(manifest_path))
+            if any(video.get("filename") == filename for video in videos):
+                return True
+    return False
+
+
 def _video_signature(filename: str, expires: int) -> str:
     payload = f"{filename}\n{expires}".encode("utf-8")
     return hmac.new(VIDEO_URL_SECRET.encode("utf-8"), payload, hashlib.sha256).hexdigest()
@@ -402,6 +523,8 @@ def _video_signature(filename: str, expires: int) -> str:
 
 @app.get("/api/video-url/{filename}")
 def create_video_url(filename: str, user=Depends(get_current_user)):
+    if not _user_owns_video(user["id"], filename):
+        raise HTTPException(status_code=404, detail="Video not found.")
     _local_video_path(filename)
     expires = int(time.time()) + VIDEO_URL_TTL_SECONDS
     signature = _video_signature(filename, expires)
@@ -425,6 +548,7 @@ def serve_signed_video(
     filename: str,
     exp: Optional[str] = None,
     sig: Optional[str] = None,
+    dl: Optional[str] = None,
     range_header: Optional[str] = Header(default=None, alias="Range"),
 ):
     video_path = _local_video_path(filename)
@@ -440,7 +564,7 @@ def serve_signed_video(
     headers = {
         "Accept-Ranges": "bytes",
         "Cache-Control": "private, no-store",
-        "Content-Disposition": f'inline; filename="{filename}"',
+        "Content-Disposition": f'{"attachment" if dl == "1" else "inline"}; filename="{filename}"',
         "X-Content-Type-Options": "nosniff",
         "Referrer-Policy": "no-referrer",
     }
@@ -483,6 +607,97 @@ def serve_signed_video(
         media_type="video/mp4",
         headers=headers,
     )
+
+
+@app.get("/api/history")
+def get_video_history(user=Depends(get_current_user)):
+    with HISTORY_LOCK:
+        history = _read_video_history_unlocked()
+        entries = history["users"].get(user["id"], [])
+        if not isinstance(entries, list):
+            entries = []
+        response = []
+        for entry in entries[:MAX_HISTORY_PER_USER]:
+            if not isinstance(entry, dict):
+                continue
+            item = dict(entry)
+            video_path = _safe_history_video_path(item.get("filename"))
+            item["has_file"] = bool(video_path and video_path.is_file())
+            response.append(item)
+    return {"videos": response}
+
+
+@app.get("/api/history/{entry_id}/url")
+def get_history_video_url(
+    entry_id: str,
+    purpose: str = "play",
+    user=Depends(get_current_user),
+):
+    if purpose not in {"play", "download"}:
+        raise HTTPException(status_code=400, detail="Purpose must be play or download.")
+
+    with HISTORY_LOCK:
+        history = _read_video_history_unlocked()
+        entries = history["users"].get(user["id"], [])
+        if not isinstance(entries, list):
+            entries = []
+        entry = next(
+            (
+                item for item in entries
+                if isinstance(item, dict) and item.get("id") == entry_id
+            ),
+            None,
+        )
+        if entry is None:
+            raise HTTPException(status_code=404, detail="Video not found.")
+        filename = entry.get("filename")
+        video_path = _safe_history_video_path(filename)
+        if video_path is None or not video_path.is_file():
+            raise HTTPException(status_code=410, detail="Video expire ho gayi.")
+        if purpose == "download":
+            entry["downloaded_at"] = datetime.now(timezone.utc).isoformat()
+            try:
+                download_count = int(entry.get("download_count") or 0)
+            except (TypeError, ValueError):
+                download_count = 0
+            entry["download_count"] = download_count + 1
+            _write_video_history_unlocked(history)
+
+    expires = int(time.time()) + VIDEO_URL_TTL_SECONDS
+    signature = _video_signature(filename, expires)
+    params = {"exp": expires, "sig": signature}
+    if purpose == "download":
+        params["dl"] = "1"
+    url = f"/api/video/{quote(filename, safe='')}?{urlencode(params)}"
+    return {"url": url, "expires_at": expires}
+
+
+@app.delete("/api/history/{entry_id}")
+def delete_history_video(entry_id: str, user=Depends(get_current_user)):
+    with HISTORY_LOCK:
+        history = _read_video_history_unlocked()
+        entries = history["users"].get(user["id"], [])
+        if not isinstance(entries, list):
+            entries = []
+        entry_index = next(
+            (
+                index for index, item in enumerate(entries)
+                if isinstance(item, dict) and item.get("id") == entry_id
+            ),
+            None,
+        )
+        if entry_index is None:
+            raise HTTPException(status_code=404, detail="Video not found.")
+        entry = entries.pop(entry_index)
+        history["users"][user["id"]] = entries
+        _write_video_history_unlocked(history)
+        video_path = _safe_history_video_path(entry.get("filename"))
+        if video_path is not None:
+            try:
+                video_path.unlink(missing_ok=True)
+            except OSError as exc:
+                print(f"Could not delete history video {entry.get('filename')}: {exc}", file=sys.stderr)
+    return {"deleted": True}
 
 
 @app.get("/api/access")
@@ -869,6 +1084,9 @@ def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
         manifest_path,
         work_dir,
         req.styles,
+        user["id"],
+        req.content_mode,
+        req.quality,
     )
     return {
         "job_id": job_id,
@@ -880,12 +1098,23 @@ def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
 
 def _read_generation_manifest(manifest_path: Path):
     try:
-        return json.loads(manifest_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        return manifest if isinstance(manifest, list) else []
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return []
 
 
-def _run_generation_job(job_id, cmd, mode, manifest_path, work_dir, styles=None):
+def _run_generation_job(
+    job_id,
+    cmd,
+    mode,
+    manifest_path,
+    work_dir,
+    styles=None,
+    user_id=None,
+    content_mode="full",
+    quality="balanced",
+):
     with GENERATION_JOBS_LOCK:
         job = GENERATION_JOBS.get(job_id)
         if job:
@@ -921,6 +1150,13 @@ def _run_generation_job(job_id, cmd, mode, manifest_path, work_dir, styles=None)
                 if used_path.exists():
                     _upload_media_file(used_path, "state/used.json", "application/json")
 
+        status = "completed" if completed.returncode == 0 else "partial"
+        try:
+            if user_id is not None:
+                _record_video_history(user_id, videos, content_mode, quality, styles)
+        except Exception as history_error:
+            print(f"Could not update generated-video history for {user_id}: {history_error}", file=sys.stderr)
+
         with GENERATION_JOBS_LOCK:
             job = GENERATION_JOBS.get(job_id)
             if job:
@@ -930,7 +1166,7 @@ def _run_generation_job(job_id, cmd, mode, manifest_path, work_dir, styles=None)
                     for video in videos
                     for warning in video.get("warnings", [])
                 ))
-                job["status"] = "completed" if completed.returncode == 0 else "partial"
+                job["status"] = status
                 job["message"] = "All reels are ready." if completed.returncode == 0 else "Some reels could not be rendered; completed reels are ready."
     except Exception as exc:
         with GENERATION_JOBS_LOCK:
