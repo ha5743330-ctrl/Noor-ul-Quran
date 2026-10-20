@@ -25,10 +25,54 @@ const VIDEO_STYLE_FONT_LABELS = {
 };
 
 document.addEventListener("DOMContentLoaded", () => {
-    initializeVideoStyleControls();
-    initializeDurationEstimate();
-    initializeStudio();
+    if (document.getElementById("reel-generator-form")) {
+        initializeVideoStyleControls();
+        initializeDurationEstimate();
+        initializeStudio();
+    } else {
+        initializeLandingAuth();
+    }
 });
+
+function redirectToAuth() {
+    const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    window.location.replace(`/auth.html?next=${encodeURIComponent(returnTo)}`);
+}
+
+async function initializeLandingAuth() {
+    const client = window.supabaseClient;
+    if (!client) return;
+    try {
+        const { data: { session }, error } = await client.auth.getSession();
+        if (error) throw error;
+        const statusTag = document.getElementById("user-status-tag");
+        const authButton = document.getElementById("nav-auth-btn");
+        const adminLink = document.getElementById("admin-portal-link");
+        if (!session) {
+            if (statusTag) statusTag.classList.add("hidden");
+            return;
+        }
+        if (authButton) {
+            authButton.textContent = session.user.email || "Sign Out";
+            authButton.href = "#";
+            authButton.onclick = handleSignOut;
+        }
+
+        const response = await fetch(`${API_BASE_URL}/access`, {
+            headers: { Authorization: `Bearer ${session.access_token}` }
+        });
+        if (!response.ok) throw new Error(`Could not load account access (HTTP ${response.status}).`);
+        window.userAccess = await response.json();
+        if (statusTag) {
+            statusTag.textContent = window.userAccess.is_admin
+                ? "Admin" : window.userAccess.premium_access ? "Premium" : "Free Tier";
+            statusTag.classList.remove("hidden");
+        }
+        if (adminLink) adminLink.classList.toggle("hidden", !window.userAccess.is_admin);
+    } catch (error) {
+        console.error("Landing account initialization failed:", error);
+    }
+}
 
 function formatDuration(seconds) {
     const rounded = Math.max(0, Math.round(Number(seconds) || 0));
@@ -264,13 +308,13 @@ async function loadMusicList() {
 async function initializeStudio() {
     const client = window.supabaseClient;
     if (!client) {
-        window.location.replace("/auth.html");
+        redirectToAuth();
         return;
     }
 
     const { data: { session }, error } = await client.auth.getSession();
     if (error || !session) {
-        window.location.replace("/auth.html");
+        redirectToAuth();
         return;
     }
 
@@ -281,7 +325,7 @@ async function initializeStudio() {
         if (!response.ok) {
             if (response.status === 401) {
                 await client.auth.signOut();
-                window.location.replace("/auth.html");
+                redirectToAuth();
                 return;
             }
             const result = await response.json();
@@ -357,7 +401,7 @@ async function generateVideo(event) {
     try {
         const { data: { session } } = await window.supabaseClient.auth.getSession();
         if (!session) {
-            window.location.replace("/auth.html");
+            redirectToAuth();
             return;
         }
         const response = await fetch(`${API_BASE_URL}/generate`, {

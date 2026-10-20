@@ -9,10 +9,22 @@ if (typeof supabase !== 'undefined' && SUPABASE_URL && SUPABASE_ANON_KEY) {
 }
 window.supabaseClient = supabaseClient;
 
+function getPostAuthRedirect() {
+    const next = new URLSearchParams(window.location.search).get("next");
+    if (!next || !next.startsWith("/") || next.startsWith("//")) return "/";
+    const target = new URL(next, window.location.origin);
+    if (target.origin !== window.location.origin || target.pathname.startsWith("/auth")) return "/";
+    return `${target.pathname}${target.search}${target.hash}`;
+}
+
+function getAuthCallbackUrl() {
+    return `${window.location.origin}/auth.html?next=${encodeURIComponent(getPostAuthRedirect())}`;
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
     if (!supabaseClient || !["/auth", "/auth.html"].includes(window.location.pathname)) return;
     const { data: { session } } = await supabaseClient.auth.getSession();
-    if (session) window.location.replace("/");
+    if (session) window.location.replace(getPostAuthRedirect());
 });
 
 // Helper function to show alert messages inside auth.html
@@ -63,7 +75,7 @@ async function handleSignIn(event) {
         } else {
             showResendConfirmation(false);
             showAlert("Login Successful! Redirecting...", false);
-            setTimeout(() => { window.location.href = "index.html"; }, 1000);
+            setTimeout(() => { window.location.href = getPostAuthRedirect(); }, 1000);
         }
     } catch (err) {
         const message = err instanceof TypeError
@@ -104,7 +116,7 @@ async function handleSignUp(event) {
             password: password,
             options: {
                 data: { full_name: fullName },
-                emailRedirectTo: `${window.location.origin}/auth.html`
+                emailRedirectTo: getAuthCallbackUrl()
             }
         });
 
@@ -113,7 +125,7 @@ async function handleSignUp(event) {
         } else {
             if (data.session) {
                 showAlert("Account created. Opening your studio...", false);
-                window.location.href = "/";
+                window.location.href = getPostAuthRedirect();
             } else {
                 showAlert("Account created. Check your email to confirm the account, then sign in.", false);
             }
@@ -146,7 +158,7 @@ async function resendConfirmationEmail() {
         const { error } = await supabaseClient.auth.resend({
             type: "signup",
             email,
-            options: { emailRedirectTo: `${window.location.origin}/auth.html` }
+            options: { emailRedirectTo: getAuthCallbackUrl() }
         });
         if (error) throw error;
         showResendConfirmation(false);
@@ -164,7 +176,7 @@ async function handleSocialAuth(provider) {
         if (!supabaseClient) throw new Error("Supabase client unavailable.");
         const { data, error } = await supabaseClient.auth.signInWithOAuth({
             provider: provider,
-            options: { redirectTo: `${window.location.origin}/index.html` }
+            options: { redirectTo: new URL(getPostAuthRedirect(), window.location.origin).href }
         });
         if (error) showAlert(error.message, true);
     } catch (err) {

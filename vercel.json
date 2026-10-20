@@ -17,6 +17,10 @@
       "destination": "/auth.html"
     },
     {
+      "source": "/generate",
+      "destination": "/generate.html"
+    },
+    {
       "source": "/favicon.ico",
       "destination": "/assets/logo.png"
     }

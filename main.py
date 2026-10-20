@@ -770,6 +770,11 @@ def auth_page():
     return RedirectResponse(url="/auth.html")
 
 
+@app.get("/generate", include_in_schema=False)
+def generate_page():
+    return RedirectResponse(url="/generate.html")
+
+
 @app.get("/signin", include_in_schema=False)
 def signin_page():
     return RedirectResponse(url="/auth.html")

@@ -38,7 +38,7 @@
 
             <nav class="hidden md:flex items-center space-x-8 text-sm font-medium text-slate-300">
                 <a href="#home" class="hover:text-amber-400 transition-colors">Home</a>
-                <a href="#generator" class="hover:text-amber-400 transition-colors">Studio</a>
+                <a href="/generate.html" class="hover:text-amber-400 transition-colors">Studio</a>
                 <a href="#features" class="hover:text-amber-400 transition-colors">Features</a>
                 <a href="#about" class="hover:text-amber-400 transition-colors">Guide</a>
                 <a id="admin-portal-link" href="/admin.html" class="hidden text-amber-400 hover:text-amber-300 transition-colors flex items-center gap-1.5 font-semibold bg-amber-500/10 px-3 py-1.5 rounded-lg border border-amber-500/20">
@@ -51,7 +51,7 @@
                     <i class="fa-solid fa-user"></i> Free Tier
                 </span>
                 <a id="nav-auth-btn" href="/auth.html" class="hidden sm:inline-flex text-slate-300 hover:text-white px-3 py-2 text-sm font-semibold">Sign In</a>
-                <a href="#generator" aria-label="Create reel" title="Create reel" class="bg-gradient-to-r from-amber-500 to-yellow-500 px-3 sm:px-5 py-2.5 rounded-lg sm:rounded-xl font-bold text-sm text-slate-950 hover:shadow-lg hover:shadow-amber-500/25 transition-all flex items-center gap-2">
+                <a href="/generate.html" aria-label="Create reel" title="Create reel" class="bg-gradient-to-r from-amber-500 to-yellow-500 px-3 sm:px-5 py-2.5 rounded-lg sm:rounded-xl font-bold text-sm text-slate-950 hover:shadow-lg hover:shadow-amber-500/25 transition-all flex items-center gap-2">
                     <i class="fa-solid fa-wand-magic-sparkles"></i>
                     <span class="hidden sm:inline">Create Reel</span>
                 </a>
@@ -73,7 +73,7 @@
                 Create portrait videos with Arabic recitation and Urdu translation, then preview and download each reel in your batch.
             </p>
             <div class="flex flex-wrap justify-center gap-4">
-                <a href="#generator" class="bg-amber-500 hover:bg-amber-400 text-slate-950 px-8 py-4 rounded-xl font-bold text-base transition-all shadow-xl shadow-amber-500/20 flex items-center gap-3">
+                <a href="/generate.html" class="bg-amber-500 hover:bg-amber-400 text-slate-950 px-8 py-4 rounded-xl font-bold text-base transition-all shadow-xl shadow-amber-500/20 flex items-center gap-3">
                     <i class="fa-solid fa-play"></i>
                     Generate Now
                 </a>
@@ -82,232 +82,6 @@
                     Learn More
                 </a>
             </div>
-        </div>
-    </section>
-
-    <!-- Generator Section Studio -->
-    <section id="generator" class="py-16 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto w-full">
-        <div class="glass-card rounded-3xl p-6 sm:p-10 border border-slate-800 shadow-2xl relative glow-effect">
-            <div class="text-center mb-10">
-                <h3 class="text-2xl sm:text-3xl font-bold text-slate-100 mb-2">Video Generator Studio</h3>
-                <p class="text-slate-400 text-sm">Configure your preferences to render studio-grade Quranic reels</p>
-            </div>
-            <p id="access-message" class="hidden mb-6 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200" role="status" aria-live="polite"></p>
-
-            <!-- Mode Selection Tabs -->
-            <div class="grid grid-cols-3 gap-2 p-1.5 bg-slate-900/90 rounded-2xl mb-8 border border-slate-800/80 text-center">
-                <button id="btn-pick" type="button" onclick="setMode('pick')" class="py-3 rounded-xl font-bold text-sm transition-all bg-slate-800 border border-amber-500/30 text-amber-400 shadow-sm">
-                    <i class="fa-solid fa-bookmark mr-2"></i> Single Verse
-                </button>
-                <button id="btn-picks" type="button" onclick="setMode('picks')" class="py-3 rounded-xl font-bold text-sm transition-all text-slate-400 hover:text-white flex items-center justify-center gap-1.5">
-                    <i class="fa-solid fa-list-check"></i> Custom List <i class="fa-solid fa-lock text-xs text-amber-400"></i>
-                </button>
-                <button id="btn-random" type="button" onclick="setMode('random')" class="py-3 rounded-xl font-bold text-sm transition-all text-slate-400 hover:text-white flex items-center justify-center gap-1.5">
-                    <i class="fa-solid fa-shuffle"></i> Bulk Random <i class="fa-solid fa-lock text-xs text-amber-400"></i>
-                </button>
-            </div>
-
-            <form id="reel-generator-form" onsubmit="handleFormSubmit(event)">
-                <!-- Active Mode Input Tracker -->
-                <input type="hidden" id="mode-select" value="pick">
-                <div class="mb-6">
-                    <label for="input-content-mode" class="block text-sm font-semibold text-slate-300 mb-2">Content mode:</label>
-                    <select id="input-content-mode" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-3.5 text-slate-100 focus:outline-none focus:border-amber-500 transition-colors">
-                        <option value="full">Arabic + Urdu (default)</option>
-                        <option value="urdu_only">Sirf Urdu text aur audio</option>
-                    </select>
-                </div>
-
-                <!-- Mode 1: Single Pick (Active in Free Mode) -->
-                <div id="mode-pick" class="space-y-6">
-                    <div>
-                            <label class="block text-sm font-semibold text-slate-300 mb-2">Select Surah and Ayat:</label>
-                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                <div>
-                                    <label for="estimate-surah" class="block text-xs text-slate-400 mb-1">Surah number</label>
-                                    <select id="estimate-surah" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-3 text-slate-100 focus:outline-none focus:border-amber-500">
-                                        <option value="1">Surah 1</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label for="estimate-start" class="block text-xs text-slate-400 mb-1">Start ayat</label>
-                                    <input id="estimate-start" type="number" min="1" value="1" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-3 text-slate-100 focus:outline-none focus:border-amber-500">
-                                </div>
-                                <div>
-                                    <label for="estimate-end" class="block text-xs text-slate-400 mb-1">End ayat</label>
-                                    <input id="estimate-end" type="number" min="1" value="1" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-3 text-slate-100 focus:outline-none focus:border-amber-500">
-                                </div>
-                            </div>
-                            <label for="input-pick" class="block text-xs text-slate-400 mt-3 mb-1">Direct range entry</label>
-                            <input type="text" id="input-pick" value="1:1-1" placeholder="e.g. 55:1-8" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 transition-colors font-mono">
-                            <p class="text-xs text-slate-500 mt-2">Format: <code class="text-amber-400 font-mono">Surah_Number : Start_Ayah - End_Ayah</code></p>
-                        </div>
-                        <div id="duration-estimate-panel" class="rounded-xl border border-slate-700 bg-slate-900/70 p-4" aria-live="polite">
-                            <p id="duration-estimate-text" class="text-sm font-semibold text-slate-300">Hisaab ho raha hai...</p>
-                            <p id="duration-estimate-warning" class="hidden mt-2 text-sm text-red-400"></p>
-                            <button id="choose-estimated-length" type="button" class="hidden mt-3 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-amber-400">Munasib length chunein</button>
-                        </div>
-                    </div>
-                </div>
-
-                <div id="mode-picks" class="hidden space-y-3">
-                    <h4 class="font-semibold text-slate-200">Custom verse list</h4>
-                    <p class="text-sm text-slate-400">The generator will use the verse ranges saved in <code class="text-amber-400">picks.txt</code>.</p>
-                </div>
-
-                <div id="mode-random" class="hidden space-y-3">
-                    <label for="input-random-count" class="block text-sm font-semibold text-slate-300">Number of random reels</label>
-                    <input id="input-random-count" type="number" min="1" max="25" value="1" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-3.5 text-slate-100 focus:outline-none focus:border-amber-500">
-                </div>
-
-                <div id="locked-pro-notice" class="hidden p-8 bg-slate-900/90 border border-amber-500/20 rounded-2xl text-center space-y-4">
-                    <div class="w-12 h-12 bg-amber-500/10 text-amber-400 rounded-full flex items-center justify-center mx-auto text-xl">
-                        <i class="fa-solid fa-crown"></i>
-                    </div>
-                    <h4 class="text-xl font-bold text-slate-100">Bulk & Multi-Verse Generation is Locked</h4>
-                    <p class="text-sm text-slate-400 max-w-md mx-auto">
-                        An admin must grant your account premium access to use custom lists and random generation.
-                    </p>
-                </div>
-
-                <!-- Settings Grid -->
-                <div class="mt-8 pt-6 border-t border-slate-800/80 grid grid-cols-1 sm:grid-cols-2 gap-6">
-                    <div>
-                        <label class="block text-sm font-semibold text-slate-300 mb-2">Maximum Video Duration:</label>
-                        <select id="input-max-dur" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-3.5 text-slate-100 focus:outline-none focus:border-amber-500 transition-colors">
-                            <option value="30">30 Seconds</option>
-                            <option value="60">60 Seconds (1 Min - Standard Reel)</option>
-                            <option value="90">90 Seconds (1.5 Min - Story/Waqia Mode)</option>
-                            <option value="120">120 Seconds (2 Min - Extended)</option>
-                            <option value="150">150 Seconds (2.5 Min - Extended)</option>
-                            <option value="180">180 Seconds (3 Min - Maximum)</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label for="input-quality" class="block text-sm font-semibold text-slate-300 mb-2">Render quality:</label>
-                        <select id="input-quality" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-3.5 text-slate-100 focus:outline-none focus:border-amber-500 transition-colors">
-                            <option value="balanced">Balanced · 720p · easier on laptop</option>
-                            <option value="high">High · 1080p · more detail, slower render</option>
-                        </select>
-                    </div>
-                    <div class="sm:col-span-2">
-                        <label class="block text-sm font-semibold text-slate-300 mb-2">Background Source:</label>
-                        <select class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-3.5 text-slate-100 focus:outline-none focus:border-amber-500 transition-colors">
-                            <option value="local">Local Portrait Clips (backgrounds/ folder)</option>
-                            <option value="paxels" disabled>Nature & Landscapes 🔒 (Locked)</option>
-                            <option value="stars" disabled>Night Sky & Space 🔒 (Locked)</option>
-                            <option value="timelapse" disabled>Cloud Timelapses 🔒 (Locked)</option>
-                        </select>
-                    </div>
-                    <div class="sm:col-span-2">
-                        <label for="input-music" class="block text-sm font-semibold text-slate-300 mb-2">Background Music (Optional):</label>
-                        <select id="input-music" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-3.5 text-slate-100 focus:outline-none focus:border-amber-500 transition-colors">
-                            <option value="">Koi music nahi (No background music)</option>
-                        </select>
-                    </div>
-                </div>
-
-                <section class="mt-8 pt-6 border-t border-slate-800/80" aria-labelledby="video-style-heading">
-                    <h4 id="video-style-heading" class="text-lg font-semibold text-slate-100 mb-4">Video Style</h4>
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        <div>
-                            <label for="video-style-element" class="block text-sm font-semibold text-slate-300 mb-2">Element:</label>
-                            <select id="video-style-element" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-3 text-slate-100 focus:outline-none focus:border-amber-500 transition-colors">
-                                <option value="bismillah">Bismillah</option>
-                                <option value="surah">Surah Name</option>
-                                <option value="label">Ayat Range</option>
-                                <option value="arabic">Arabic Ayaat</option>
-                                <option value="urdu">Urdu Tarjuma</option>
-                                <option value="channel">Channel Name</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label for="video-style-color" class="block text-sm font-semibold text-slate-300 mb-2">Color:</label>
-                            <select id="video-style-color" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-3 text-slate-100 focus:outline-none focus:border-amber-500 transition-colors">
-                                <option value="#FFFFFF">White</option>
-                                <option value="#FFD700">Gold</option>
-                                <option value="#FFFF00">Yellow</option>
-                                <option value="#00C853">Green</option>
-                                <option value="#00E5FF">Cyan</option>
-                                <option value="#FF4081">Pink</option>
-                                <option value="#FF9100">Orange</option>
-                                <option value="#FF1744">Red</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label for="video-style-font" class="block text-sm font-semibold text-slate-300 mb-2">Font:</label>
-                            <select id="video-style-font" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-3 text-slate-100 focus:outline-none focus:border-amber-500 transition-colors">
-                                <option value="amiri_regular">Amiri Regular</option>
-                                <option value="amiri_bold">Amiri Bold</option>
-                                <option value="naskh_regular">Naskh Regular</option>
-                                <option value="naskh_bold">Naskh Bold</option>
-                                <option value="nastaliq_regular">Nastaliq Regular</option>
-                                <option value="nastaliq_bold">Nastaliq Bold</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="mt-4 flex flex-wrap gap-3">
-                        <button id="apply-video-style" type="button" class="rounded-lg bg-amber-500 px-5 py-2.5 font-semibold text-slate-950 hover:bg-amber-400 transition-colors">Apply</button>
-                        <button id="reset-video-styles" type="button" class="rounded-lg border border-slate-600 px-5 py-2.5 font-semibold text-slate-200 hover:bg-slate-800 transition-colors">Reset</button>
-                    </div>
-                    <ul id="applied-video-styles" class="hidden mt-4 space-y-1 text-sm text-slate-300" aria-live="polite"></ul>
-                </section>
-
-                <!-- Generate CTA -->
-                <div class="mt-10">
-                    <button id="generate-button" type="submit" class="w-full bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 text-slate-950 font-bold py-4 rounded-xl shadow-lg shadow-amber-500/20 hover:scale-[1.005] active:scale-[0.995] transition-all flex items-center justify-center gap-3 text-lg">
-                        <i class="fa-solid fa-gear text-xl"></i>
-                        Generate Video
-                    </button>
-                </div>
-            </form>
-
-            <!-- Render Status Terminal -->
-            <div id="output-box" class="mt-8 p-4 bg-slate-950 rounded-xl border border-slate-800 text-xs font-mono text-slate-400 space-y-2 hidden">
-                <div class="flex items-center justify-between text-slate-300 pb-2 border-b border-slate-800">
-                    <span><i id="status-spinner" class="fa-solid fa-spinner animate-spin text-amber-400 mr-2"></i> <span id="status-heading">Status: Processing timeline...</span></span>
-                    <span id="status-percent">0%</span>
-                </div>
-                <p id="log-message" class="text-amber-300/90">> Preparing rendering queue...</p>
-                <div id="status-box" class="text-xs font-bold mt-2"></div>
-                <ul id="generation-warnings" class="hidden mt-2 list-disc pl-5 text-xs font-semibold text-amber-300" aria-live="polite"></ul>
-            </div>
-            <!-- Video Preview Container (Hidden by default) -->
-<div id="video-preview-box" class="mt-8 p-4 sm:p-6 bg-slate-900/90 rounded-2xl border border-amber-500/30 text-center space-y-4 hidden">
-    <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-        <h4 class="text-base font-bold text-amber-400 flex items-center gap-2">
-            <i class="fa-solid fa-circle-check text-green-400"></i> Generated Reels
-        </h4>
-        <span id="preview-counter" class="text-xs font-semibold text-slate-300">0 / 0</span>
-    </div>
-
-    <div class="relative mx-auto w-full max-w-sm py-2">
-        <button id="preview-previous" type="button" onclick="showPreviousVideo()" aria-label="Previous reel" title="Previous reel" class="absolute left-0 top-1/2 z-10 -translate-y-1/2 w-10 h-10 rounded-full border border-slate-600 bg-slate-950/90 text-white hover:bg-amber-500 hover:text-slate-950 disabled:opacity-30 disabled:cursor-not-allowed">
-            <i class="fa-solid fa-chevron-left" aria-hidden="true"></i>
-        </button>
-        <div class="relative mx-auto w-[min(72vw,18rem)] rounded-xl overflow-hidden border border-slate-700 shadow-2xl aspect-[9/16] bg-black">
-            <video id="rendered-video-player" controls playsinline preload="none" class="w-full h-full object-contain">
-                Your browser does not support the video tag.
-            </video>
-        </div>
-        <button id="preview-next" type="button" onclick="showNextVideo()" aria-label="Next reel" title="Next reel" class="absolute right-0 top-1/2 z-10 -translate-y-1/2 w-10 h-10 rounded-full border border-slate-600 bg-slate-950/90 text-white hover:bg-amber-500 hover:text-slate-950 disabled:opacity-30 disabled:cursor-not-allowed">
-            <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
-        </button>
-    </div>
-    <p id="preview-filename" class="text-xs font-mono text-slate-400 break-all">No reel selected</p>
-    <div id="video-gallery" role="group" aria-label="Choose a generated reel" class="flex gap-2 overflow-x-auto pb-2 text-left"></div>
-    <p id="preview-caption" class="max-w-xl mx-auto text-xs leading-relaxed text-slate-400 whitespace-pre-line"></p>
-
-    <!-- Action Buttons -->
-    <div class="flex justify-center gap-3 pt-2">
-        <a id="download-btn" href="#" download class="bg-amber-500 hover:bg-amber-400 text-slate-950 px-5 py-2.5 rounded-xl font-bold text-xs transition-all flex items-center gap-2">
-            <i class="fa-solid fa-download"></i> Download Reel
-        </a>
-        <button type="button" onclick="copyCaption()" class="glass-card hover:bg-slate-800 text-slate-200 px-4 py-2.5 rounded-xl font-bold text-xs transition-all border border-slate-700 flex items-center gap-2">
-            <i class="fa-solid fa-copy"></i> Copy Captions
-        </button>
-    </div>
-</div>
         </div>
     </section>
 
