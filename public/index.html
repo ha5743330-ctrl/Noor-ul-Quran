@@ -17,6 +17,20 @@
             background: rgba(15, 23, 42, 0.78);
             border: 1px solid rgba(148, 163, 184, 0.18);
         }
+        @keyframes hero-background-fade {
+            0%, 60% { opacity: 1; }
+            70%, 90% { opacity: 0; }
+            100% { opacity: 1; }
+        }
+        .hero-background-slide {
+            animation: hero-background-fade 18s infinite;
+        }
+        .hero-background-slide:nth-child(2) { animation-delay: -12s; }
+        .hero-background-slide:nth-child(3) { animation-delay: -6s; }
+        @media (prefers-reduced-motion: reduce) {
+            .hero-background-slide { animation: none; opacity: 0; }
+            .hero-background-slide:first-child { opacity: 1; }
+        }
         :focus-visible {
             outline: 3px solid #fbbf24;
             outline-offset: 3px;
@@ -43,9 +57,15 @@
     </header>
 
     <main>
-        <section id="home" class="relative overflow-hidden px-4 py-16 sm:px-6 sm:py-24">
+        <section id="home" class="relative isolate flex min-h-[36rem] items-center overflow-hidden px-4 py-16 sm:px-6 sm:py-24">
+            <div class="pointer-events-none absolute inset-0" aria-hidden="true">
+                <img src="/assets/quran-background-1.jpg" alt="" class="hero-background-slide absolute inset-0 h-full w-full object-cover">
+                <img src="/assets/quran-background-2.jpg" alt="" class="hero-background-slide absolute inset-0 h-full w-full object-cover">
+                <img src="/assets/quran-background-3.jpg" alt="" class="hero-background-slide absolute inset-0 h-full w-full object-cover">
+                <div class="absolute inset-0 bg-gradient-to-b from-slate-950/75 via-slate-950/65 to-slate-950/90"></div>
+            </div>
             <div class="pointer-events-none absolute left-1/2 top-12 h-72 w-72 -translate-x-1/2 rounded-full bg-amber-500/10 blur-3xl" aria-hidden="true"></div>
-            <div class="relative mx-auto max-w-4xl text-center">
+            <div class="relative z-10 mx-auto max-w-4xl text-center">
                 <img src="/assets/logo.png" alt="" class="mx-auto mb-6 h-16 w-16 rounded-full bg-white object-contain shadow-xl shadow-amber-900/20 sm:h-20 sm:w-20">
                 <p class="mb-5 inline-flex items-center gap-2 rounded-full border border-amber-400/30 bg-amber-400/10 px-4 py-2 text-xs font-semibold text-amber-200 sm:text-sm">
                     <i class="fa-solid fa-circle-play" aria-hidden="true"></i>
