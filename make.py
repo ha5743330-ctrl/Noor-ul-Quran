@@ -40,6 +40,8 @@ INCLUDE_ARABIC_AUDIO = True
 GAP_AFTER_ARABIC = 0.35
 DURATION_TOLERANCE = 0.15
 NORMALIZE_AUDIO = True
+FFMPEG_CODEC_THREADS = ("-threads", "1")
+FFMPEG_FILTER_THREADS = ("-filter_threads", "1", "-filter_complex_threads", "1")
 BASE_URL = "https://everyayah.com/data/"
 ARABIC_FOLDER = "Alafasy_128kbps"
 URDU_FOLDER = "translations/urdu_shamshad_ali_khan_46kbps"
@@ -190,7 +192,10 @@ def encode_video(cmd, outfile):
         hardware_args = []
 
     if hardware_args:
-        result = subprocess.run(cmd + hardware_args + ["-pix_fmt", "yuv420p"] + audio_args, check=False)
+        result = subprocess.run(
+            cmd + hardware_args + list(FFMPEG_CODEC_THREADS) + ["-pix_fmt", "yuv420p"] + audio_args,
+            check=False,
+        )
         if result.returncode == 0:
             return
         print(f"Hardware encoder {encoder} failed; retrying with CPU encoding.", file=sys.stderr)
@@ -198,7 +203,9 @@ def encode_video(cmd, outfile):
 
     run(
         cmd
-        + ["-c:v", "libx264", "-preset", "ultrafast", "-crf", "24", "-threads", "2", "-pix_fmt", "yuv420p"]
+        + ["-c:v", "libx264", "-preset", "ultrafast", "-crf", "24"]
+        + list(FFMPEG_CODEC_THREADS)
+        + ["-pix_fmt", "yuv420p"]
         + audio_args
     )
 
@@ -698,11 +705,18 @@ def build(Q, s, a0, a1, outfile, bgs, rng, tmp, styles=None, max_duration=MAX_DU
     lst.write_text("\n".join(rows))
     
     playlist = background_playlist(bgs, total, rng)
-    cmd = ["ffmpeg", "-nostdin", "-y", "-v", "error"]
+    cmd = [
+        "ffmpeg", "-nostdin", "-y", "-v", "error",
+        *FFMPEG_FILTER_THREADS,
+    ]
     for path, seek, segment_duration in playlist:
-        cmd += ["-stream_loop", "-1", "-ss", f"{seek:.3f}", "-t", f"{segment_duration:.3f}", "-i", str(path)]
+        cmd += [
+            *FFMPEG_CODEC_THREADS,
+            "-stream_loop", "-1", "-ss", f"{seek:.3f}",
+            "-t", f"{segment_duration:.3f}", "-i", str(path),
+        ]
     overlay_input = len(playlist)
-    cmd += ["-f", "concat", "-safe", "0", "-i", str(lst)]
+    cmd += [*FFMPEG_CODEC_THREADS, "-f", "concat", "-safe", "0", "-i", str(lst)]
 
     fc = []
     background_labels = []
@@ -737,7 +751,7 @@ def build(Q, s, a0, a1, outfile, bgs, rng, tmp, styles=None, max_duration=MAX_DU
     norm = ",loudnorm=I=-18:TP=-2:LRA=7" if NORMALIZE_AUDIO else ""
     for it in items:
         for f, d_seg, pad in it["segs"]:
-            cmd += ["-i", f]
+            cmd += [*FFMPEG_CODEC_THREADS, "-i", f]
             fc.append(f"[{idx}:a]aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo{norm},"
                       f"asetpts=PTS-STARTPTS" + (f",apad=pad_dur={pad}" if pad else "") + f"[s{idx}]")
             labels.append(f"[s{idx}]"); idx += 1
@@ -751,7 +765,7 @@ def build(Q, s, a0, a1, outfile, bgs, rng, tmp, styles=None, max_duration=MAX_DU
 
     music_input_index = None
     if music_path:
-        cmd += ["-stream_loop", "-1", "-i", str(music_path)]
+        cmd += [*FFMPEG_CODEC_THREADS, "-stream_loop", "-1", "-i", str(music_path)]
         music_input_index = idx
         idx += 1
 

@@ -10,6 +10,7 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 import main
+import make
 
 
 FREE_USER = {"id": "free-user", "is_admin": False, "premium_access": False}
@@ -275,6 +276,21 @@ def test_upload_background_rejects_malformed_content_length(client):
     with pytest.raises(HTTPException) as exc:
         asyncio.run(main.upload_background(Request(), user=ADMIN_USER))
     assert exc.value.status_code == 400
+
+
+def test_ffmpeg_cpu_render_uses_single_codec_thread(monkeypatch, tmp_path):
+    captured = {}
+    monkeypatch.setattr(make, "detect_hardware_encoder", lambda: "")
+    monkeypatch.setattr(make, "run", lambda command, **kwargs: captured.update(command=command))
+
+    make.encode_video(["ffmpeg", "-i", "input.mp4"], tmp_path / "output.mp4")
+
+    command = captured["command"]
+    assert command[command.index("-threads") + 1] == "1"
+    assert command[-1] == str(tmp_path / "output.mp4")
+    assert make.FFMPEG_FILTER_THREADS == (
+        "-filter_threads", "1", "-filter_complex_threads", "1"
+    )
 
 
 def test_music_upload_persists_to_supabase_and_local_cache(client, monkeypatch):
