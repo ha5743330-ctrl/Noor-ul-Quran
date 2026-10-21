@@ -98,4 +98,6 @@ You can check the reel plan without rendering with:
 
 ### Deployment
 
-Deployment setup is intentionally left for later; this README covers local development only.
+The app is deployed on Render's free Docker plan. Its `/tmp` disk is ephemeral: videos and the local Recent Videos history can disappear when the service restarts or redeploys. Download any video you need to keep.
+
+When configured, Supabase Storage keeps uploaded media objects beyond a Render restart. The Recent Videos history index is currently stored locally on Render, however, so persistent history metadata requires storing that index in Supabase as well; it is not currently persisted there.
