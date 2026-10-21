@@ -1,11 +1,12 @@
 import json
 import hashlib
 import hmac
+import logging
+import ntpath
 import os
 import re
 import secrets
 import shutil
-import ntpath
 import subprocess
 import sys
 import time
@@ -24,6 +25,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+
+LOGGER = logging.getLogger(__name__)
 
 # 1. Environment Variables Load Karein
 BASE_DIR = Path(__file__).resolve().parent
@@ -240,6 +243,24 @@ def _upload_media_file(local_path: Path, object_path: str, content_type: str):
             f"/object/{quote(MEDIA_BUCKET, safe='')}/{quote(object_path, safe='/')}",
             data=media_file,
             headers={"Content-Type": content_type, "x-upsert": "true"},
+        )
+
+
+def _delete_media_objects(object_paths):
+    if not SUPABASE_SERVICE_KEY:
+        return
+    paths = sorted({
+        path
+        for path in object_paths
+        if isinstance(path, str)
+        and path.startswith("videos/")
+        and ".." not in path.split("/")
+    })
+    if paths:
+        _storage_request(
+            "DELETE",
+            f"/object/{quote(MEDIA_BUCKET, safe='')}",
+            json={"prefixes": paths},
         )
 
 
@@ -464,8 +485,42 @@ def _safe_history_video_path(filename):
     return video_path
 
 
+def _cleanup_orphaned_output_files(now=None):
+    cutoff = (time.time() if now is None else now) - 24 * 60 * 60
+    with HISTORY_LOCK:
+        history = _read_video_history_unlocked()
+        referenced = {
+            entry.get("filename")
+            for entries in history["users"].values()
+            if isinstance(entries, list)
+            for entry in entries
+            if isinstance(entry, dict) and isinstance(entry.get("filename"), str)
+        }
+
+    removed = 0
+    if not OUTPUT_DIR.exists():
+        return removed
+    for path in OUTPUT_DIR.iterdir():
+        if not path.is_file() or path.suffix.lower() not in {".mp4", ".tmp", ".temp", ".part"}:
+            continue
+        try:
+            if path.name in referenced or path.stat().st_mtime >= cutoff:
+                continue
+            path.unlink()
+            removed += 1
+        except OSError:
+            LOGGER.exception("Could not clean old output file %s", path.name)
+    return removed
+
+
+@app.on_event("startup")
+def cleanup_output_on_startup():
+    _cleanup_orphaned_output_files()
+
+
 def _record_video_history(user_id, videos, content_mode, quality, styles):
     expired_filenames = []
+    expired_object_paths = []
     with HISTORY_LOCK:
         history = _read_video_history_unlocked()
         entries = history["users"].get(user_id, [])
@@ -486,6 +541,7 @@ def _record_video_history(user_id, videos, content_mode, quality, styles):
                 "downloaded_at": None,
                 "download_count": 0,
                 "styled": bool(styles),
+                "object_path": video.get("object_path"),
             }
             for video in reversed(videos)
             if isinstance(video, dict) and isinstance(video.get("filename"), str)
@@ -506,6 +562,18 @@ def _record_video_history(user_id, videos, content_mode, quality, styles):
             and isinstance(entry.get("filename"), str)
             and entry.get("filename") not in retained_filenames
         ]
+        retained_object_paths = {
+            entry.get("object_path")
+            for entry in history["users"][user_id]
+            if isinstance(entry.get("object_path"), str)
+        }
+        expired_object_paths = [
+            entry.get("object_path")
+            for entry in expired_entries
+            if isinstance(entry, dict)
+            and isinstance(entry.get("object_path"), str)
+            and entry.get("object_path") not in retained_object_paths
+        ]
 
     for filename in expired_filenames:
         video_path = _safe_history_video_path(filename)
@@ -513,7 +581,11 @@ def _record_video_history(user_id, videos, content_mode, quality, styles):
             try:
                 video_path.unlink(missing_ok=True)
             except OSError:
-                pass
+                LOGGER.exception("Could not delete pruned history video %s", filename)
+    try:
+        _delete_media_objects(expired_object_paths)
+    except Exception:
+        LOGGER.exception("Could not delete pruned history media objects")
 
 
 def _user_owns_video(user_id, filename):
@@ -717,11 +789,24 @@ def delete_history_video(entry_id: str, user=Depends(get_current_user)):
         history["users"][user["id"]] = entries
         _write_video_history_unlocked(history)
         video_path = _safe_history_video_path(entry.get("filename"))
-        if video_path is not None:
-            try:
-                video_path.unlink(missing_ok=True)
-            except OSError as exc:
-                print(f"Could not delete history video {entry.get('filename')}: {exc}", file=sys.stderr)
+        object_path = entry.get("object_path")
+        remaining_object_paths = {
+            item.get("object_path")
+            for user_entries in history["users"].values()
+            if isinstance(user_entries, list)
+            for item in user_entries
+            if isinstance(item, dict) and isinstance(item.get("object_path"), str)
+        }
+    if video_path is not None:
+        try:
+            video_path.unlink(missing_ok=True)
+        except OSError:
+            LOGGER.exception("Could not delete history video %s", entry.get("filename"))
+    if object_path not in remaining_object_paths:
+        try:
+            _delete_media_objects([object_path])
+        except Exception:
+            LOGGER.exception("Could not delete history media object")
     return {"deleted": True}
 
 
@@ -1153,6 +1238,7 @@ def _run_generation_job(
                     encoding="utf-8",
                 )
             _prepare_ephemeral_media()
+            _cleanup_orphaned_output_files()
             completed = subprocess.run(cmd, cwd=str(BASE_DIR), capture_output=True, text=True)
             videos = _read_generation_manifest(manifest_path)
             if completed.returncode != 0 and not videos:
@@ -1165,6 +1251,7 @@ def _run_generation_job(
                     video_path = OUTPUT_DIR / video["filename"]
                     stored_video = f"videos/{uuid4().hex}_{video['filename']}"
                     _upload_media_file(video_path, stored_video, "video/mp4")
+                    video["object_path"] = stored_video
                     video["url"] = _signed_media_url(stored_video)
 
             if SUPABASE_SERVICE_KEY:
