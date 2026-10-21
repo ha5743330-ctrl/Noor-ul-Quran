@@ -16,7 +16,15 @@ The frontend is a static Vercel site. The Python/FFmpeg renderer runs as a Docke
    - Enter the service-role/secret key only in Render's server environment. Never use it in Vercel or browser code, and never send it in chat.
 7. Copy the Render service URL into Vercel's `API_BASE_URL`, then redeploy the Vercel project.
 8. In Supabase Authentication URL Configuration, add the Vercel origin and `https://your-project.vercel.app/**` to the allowed redirect URLs. Keep the local `http://127.0.0.1:8000/**` redirect for local development if needed.
-9. Sign in as the seeded admin and use Admin Access to upload MP4/MOV backgrounds, per-ayah Arabic/Urdu text overrides, and Arabic/Urdu audio. Generated videos and captions are stored in the private bucket and served with signed URLs.
+9. Sign in as the seeded admin and use Admin Access to upload MP4/MOV backgrounds, background music, per-ayah Arabic/Urdu text overrides, and Arabic/Urdu audio. These media assets are saved in the private bucket and downloaded to Render's temporary disk when needed. Generated videos and captions are stored in the private bucket and served with signed URLs.
+
+## Moving local assets to hosted storage
+
+- Upload required background clips and music from **Admin Access** after signing in to the deployed site. Do not commit media files to Git; `.gitignore` intentionally excludes them. After a Render restart, Supabase Storage is the source and the backend downloads those assets again.
+- The local background videos currently total more than Supabase Free's 1 GB storage allowance. Select only the clips you intend to use and compress any clip over the 50 MB per-file limit before uploading; do not try to upload the complete local folder unchanged.
+- The `audio/arabic` and `audio/urdu` folders are downloaded audio cache. The renderer fetches missing verse audio from EveryAyah as needed, so these cache files do not need to be deployed. Admin-uploaded verse audio is saved to Supabase Storage.
+- `data/quran.json` is fetched while the Docker image is built. Admin-edited verse text and custom audio are stored in Supabase. The required renderer fonts are tracked in Git and included in the image.
+- Verify a background and music track appear in the admin lists, then generate a reel using each before relying on the deployment.
 
 ## Hosting notes
 

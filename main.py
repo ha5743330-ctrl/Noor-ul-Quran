@@ -311,12 +311,20 @@ def _prepare_ephemeral_media():
     for item in _list_media_objects("backgrounds"):
         object_name = item.get("name", "")
         filename = Path(object_name).name
-        if Path(filename).suffix.lower() not in {".mp4", ".mov"}:
+        extension = Path(filename).suffix.lower()
+        if extension not in {".mp4", ".mov"}:
             continue
         object_path = object_name if object_name.startswith("backgrounds/") else f"backgrounds/{filename}"
         local_path = BACKGROUND_DIR / filename
         if not local_path.exists():
             _download_media_file(object_path, local_path)
+
+    music_dir = BACKGROUND_DIR / "music"
+    music_dir.mkdir(parents=True, exist_ok=True)
+    for filename in _available_music_filenames():
+        local_path = music_dir / filename
+        if not local_path.exists():
+            _download_media_file(f"backgrounds/music/{filename}", local_path)
 
     for object_path, local_path in (
         ("metadata/captions.csv", OUTPUT_DIR / "captions.csv"),
@@ -440,6 +448,59 @@ def _validate_music_filename(filename: str) -> str:
 @app.get("/api/music-list")
 def list_background_music(user=Depends(get_current_user)):
     return {"music_files": _available_music_filenames()}
+
+
+@app.post("/api/admin/music")
+async def upload_background_music(request: Request, user=Depends(require_admin)):
+    filename = request.query_params.get("filename", "")
+    extension = Path(filename).suffix.lower()
+    if (
+        not filename
+        or filename.strip() != filename
+        or "\x00" in filename
+        or "/" in filename
+        or "\\" in filename
+        or ".." in filename
+        or Path(filename).name != filename
+        or ntpath.basename(filename) != filename
+        or extension not in MUSIC_FILE_EXTENSIONS
+    ):
+        raise HTTPException(status_code=400, detail="Upload a valid MP3, MPEG, WAV, AAC, or M4A music file.")
+
+    content_length = request.headers.get("content-length")
+    if content_length is not None:
+        if re.fullmatch(r"[0-9]+", content_length) is None:
+            raise HTTPException(status_code=400, detail="Invalid content length.")
+        if int(content_length) > MAX_BACKGROUND_BYTES:
+            raise HTTPException(status_code=413, detail="Music file must be 50 MB or smaller.")
+
+    music_dir = BACKGROUND_DIR / "music"
+    music_dir.mkdir(parents=True, exist_ok=True)
+    destination = music_dir / filename
+    temporary_path = music_dir / f".{uuid4().hex}.upload"
+    total = 0
+    try:
+        with temporary_path.open("wb") as output_file:
+            async for chunk in request.stream():
+                total += len(chunk)
+                if total > MAX_BACKGROUND_BYTES:
+                    raise HTTPException(status_code=413, detail="Music file must be 50 MB or smaller.")
+                output_file.write(chunk)
+        if total == 0:
+            raise HTTPException(status_code=400, detail="The uploaded music file is empty.")
+        if SUPABASE_SERVICE_KEY:
+            content_type = (
+                "audio/mpeg"
+                if extension in {".mp3", ".mpeg"}
+                else ALLOWED_AUDIO_TYPES.get(extension, "application/octet-stream")
+            )
+            _upload_media_file(temporary_path, f"backgrounds/music/{filename}", content_type)
+        temporary_path.replace(destination)
+    except Exception:
+        temporary_path.unlink(missing_ok=True)
+        raise
+
+    return {"filename": filename, "size": total}
 
 
 def _local_video_path(filename: str) -> Path:

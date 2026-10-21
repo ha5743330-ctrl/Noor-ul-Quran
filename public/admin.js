@@ -58,6 +58,7 @@ async function initializeAdmin() {
         document.getElementById("admin-email").textContent = access.email;
         await loadUsers();
         await loadBackgrounds();
+        await loadMusic();
         await loadDiagnostics();
     } catch (error) {
         showAdminMessage(error.message, true);
@@ -181,6 +182,28 @@ async function loadBackgrounds() {
             size.textContent = `${(clip.size / (1024 * 1024)).toFixed(1)} MB`;
             item.append(name, size);
             list.append(item);
+        }
+    } catch (error) {
+        showAdminMessage(error.message, true);
+    }
+}
+
+async function loadMusic() {
+    const list = document.getElementById("music-list");
+    try {
+        const result = await adminRequest("/admin/music");
+        list.replaceChildren();
+        for (const filename of result.music_files) {
+            const item = document.createElement("li");
+            item.className = "py-2";
+            item.textContent = filename;
+            list.append(item);
+        }
+        if (!result.music_files.length) {
+            const empty = document.createElement("li");
+            empty.className = "py-2 text-slate-500";
+            empty.textContent = "No background music uploaded.";
+            list.append(empty);
         }
     } catch (error) {
         showAdminMessage(error.message, true);
@@ -359,10 +382,42 @@ async function uploadBackground(event) {
     }
 }
 
+async function uploadMusic(event) {
+    event.preventDefault();
+    const input = document.getElementById("music-file");
+    const button = document.getElementById("music-upload-button");
+    const file = input.files[0];
+    if (!file) return;
+    if (file.size > 50 * 1024 * 1024) {
+        showAdminMessage("Music file must be 50 MB or smaller.", true);
+        return;
+    }
+
+    button.disabled = true;
+    button.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>Uploading';
+    try {
+        const filename = encodeURIComponent(file.name);
+        await adminRequest(`/admin/music?filename=${filename}`, {
+            method: "POST",
+            body: file,
+            headers: { "Content-Type": file.type || "audio/mpeg" }
+        });
+        input.value = "";
+        showAdminMessage("Background music uploaded.");
+        await loadMusic();
+    } catch (error) {
+        showAdminMessage(error.message, true);
+    } finally {
+        button.disabled = false;
+        button.innerHTML = '<i class="fa-solid fa-upload mr-2"></i>Upload music';
+    }
+}
+
 document.getElementById("refresh-users").addEventListener("click", loadUsers);
 document.getElementById("refresh-diagnostics").addEventListener("click", loadDiagnostics);
 document.getElementById("user-search").addEventListener("input", renderUsers);
 document.getElementById("background-upload-form").addEventListener("submit", uploadBackground);
+document.getElementById("music-upload-form").addEventListener("submit", uploadMusic);
 document.getElementById("verse-lookup-form").addEventListener("submit", loadVerseContent);
 document.getElementById("verse-content-form").addEventListener("submit", saveVerseContent);
 document.getElementById("verse-audio-form").addEventListener("submit", uploadVerseAudio);

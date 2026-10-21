@@ -274,3 +274,43 @@ def test_upload_background_rejects_malformed_content_length(client):
     with pytest.raises(HTTPException) as exc:
         asyncio.run(main.upload_background(Request(), user=ADMIN_USER))
     assert exc.value.status_code == 400
+
+
+def test_music_upload_persists_to_supabase_and_local_cache(client, monkeypatch):
+    monkeypatch.setattr(main, "SUPABASE_SERVICE_KEY", "configured")
+    uploads = []
+
+    def capture_upload(path, object_path, content_type):
+        uploads.append((path.read_bytes(), object_path, content_type))
+
+    class Request:
+        query_params = {"filename": "nasheed.mp3"}
+        headers = {"content-length": "5"}
+
+        async def stream(self):
+            yield b"audio"
+
+    monkeypatch.setattr(main, "_upload_media_file", capture_upload)
+    response = asyncio.run(main.upload_background_music(Request(), user=ADMIN_USER))
+    assert response == {"filename": "nasheed.mp3", "size": 5}
+    assert uploads == [(b"audio", "backgrounds/music/nasheed.mp3", "audio/mpeg")]
+    assert (main.BACKGROUND_DIR / "music" / "nasheed.mp3").read_bytes() == b"audio"
+
+
+def test_prepare_ephemeral_media_downloads_supabase_music(client, monkeypatch):
+    monkeypatch.setattr(main, "SUPABASE_SERVICE_KEY", "configured")
+    monkeypatch.setattr(main, "_list_media_objects", lambda prefix: [])
+    monkeypatch.setattr(main, "_media_object_exists", lambda path: False)
+    monkeypatch.setattr(main, "_available_music_filenames", lambda: ["nasheed.mp3"])
+    downloads = []
+
+    def capture_download(object_path, local_path):
+        downloads.append(object_path)
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        local_path.write_bytes(b"audio")
+        return True
+
+    monkeypatch.setattr(main, "_download_media_file", capture_download)
+    main._prepare_ephemeral_media()
+    assert downloads == ["backgrounds/music/nasheed.mp3"]
+    assert (main.BACKGROUND_DIR / "music" / "nasheed.mp3").read_bytes() == b"audio"

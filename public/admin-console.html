@@ -145,6 +145,21 @@
 
                     <ul id="background-list" class="mt-4 space-y-2 divide-y divide-slate-800 text-sm text-slate-300"></ul>
                 </div>
+
+                <div class="mt-6 space-y-4 border-t border-slate-800 pt-5">
+                    <div>
+                        <h3 class="font-semibold text-white">Background music</h3>
+                        <p class="mt-1 text-sm text-slate-400">Upload MP3, MPEG, WAV, AAC, or M4A. Maximum file size is 50 MB.</p>
+                    </div>
+                    <form id="music-upload-form" class="flex flex-col gap-3 sm:flex-row sm:items-center">
+                        <label class="sr-only" for="music-file">Choose a music file</label>
+                        <input id="music-file" type="file" accept=".mp3,.mpeg,.wav,.aac,.m4a,audio/mpeg,audio/mp4,audio/aac,audio/wav" required class="max-w-full text-sm text-slate-300 file:mr-3 file:rounded-xl file:border-0 file:bg-slate-800 file:px-3 file:py-2 file:text-slate-200">
+                        <button id="music-upload-button" type="submit" class="rounded-xl border border-slate-700 bg-slate-800 px-4 py-2.5 text-sm font-semibold text-slate-200 transition hover:bg-slate-700">
+                            <i class="fa-solid fa-upload mr-2"></i>Upload music
+                        </button>
+                    </form>
+                    <ul id="music-list" class="space-y-2 divide-y divide-slate-800 text-sm text-slate-300"></ul>
+                </div>
             </div>
         </section>
 
