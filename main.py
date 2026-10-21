@@ -1254,6 +1254,19 @@ def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
         raise HTTPException(status_code=400, detail="Invalid generation mode.")
     if req.content_mode not in {"full", "urdu_only"}:
         raise HTTPException(status_code=400, detail="Content mode must be full or urdu_only.")
+    if req.mode == "pick":
+        verse_match = re.fullmatch(
+            r"\s*(\d+)\s*:\s*(\d+)(?:\s*-\s*(\d+))?\s*",
+            req.verse or "",
+        )
+        if not verse_match:
+            raise HTTPException(status_code=400, detail="Enter a valid Surah:Ayah or Surah:Start-End range.")
+        surah_number, start_ayah = int(verse_match[1]), int(verse_match[2])
+        end_ayah = int(verse_match[3] or start_ayah)
+        if start_ayah > end_ayah:
+            raise HTTPException(status_code=400, detail="Start ayah must not exceed end ayah.")
+        _validate_verse(surah_number, start_ayah)
+        _validate_verse(surah_number, end_ayah)
     if req.mode != "pick" and not (user["is_admin"] or user["premium_access"]):
         raise HTTPException(status_code=403, detail="Premium access is required for custom and random generation.")
     if req.max_duration > 60 and not (user["is_admin"] or user["premium_access"]):

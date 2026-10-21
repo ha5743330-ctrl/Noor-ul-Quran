@@ -68,6 +68,7 @@ def test_free_user_is_gated_from_picks_random_and_long_videos(client):
         {"mode": "pick", "verse": "1:1", "styles": {"arabic": {"color": "red"}}},
         {"mode": "pick", "verse": "1:1", "styles": {"arabic": {"font": "unknown"}}},
         {"mode": "pick", "verse": "1:1", "styles": {"other": {"color": "#ffffff"}}},
+        {"mode": "pick", "verse": "114:1-9"},
         {"mode": "pick", "verse": "1:1", "music": "../outside.mp3"},
         {"mode": "pick", "verse": "1:1", "music": "..\\outside.mp3"},
         {"mode": "pick", "verse": "1:1", "music": ""},
