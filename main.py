@@ -5,6 +5,7 @@ import os
 import re
 import secrets
 import shutil
+import ntpath
 import subprocess
 import sys
 import time
@@ -361,30 +362,54 @@ def health_check():
 
 
 # Background music ki files list karne ke liye endpoint:
-@app.get("/api/admin/music")
-@app.get("/api/music-list")
-def list_background_music(user=Depends(get_current_user)):
+def _available_music_filenames():
     music_dir = BACKGROUND_DIR / "music"
     music_dir.mkdir(parents=True, exist_ok=True)
 
     if SUPABASE_SERVICE_KEY:
-        try:
-            objects = _list_media_objects("backgrounds/music")
-            files = [
-                item["name"].split("/")[-1]
-                for item in objects
-                if Path(item.get("name", "")).suffix.lower() in MUSIC_FILE_EXTENSIONS
-            ]
-            if files:
-                return {"music_files": files}
-        except Exception:
-            pass
+        objects = _list_media_objects("backgrounds/music")
+        files = [
+            item["name"].split("/")[-1]
+            for item in objects
+            if isinstance(item, dict)
+            and isinstance(item.get("name"), str)
+            and Path(item["name"]).suffix.lower() in MUSIC_FILE_EXTENSIONS
+        ]
+        if files:
+            return sorted(set(files), key=str.lower)
 
-    clips = sorted(
+    return sorted(
         [p.name for p in music_dir.iterdir() if p.is_file() and p.suffix.lower() in MUSIC_FILE_EXTENSIONS],
         key=lambda name: name.lower(),
     )
-    return {"music_files": clips}
+
+
+def _validate_music_filename(filename: str) -> str:
+    if (
+        not isinstance(filename, str)
+        or not filename
+        or filename.strip() != filename
+        or "\x00" in filename
+        or "/" in filename
+        or "\\" in filename
+        or ".." in filename
+        or Path(filename).is_absolute()
+        or ntpath.isabs(filename)
+        or filename not in _available_music_filenames()
+    ):
+        raise HTTPException(status_code=400, detail="Invalid music filename.")
+
+    music_root = (BACKGROUND_DIR / "music").resolve()
+    music_path = (music_root / filename).resolve()
+    if not music_path.is_relative_to(music_root):
+        raise HTTPException(status_code=400, detail="Invalid music filename.")
+    return filename
+
+
+@app.get("/api/admin/music")
+@app.get("/api/music-list")
+def list_background_music(user=Depends(get_current_user)):
+    return {"music_files": _available_music_filenames()}
 
 
 def _local_video_path(filename: str) -> Path:
@@ -1031,8 +1056,8 @@ def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
         cmd.append("--urdu-only")
 
     # Background music argument agar select kiya gaya ho (yeh ab bilkul theek jagah par hai):
-    if req.music and req.music != "None" and req.music != "none":
-        cmd.extend(["--music", req.music])
+    if req.music is not None:
+        cmd.extend(["--music", _validate_music_filename(req.music)])
 
     batch_id = uuid4().hex[:10]
     work_dir = CACHE_DIR / "tmp" / batch_id
