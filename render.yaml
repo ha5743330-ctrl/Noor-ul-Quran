@@ -24,3 +24,5 @@ services:
         value: /tmp/noor/backgrounds
       - key: CACHE_DIR
         value: /tmp/noor/cache
+      - key: RENDER_MEMORY_PROFILE
+        value: low
