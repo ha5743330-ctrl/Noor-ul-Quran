@@ -67,6 +67,14 @@ ALLOWED_AUDIO_TYPES = {
 }
 MUSIC_FILE_EXTENSIONS = {".mp3", ".mpeg", ".wav", ".aac", ".m4a"}
 
+
+def _redact_secrets(message: str) -> str:
+    for secret in (SUPABASE_URL, SUPABASE_KEY, SUPABASE_SERVICE_KEY, VIDEO_URL_SECRET):
+        if secret:
+            message = message.replace(secret, "[REDACTED]")
+    return message
+
+
 # 2. FastAPI App Initialize Karein
 app = FastAPI(title="Noor ul Quran API Engine")
 GENERATION_LOCK = Lock()
@@ -650,7 +658,12 @@ def serve_signed_video(
     range_header: Optional[str] = Header(default=None, alias="Range"),
 ):
     video_path = _local_video_path(filename)
-    if exp is None or sig is None or re.fullmatch(r"[0-9]{1,12}", exp) is None:
+    if (
+        not isinstance(exp, str)
+        or re.fullmatch(r"[0-9]{1,12}", exp) is None
+        or not isinstance(sig, str)
+        or re.fullmatch(r"[0-9a-f]{64}", sig) is None
+    ):
         raise HTTPException(status_code=403, detail="Invalid or expired video link.")
     expires = int(exp)
     if expires <= int(time.time()) or not hmac.compare_digest(sig, _video_signature(filename, expires)):
@@ -981,8 +994,11 @@ async def upload_background(request: Request, user=Depends(require_admin)):
         raise HTTPException(status_code=400, detail="Upload an MP4 or MOV video clip.")
 
     content_length = request.headers.get("content-length")
-    if content_length and int(content_length) > MAX_BACKGROUND_BYTES:
-        raise HTTPException(status_code=413, detail="Background clip must be 50 MB or smaller.")
+    if content_length is not None:
+        if re.fullmatch(r"[0-9]+", content_length) is None:
+            raise HTTPException(status_code=400, detail="Invalid content length.")
+        if int(content_length) > MAX_BACKGROUND_BYTES:
+            raise HTTPException(status_code=413, detail="Background clip must be 50 MB or smaller.")
 
     stored_name = f"{uuid4().hex}{extension}"
     destination = BACKGROUND_DIR / stored_name
@@ -1328,7 +1344,12 @@ def _run_generation_job(
             if user_id is not None:
                 _record_video_history(user_id, videos, content_mode, quality, styles)
         except Exception as history_error:
-            print(f"Could not update generated-video history for {user_id}: {history_error}", file=sys.stderr)
+            LOGGER.error(
+                "Could not update generated-video history (job_id=%s, user_id=%s): %s",
+                job_id,
+                user_id,
+                _redact_secrets(str(history_error)),
+            )
 
         with GENERATION_JOBS_LOCK:
             job = GENERATION_JOBS.get(job_id)
@@ -1342,11 +1363,18 @@ def _run_generation_job(
                 job["status"] = status
                 job["message"] = "All reels are ready." if completed.returncode == 0 else "Some reels could not be rendered; completed reels are ready."
     except Exception as exc:
+        safe_error = _redact_secrets(str(exc))
+        LOGGER.error(
+            "Generation job failed (job_id=%s, user_id=%s): %s",
+            job_id,
+            user_id,
+            safe_error,
+        )
         with GENERATION_JOBS_LOCK:
             job = GENERATION_JOBS.get(job_id)
             if job:
                 job["status"] = "failed"
-                job["error"] = str(exc)
+                job["error"] = safe_error
                 job["videos"] = _read_generation_manifest(manifest_path)
     finally:
         shutil.rmtree(work_dir, ignore_errors=True)
