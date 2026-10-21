@@ -24,6 +24,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from PIL import features
 from pydantic import BaseModel, Field
 
 LOGGER = logging.getLogger(__name__)
@@ -865,6 +866,66 @@ def estimate_reel(
         "within_tolerance": plan["tolerance_fits_up_to"] >= end_ayah,
         "total_count": plan["total_count"],
         "range_seconds": round(plan["range_seconds"], 6),
+    }
+
+
+@app.get("/api/admin/diagnostics")
+def admin_diagnostics(user=Depends(require_admin)):
+    ffmpeg_version = "unavailable"
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-version"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=5,
+        )
+        if result.stdout:
+            ffmpeg_version = result.stdout.splitlines()[0]
+    except (OSError, subprocess.SubprocessError):
+        LOGGER.warning("Could not read the FFmpeg version for admin diagnostics")
+
+    quran_file = BASE_DIR / "data" / "quran.json"
+    ayat_count = 0
+    if quran_file.is_file():
+        quran = json.loads(quran_file.read_text(encoding="utf-8"))
+        ayat_count = sum(
+            int(surah["n"])
+            for surah in quran.get("surahs", {}).values()
+        )
+
+    output_used_bytes = sum(
+        path.stat().st_size
+        for path in OUTPUT_DIR.rglob("*")
+        if path.is_file()
+    )
+    with HISTORY_LOCK:
+        history = _read_video_history_unlocked()
+        history_count = sum(
+            sum(isinstance(entry, dict) for entry in entries)
+            for entries in history["users"].values()
+            if isinstance(entries, list)
+        )
+
+    disk = shutil.disk_usage(OUTPUT_DIR)
+    return {
+        "ffmpeg_version": ffmpeg_version,
+        "raqm": bool(features.check("raqm")),
+        "quran_json_present": quran_file.is_file(),
+        "quran_ayat_count": ayat_count,
+        "background_file_count": sum(
+            1
+            for path in BACKGROUND_DIR.iterdir()
+            if path.is_file() and path.suffix.lower() in {".mp4", ".mov"}
+        ),
+        "music_file_count": len(_available_music_filenames()),
+        "output_free_bytes": disk.free,
+        "output_used_bytes": output_used_bytes,
+        "history_entry_count": history_count,
+        "supabase_url_set": bool(SUPABASE_URL),
+        "supabase_anon_key_set": bool(SUPABASE_KEY),
+        "supabase_service_role_key_set": bool(SUPABASE_SERVICE_KEY),
+        "video_url_secret_set": bool(os.getenv("VIDEO_URL_SECRET")),
     }
 
 
