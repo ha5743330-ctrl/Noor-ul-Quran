@@ -293,6 +293,27 @@ def test_ffmpeg_cpu_render_uses_single_codec_thread(monkeypatch, tmp_path):
     )
 
 
+@pytest.mark.parametrize(
+    ("quality", "expected"),
+    [
+        ("balanced", (480, 854, 20)),
+        ("high", (540, 960, 20)),
+    ],
+)
+def test_render_memory_profile_uses_smaller_output_on_render(monkeypatch, quality, expected):
+    monkeypatch.setenv("RENDER_MEMORY_PROFILE", "low")
+    make.set_video_quality(quality)
+    assert (make.W, make.H, make.FPS) == expected
+
+
+def test_render_quality_defaults_are_unchanged_without_memory_profile(monkeypatch):
+    monkeypatch.delenv("RENDER_MEMORY_PROFILE", raising=False)
+    make.set_video_quality("balanced")
+    assert (make.W, make.H, make.FPS) == (720, 1280, 24)
+    make.set_video_quality("high")
+    assert (make.W, make.H, make.FPS) == (1080, 1920, 30)
+
+
 def test_music_upload_persists_to_supabase_and_local_cache(client, monkeypatch):
     monkeypatch.setattr(main, "SUPABASE_SERVICE_KEY", "configured")
     uploads = []

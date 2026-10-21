@@ -211,6 +211,12 @@ def encode_video(cmd, outfile):
 
 def set_video_quality(quality):
     global W, H, FPS
+    if os.getenv("RENDER_MEMORY_PROFILE", "").lower() == "low":
+        if quality == "high":
+            W, H, FPS = 540, 960, 20
+        else:
+            W, H, FPS = 480, 854, 20
+        return
     if quality == "high":
         W, H, FPS = 1080, 1920, 30
     else:
