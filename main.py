@@ -1,6 +1,8 @@
 import json
 import hashlib
 import hmac
+import logging
+import ntpath
 import os
 import re
 import secrets
@@ -22,7 +24,10 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from PIL import features
 from pydantic import BaseModel, Field
+
+LOGGER = logging.getLogger(__name__)
 
 # 1. Environment Variables Load Karein
 BASE_DIR = Path(__file__).resolve().parent
@@ -61,6 +66,14 @@ ALLOWED_AUDIO_TYPES = {
     ".wav": "audio/wav",
 }
 MUSIC_FILE_EXTENSIONS = {".mp3", ".mpeg", ".wav", ".aac", ".m4a"}
+
+
+def _redact_secrets(message: str) -> str:
+    for secret in (SUPABASE_URL, SUPABASE_KEY, SUPABASE_SERVICE_KEY, VIDEO_URL_SECRET):
+        if secret:
+            message = message.replace(secret, "[REDACTED]")
+    return message
+
 
 # 2. FastAPI App Initialize Karein
 app = FastAPI(title="Noor ul Quran API Engine")
@@ -242,6 +255,24 @@ def _upload_media_file(local_path: Path, object_path: str, content_type: str):
         )
 
 
+def _delete_media_objects(object_paths):
+    if not SUPABASE_SERVICE_KEY:
+        return
+    paths = sorted({
+        path
+        for path in object_paths
+        if isinstance(path, str)
+        and path.startswith("videos/")
+        and ".." not in path.split("/")
+    })
+    if paths:
+        _storage_request(
+            "DELETE",
+            f"/object/{quote(MEDIA_BUCKET, safe='')}",
+            json={"prefixes": paths},
+        )
+
+
 def _download_media_file(object_path: str, local_path: Path) -> bool:
     response = _storage_request(
         "GET",
@@ -280,12 +311,20 @@ def _prepare_ephemeral_media():
     for item in _list_media_objects("backgrounds"):
         object_name = item.get("name", "")
         filename = Path(object_name).name
-        if Path(filename).suffix.lower() not in {".mp4", ".mov"}:
+        extension = Path(filename).suffix.lower()
+        if extension not in {".mp4", ".mov"}:
             continue
         object_path = object_name if object_name.startswith("backgrounds/") else f"backgrounds/{filename}"
         local_path = BACKGROUND_DIR / filename
         if not local_path.exists():
             _download_media_file(object_path, local_path)
+
+    music_dir = BACKGROUND_DIR / "music"
+    music_dir.mkdir(parents=True, exist_ok=True)
+    for filename in _available_music_filenames():
+        local_path = music_dir / filename
+        if not local_path.exists():
+            _download_media_file(f"backgrounds/music/{filename}", local_path)
 
     for object_path, local_path in (
         ("metadata/captions.csv", OUTPUT_DIR / "captions.csv"),
@@ -361,30 +400,107 @@ def health_check():
 
 
 # Background music ki files list karne ke liye endpoint:
-@app.get("/api/admin/music")
-@app.get("/api/music-list")
-def list_background_music(user=Depends(get_current_user)):
+def _available_music_filenames():
     music_dir = BACKGROUND_DIR / "music"
     music_dir.mkdir(parents=True, exist_ok=True)
 
     if SUPABASE_SERVICE_KEY:
-        try:
-            objects = _list_media_objects("backgrounds/music")
-            files = [
-                item["name"].split("/")[-1]
-                for item in objects
-                if Path(item.get("name", "")).suffix.lower() in MUSIC_FILE_EXTENSIONS
-            ]
-            if files:
-                return {"music_files": files}
-        except Exception:
-            pass
+        objects = _list_media_objects("backgrounds/music")
+        files = [
+            item["name"].split("/")[-1]
+            for item in objects
+            if isinstance(item, dict)
+            and isinstance(item.get("name"), str)
+            and Path(item["name"]).suffix.lower() in MUSIC_FILE_EXTENSIONS
+        ]
+        if files:
+            return sorted(set(files), key=str.lower)
 
-    clips = sorted(
+    return sorted(
         [p.name for p in music_dir.iterdir() if p.is_file() and p.suffix.lower() in MUSIC_FILE_EXTENSIONS],
         key=lambda name: name.lower(),
     )
-    return {"music_files": clips}
+
+
+def _validate_music_filename(filename: str) -> str:
+    if (
+        not isinstance(filename, str)
+        or not filename
+        or filename.strip() != filename
+        or "\x00" in filename
+        or "/" in filename
+        or "\\" in filename
+        or ".." in filename
+        or Path(filename).is_absolute()
+        or ntpath.isabs(filename)
+        or filename not in _available_music_filenames()
+    ):
+        raise HTTPException(status_code=400, detail="Invalid music filename.")
+
+    music_root = (BACKGROUND_DIR / "music").resolve()
+    music_path = (music_root / filename).resolve()
+    if not music_path.is_relative_to(music_root):
+        raise HTTPException(status_code=400, detail="Invalid music filename.")
+    return filename
+
+
+@app.get("/api/admin/music")
+@app.get("/api/music-list")
+def list_background_music(user=Depends(get_current_user)):
+    return {"music_files": _available_music_filenames()}
+
+
+@app.post("/api/admin/music")
+async def upload_background_music(request: Request, user=Depends(require_admin)):
+    filename = request.query_params.get("filename", "")
+    extension = Path(filename).suffix.lower()
+    if (
+        not filename
+        or filename.strip() != filename
+        or "\x00" in filename
+        or "/" in filename
+        or "\\" in filename
+        or ".." in filename
+        or Path(filename).name != filename
+        or ntpath.basename(filename) != filename
+        or extension not in MUSIC_FILE_EXTENSIONS
+    ):
+        raise HTTPException(status_code=400, detail="Upload a valid MP3, MPEG, WAV, AAC, or M4A music file.")
+
+    content_length = request.headers.get("content-length")
+    if content_length is not None:
+        if re.fullmatch(r"[0-9]+", content_length) is None:
+            raise HTTPException(status_code=400, detail="Invalid content length.")
+        if int(content_length) > MAX_BACKGROUND_BYTES:
+            raise HTTPException(status_code=413, detail="Music file must be 50 MB or smaller.")
+
+    music_dir = BACKGROUND_DIR / "music"
+    music_dir.mkdir(parents=True, exist_ok=True)
+    destination = music_dir / filename
+    temporary_path = music_dir / f".{uuid4().hex}.upload"
+    total = 0
+    try:
+        with temporary_path.open("wb") as output_file:
+            async for chunk in request.stream():
+                total += len(chunk)
+                if total > MAX_BACKGROUND_BYTES:
+                    raise HTTPException(status_code=413, detail="Music file must be 50 MB or smaller.")
+                output_file.write(chunk)
+        if total == 0:
+            raise HTTPException(status_code=400, detail="The uploaded music file is empty.")
+        if SUPABASE_SERVICE_KEY:
+            content_type = (
+                "audio/mpeg"
+                if extension in {".mp3", ".mpeg"}
+                else ALLOWED_AUDIO_TYPES.get(extension, "application/octet-stream")
+            )
+            _upload_media_file(temporary_path, f"backgrounds/music/{filename}", content_type)
+        temporary_path.replace(destination)
+    except Exception:
+        temporary_path.unlink(missing_ok=True)
+        raise
+
+    return {"filename": filename, "size": total}
 
 
 def _local_video_path(filename: str) -> Path:
@@ -439,8 +555,42 @@ def _safe_history_video_path(filename):
     return video_path
 
 
+def _cleanup_orphaned_output_files(now=None):
+    cutoff = (time.time() if now is None else now) - 24 * 60 * 60
+    with HISTORY_LOCK:
+        history = _read_video_history_unlocked()
+        referenced = {
+            entry.get("filename")
+            for entries in history["users"].values()
+            if isinstance(entries, list)
+            for entry in entries
+            if isinstance(entry, dict) and isinstance(entry.get("filename"), str)
+        }
+
+    removed = 0
+    if not OUTPUT_DIR.exists():
+        return removed
+    for path in OUTPUT_DIR.iterdir():
+        if not path.is_file() or path.suffix.lower() not in {".mp4", ".tmp", ".temp", ".part"}:
+            continue
+        try:
+            if path.name in referenced or path.stat().st_mtime >= cutoff:
+                continue
+            path.unlink()
+            removed += 1
+        except OSError:
+            LOGGER.exception("Could not clean old output file %s", path.name)
+    return removed
+
+
+@app.on_event("startup")
+def cleanup_output_on_startup():
+    _cleanup_orphaned_output_files()
+
+
 def _record_video_history(user_id, videos, content_mode, quality, styles):
     expired_filenames = []
+    expired_object_paths = []
     with HISTORY_LOCK:
         history = _read_video_history_unlocked()
         entries = history["users"].get(user_id, [])
@@ -461,6 +611,7 @@ def _record_video_history(user_id, videos, content_mode, quality, styles):
                 "downloaded_at": None,
                 "download_count": 0,
                 "styled": bool(styles),
+                "object_path": video.get("object_path"),
             }
             for video in reversed(videos)
             if isinstance(video, dict) and isinstance(video.get("filename"), str)
@@ -481,6 +632,18 @@ def _record_video_history(user_id, videos, content_mode, quality, styles):
             and isinstance(entry.get("filename"), str)
             and entry.get("filename") not in retained_filenames
         ]
+        retained_object_paths = {
+            entry.get("object_path")
+            for entry in history["users"][user_id]
+            if isinstance(entry.get("object_path"), str)
+        }
+        expired_object_paths = [
+            entry.get("object_path")
+            for entry in expired_entries
+            if isinstance(entry, dict)
+            and isinstance(entry.get("object_path"), str)
+            and entry.get("object_path") not in retained_object_paths
+        ]
 
     for filename in expired_filenames:
         video_path = _safe_history_video_path(filename)
@@ -488,7 +651,11 @@ def _record_video_history(user_id, videos, content_mode, quality, styles):
             try:
                 video_path.unlink(missing_ok=True)
             except OSError:
-                pass
+                LOGGER.exception("Could not delete pruned history video %s", filename)
+    try:
+        _delete_media_objects(expired_object_paths)
+    except Exception:
+        LOGGER.exception("Could not delete pruned history media objects")
 
 
 def _user_owns_video(user_id, filename):
@@ -552,7 +719,12 @@ def serve_signed_video(
     range_header: Optional[str] = Header(default=None, alias="Range"),
 ):
     video_path = _local_video_path(filename)
-    if exp is None or sig is None or re.fullmatch(r"[0-9]{1,12}", exp) is None:
+    if (
+        not isinstance(exp, str)
+        or re.fullmatch(r"[0-9]{1,12}", exp) is None
+        or not isinstance(sig, str)
+        or re.fullmatch(r"[0-9a-f]{64}", sig) is None
+    ):
         raise HTTPException(status_code=403, detail="Invalid or expired video link.")
     expires = int(exp)
     if expires <= int(time.time()) or not hmac.compare_digest(sig, _video_signature(filename, expires)):
@@ -692,11 +864,24 @@ def delete_history_video(entry_id: str, user=Depends(get_current_user)):
         history["users"][user["id"]] = entries
         _write_video_history_unlocked(history)
         video_path = _safe_history_video_path(entry.get("filename"))
-        if video_path is not None:
-            try:
-                video_path.unlink(missing_ok=True)
-            except OSError as exc:
-                print(f"Could not delete history video {entry.get('filename')}: {exc}", file=sys.stderr)
+        object_path = entry.get("object_path")
+        remaining_object_paths = {
+            item.get("object_path")
+            for user_entries in history["users"].values()
+            if isinstance(user_entries, list)
+            for item in user_entries
+            if isinstance(item, dict) and isinstance(item.get("object_path"), str)
+        }
+    if video_path is not None:
+        try:
+            video_path.unlink(missing_ok=True)
+        except OSError:
+            LOGGER.exception("Could not delete history video %s", entry.get("filename"))
+    if object_path not in remaining_object_paths:
+        try:
+            _delete_media_objects([object_path])
+        except Exception:
+            LOGGER.exception("Could not delete history media object")
     return {"deleted": True}
 
 
@@ -758,6 +943,66 @@ def estimate_reel(
     }
 
 
+@app.get("/api/admin/diagnostics")
+def admin_diagnostics(user=Depends(require_admin)):
+    ffmpeg_version = "unavailable"
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-version"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=5,
+        )
+        if result.stdout:
+            ffmpeg_version = result.stdout.splitlines()[0]
+    except (OSError, subprocess.SubprocessError):
+        LOGGER.warning("Could not read the FFmpeg version for admin diagnostics")
+
+    quran_file = BASE_DIR / "data" / "quran.json"
+    ayat_count = 0
+    if quran_file.is_file():
+        quran = json.loads(quran_file.read_text(encoding="utf-8"))
+        ayat_count = sum(
+            int(surah["n"])
+            for surah in quran.get("surahs", {}).values()
+        )
+
+    output_used_bytes = sum(
+        path.stat().st_size
+        for path in OUTPUT_DIR.rglob("*")
+        if path.is_file()
+    )
+    with HISTORY_LOCK:
+        history = _read_video_history_unlocked()
+        history_count = sum(
+            sum(isinstance(entry, dict) for entry in entries)
+            for entries in history["users"].values()
+            if isinstance(entries, list)
+        )
+
+    disk = shutil.disk_usage(OUTPUT_DIR)
+    return {
+        "ffmpeg_version": ffmpeg_version,
+        "raqm": bool(features.check("raqm")),
+        "quran_json_present": quran_file.is_file(),
+        "quran_ayat_count": ayat_count,
+        "background_file_count": sum(
+            1
+            for path in BACKGROUND_DIR.iterdir()
+            if path.is_file() and path.suffix.lower() in {".mp4", ".mov"}
+        ),
+        "music_file_count": len(_available_music_filenames()),
+        "output_free_bytes": disk.free,
+        "output_used_bytes": output_used_bytes,
+        "history_entry_count": history_count,
+        "supabase_url_set": bool(SUPABASE_URL),
+        "supabase_anon_key_set": bool(SUPABASE_KEY),
+        "supabase_service_role_key_set": bool(SUPABASE_SERVICE_KEY),
+        "video_url_secret_set": bool(os.getenv("VIDEO_URL_SECRET")),
+    }
+
+
 @app.get("/api/admin/users")
 def list_users(user=Depends(require_admin)):
     response = _supabase_request(
@@ -810,8 +1055,11 @@ async def upload_background(request: Request, user=Depends(require_admin)):
         raise HTTPException(status_code=400, detail="Upload an MP4 or MOV video clip.")
 
     content_length = request.headers.get("content-length")
-    if content_length and int(content_length) > MAX_BACKGROUND_BYTES:
-        raise HTTPException(status_code=413, detail="Background clip must be 50 MB or smaller.")
+    if content_length is not None:
+        if re.fullmatch(r"[0-9]+", content_length) is None:
+            raise HTTPException(status_code=400, detail="Invalid content length.")
+        if int(content_length) > MAX_BACKGROUND_BYTES:
+            raise HTTPException(status_code=413, detail="Background clip must be 50 MB or smaller.")
 
     stored_name = f"{uuid4().hex}{extension}"
     destination = BACKGROUND_DIR / stored_name
@@ -1031,8 +1279,8 @@ def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
         cmd.append("--urdu-only")
 
     # Background music argument agar select kiya gaya ho (yeh ab bilkul theek jagah par hai):
-    if req.music and req.music != "None" and req.music != "none":
-        cmd.extend(["--music", req.music])
+    if req.music is not None:
+        cmd.extend(["--music", _validate_music_filename(req.music)])
 
     batch_id = uuid4().hex[:10]
     work_dir = CACHE_DIR / "tmp" / batch_id
@@ -1128,6 +1376,7 @@ def _run_generation_job(
                     encoding="utf-8",
                 )
             _prepare_ephemeral_media()
+            _cleanup_orphaned_output_files()
             completed = subprocess.run(cmd, cwd=str(BASE_DIR), capture_output=True, text=True)
             videos = _read_generation_manifest(manifest_path)
             if completed.returncode != 0 and not videos:
@@ -1140,6 +1389,7 @@ def _run_generation_job(
                     video_path = OUTPUT_DIR / video["filename"]
                     stored_video = f"videos/{uuid4().hex}_{video['filename']}"
                     _upload_media_file(video_path, stored_video, "video/mp4")
+                    video["object_path"] = stored_video
                     video["url"] = _signed_media_url(stored_video)
 
             if SUPABASE_SERVICE_KEY:
@@ -1155,7 +1405,12 @@ def _run_generation_job(
             if user_id is not None:
                 _record_video_history(user_id, videos, content_mode, quality, styles)
         except Exception as history_error:
-            print(f"Could not update generated-video history for {user_id}: {history_error}", file=sys.stderr)
+            LOGGER.error(
+                "Could not update generated-video history (job_id=%s, user_id=%s): %s",
+                job_id,
+                user_id,
+                _redact_secrets(str(history_error)),
+            )
 
         with GENERATION_JOBS_LOCK:
             job = GENERATION_JOBS.get(job_id)
@@ -1169,11 +1424,18 @@ def _run_generation_job(
                 job["status"] = status
                 job["message"] = "All reels are ready." if completed.returncode == 0 else "Some reels could not be rendered; completed reels are ready."
     except Exception as exc:
+        safe_error = _redact_secrets(str(exc))
+        LOGGER.error(
+            "Generation job failed (job_id=%s, user_id=%s): %s",
+            job_id,
+            user_id,
+            safe_error,
+        )
         with GENERATION_JOBS_LOCK:
             job = GENERATION_JOBS.get(job_id)
             if job:
                 job["status"] = "failed"
-                job["error"] = str(exc)
+                job["error"] = safe_error
                 job["videos"] = _read_generation_manifest(manifest_path)
     finally:
         shutil.rmtree(work_dir, ignore_errors=True)

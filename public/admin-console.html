@@ -76,6 +76,20 @@
             </div>
         </section>
 
+        <section class="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 shadow-xl shadow-slate-950/20" aria-labelledby="diagnostics-heading">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                    <p class="text-xs uppercase tracking-[0.18em] text-slate-400">Server</p>
+                    <h2 id="diagnostics-heading" class="mt-1 text-lg font-semibold text-white">Diagnostics</h2>
+                </div>
+                <button id="refresh-diagnostics" type="button" class="rounded-xl border border-slate-700 bg-slate-950/70 px-3 py-2 text-sm text-slate-300 transition hover:border-slate-500 hover:bg-slate-800">
+                    <i class="fa-solid fa-rotate mr-2"></i>Refresh
+                </button>
+            </div>
+            <p id="diagnostics-status" class="mt-3 text-sm text-slate-400" role="status" aria-live="polite">Loading diagnostics...</p>
+            <dl id="diagnostics-grid" class="mt-3 grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-4"></dl>
+        </section>
+
         <section class="grid gap-6 xl:grid-cols-[1.5fr_0.9fr]">
             <div class="rounded-3xl border border-slate-800 bg-slate-900/60 p-5 shadow-2xl shadow-slate-950/20">
                 <div class="flex flex-wrap items-end justify-between gap-4 border-b border-slate-800 pb-5">
@@ -130,6 +144,21 @@
                     </form>
 
                     <ul id="background-list" class="mt-4 space-y-2 divide-y divide-slate-800 text-sm text-slate-300"></ul>
+                </div>
+
+                <div class="mt-6 space-y-4 border-t border-slate-800 pt-5">
+                    <div>
+                        <h3 class="font-semibold text-white">Background music</h3>
+                        <p class="mt-1 text-sm text-slate-400">Upload MP3, MPEG, WAV, AAC, or M4A. Maximum file size is 50 MB.</p>
+                    </div>
+                    <form id="music-upload-form" class="flex flex-col gap-3 sm:flex-row sm:items-center">
+                        <label class="sr-only" for="music-file">Choose a music file</label>
+                        <input id="music-file" type="file" accept=".mp3,.mpeg,.wav,.aac,.m4a,audio/mpeg,audio/mp4,audio/aac,audio/wav" required class="max-w-full text-sm text-slate-300 file:mr-3 file:rounded-xl file:border-0 file:bg-slate-800 file:px-3 file:py-2 file:text-slate-200">
+                        <button id="music-upload-button" type="submit" class="rounded-xl border border-slate-700 bg-slate-800 px-4 py-2.5 text-sm font-semibold text-slate-200 transition hover:bg-slate-700">
+                            <i class="fa-solid fa-upload mr-2"></i>Upload music
+                        </button>
+                    </form>
+                    <ul id="music-list" class="space-y-2 divide-y divide-slate-800 text-sm text-slate-300"></ul>
                 </div>
             </div>
         </section>

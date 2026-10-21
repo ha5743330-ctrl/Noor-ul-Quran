@@ -58,6 +58,8 @@ async function initializeAdmin() {
         document.getElementById("admin-email").textContent = access.email;
         await loadUsers();
         await loadBackgrounds();
+        await loadMusic();
+        await loadDiagnostics();
     } catch (error) {
         showAdminMessage(error.message, true);
     }
@@ -183,6 +185,68 @@ async function loadBackgrounds() {
         }
     } catch (error) {
         showAdminMessage(error.message, true);
+    }
+}
+
+async function loadMusic() {
+    const list = document.getElementById("music-list");
+    try {
+        const result = await adminRequest("/admin/music");
+        list.replaceChildren();
+        for (const filename of result.music_files) {
+            const item = document.createElement("li");
+            item.className = "py-2";
+            item.textContent = filename;
+            list.append(item);
+        }
+        if (!result.music_files.length) {
+            const empty = document.createElement("li");
+            empty.className = "py-2 text-slate-500";
+            empty.textContent = "No background music uploaded.";
+            list.append(empty);
+        }
+    } catch (error) {
+        showAdminMessage(error.message, true);
+    }
+}
+
+async function loadDiagnostics() {
+    const status = document.getElementById("diagnostics-status");
+    const grid = document.getElementById("diagnostics-grid");
+    status.textContent = "Loading diagnostics...";
+    try {
+        const diagnostics = await adminRequest("/admin/diagnostics");
+        const megabytes = (bytes) => `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+        const values = [
+            ["FFmpeg", diagnostics.ffmpeg_version],
+            ["RAQM", diagnostics.raqm ? "True" : "False"],
+            ["Quran data", diagnostics.quran_json_present ? `Present · ${diagnostics.quran_ayat_count} ayat` : "Missing"],
+            ["Background files", diagnostics.background_file_count],
+            ["Music files", diagnostics.music_file_count],
+            ["Output disk free", megabytes(diagnostics.output_free_bytes)],
+            ["Output folder used", megabytes(diagnostics.output_used_bytes)],
+            ["History entries", diagnostics.history_entry_count],
+            ["Supabase URL", diagnostics.supabase_url_set ? "Set" : "Not set"],
+            ["Supabase anon key", diagnostics.supabase_anon_key_set ? "Set" : "Not set"],
+            ["Supabase service key", diagnostics.supabase_service_role_key_set ? "Set" : "Not set"],
+            ["Video URL secret", diagnostics.video_url_secret_set ? "Set" : "Not set"]
+        ];
+        grid.replaceChildren();
+        for (const [label, value] of values) {
+            const item = document.createElement("div");
+            const name = document.createElement("dt");
+            name.className = "text-xs text-slate-500";
+            name.textContent = label;
+            const detail = document.createElement("dd");
+            detail.className = "mt-1 break-words text-sm font-medium text-slate-200";
+            detail.textContent = String(value);
+            item.append(name, detail);
+            grid.append(item);
+        }
+        status.textContent = "Diagnostics updated.";
+    } catch (error) {
+        status.textContent = error.message || "Could not load diagnostics.";
+        showAdminMessage(status.textContent, true);
     }
 }
 
@@ -318,9 +382,42 @@ async function uploadBackground(event) {
     }
 }
 
+async function uploadMusic(event) {
+    event.preventDefault();
+    const input = document.getElementById("music-file");
+    const button = document.getElementById("music-upload-button");
+    const file = input.files[0];
+    if (!file) return;
+    if (file.size > 50 * 1024 * 1024) {
+        showAdminMessage("Music file must be 50 MB or smaller.", true);
+        return;
+    }
+
+    button.disabled = true;
+    button.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>Uploading';
+    try {
+        const filename = encodeURIComponent(file.name);
+        await adminRequest(`/admin/music?filename=${filename}`, {
+            method: "POST",
+            body: file,
+            headers: { "Content-Type": file.type || "audio/mpeg" }
+        });
+        input.value = "";
+        showAdminMessage("Background music uploaded.");
+        await loadMusic();
+    } catch (error) {
+        showAdminMessage(error.message, true);
+    } finally {
+        button.disabled = false;
+        button.innerHTML = '<i class="fa-solid fa-upload mr-2"></i>Upload music';
+    }
+}
+
 document.getElementById("refresh-users").addEventListener("click", loadUsers);
+document.getElementById("refresh-diagnostics").addEventListener("click", loadDiagnostics);
 document.getElementById("user-search").addEventListener("input", renderUsers);
 document.getElementById("background-upload-form").addEventListener("submit", uploadBackground);
+document.getElementById("music-upload-form").addEventListener("submit", uploadMusic);
 document.getElementById("verse-lookup-form").addEventListener("submit", loadVerseContent);
 document.getElementById("verse-content-form").addEventListener("submit", saveVerseContent);
 document.getElementById("verse-audio-form").addEventListener("submit", uploadVerseAudio);

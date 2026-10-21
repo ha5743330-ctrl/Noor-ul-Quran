@@ -98,4 +98,18 @@ You can check the reel plan without rendering with:
 
 ### Deployment
 
-Deployment setup is intentionally left for later; this README covers local development only.
+The app is deployed on Render's free Docker plan. Its `/tmp` disk is ephemeral: videos and the local Recent Videos history can disappear when the service restarts or redeploys. Download any video you need to keep.
+
+When configured, Supabase Storage keeps uploaded media objects beyond a Render restart. The Recent Videos history index is currently stored locally on Render, however, so persistent history metadata requires storing that index in Supabase as well; it is not currently persisted there.
+
+## Credits & licenses
+
+Record the source and applicable license for each media category before release:
+
+- EveryAyah audio — Source: ____________________ · License: ____________________
+- Background clips — Source: ____________________ · License: ____________________
+- Nasheed music — Source: ____________________ · License: ____________________
+
+## Release flow
+
+Create a branch, open a pull request, wait for the CI checks to pass, then merge the pull request.
