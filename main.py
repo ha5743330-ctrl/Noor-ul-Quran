@@ -9,7 +9,9 @@ import secrets
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
+import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from threading import Lock
@@ -26,8 +28,14 @@ from fastapi.responses import FileResponse, RedirectResponse, Response, Streamin
 from fastapi.staticfiles import StaticFiles
 from PIL import features
 from pydantic import BaseModel, Field
+from starlette.background import BackgroundTask
 
 LOGGER = logging.getLogger(__name__)
+RAQM_AVAILABLE = bool(features.check("raqm"))
+RAQM_REQUIRED_ERROR = (
+    "Arabic/Urdu text rendering is unavailable because this Pillow build lacks "
+    "RAQM text shaping. Install a RAQM-enabled Pillow build and restart the service."
+)
 
 # 1. Environment Variables Load Karein
 BASE_DIR = Path(__file__).resolve().parent
@@ -40,7 +48,6 @@ SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 MEDIA_BUCKET = os.getenv("SUPABASE_MEDIA_BUCKET", "noor-media")
 OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", BASE_DIR / "output"))
 HISTORY_FILE = OUTPUT_DIR / "history.json"
-MAX_HISTORY_PER_USER = 5
 BACKGROUND_DIR = Path(os.getenv("BACKGROUNDS_DIR", BASE_DIR / "backgrounds"))
 CACHE_DIR = Path(os.getenv("CACHE_DIR", BASE_DIR / "cache"))
 VIDEO_URL_SECRET = os.getenv("VIDEO_URL_SECRET") or secrets.token_urlsafe(32)
@@ -50,7 +57,7 @@ ADMIN_CONTENT_FILE = BASE_DIR / "data" / "admin_content.json"
 ADMIN_AUDIO_DIR = BASE_DIR / "audio" / "admin"
 MAX_BACKGROUND_BYTES = 50 * 1024 * 1024
 MAX_TEXT_LENGTH = 5000
-VIDEO_STYLE_ELEMENTS = {"bismillah", "surah", "label", "arabic", "urdu", "channel"}
+VIDEO_STYLE_ELEMENTS = {"bismillah", "surah", "label", "arabic", "urdu", "english", "channel"}
 VIDEO_STYLE_FONTS = {
     "amiri_regular",
     "amiri_bold",
@@ -557,24 +564,14 @@ def _safe_history_video_path(filename):
 
 def _cleanup_orphaned_output_files(now=None):
     cutoff = (time.time() if now is None else now) - 24 * 60 * 60
-    with HISTORY_LOCK:
-        history = _read_video_history_unlocked()
-        referenced = {
-            entry.get("filename")
-            for entries in history["users"].values()
-            if isinstance(entries, list)
-            for entry in entries
-            if isinstance(entry, dict) and isinstance(entry.get("filename"), str)
-        }
-
     removed = 0
     if not OUTPUT_DIR.exists():
         return removed
     for path in OUTPUT_DIR.iterdir():
-        if not path.is_file() or path.suffix.lower() not in {".mp4", ".tmp", ".temp", ".part"}:
+        if not path.is_file() or path.suffix.lower() not in {".tmp", ".temp", ".part"}:
             continue
         try:
-            if path.name in referenced or path.stat().st_mtime >= cutoff:
+            if path.stat().st_mtime >= cutoff:
                 continue
             path.unlink()
             removed += 1
@@ -585,12 +582,24 @@ def _cleanup_orphaned_output_files(now=None):
 
 @app.on_event("startup")
 def cleanup_output_on_startup():
+    global RAQM_AVAILABLE
+    RAQM_AVAILABLE = bool(features.check("raqm"))
+    if not RAQM_AVAILABLE:
+        LOGGER.error(RAQM_REQUIRED_ERROR)
     _cleanup_orphaned_output_files()
 
 
+def _require_raqm_for_generation(content_mode: str):
+    if content_mode in {"full", "urdu_only", "arabic_only"} and not RAQM_AVAILABLE:
+        LOGGER.error(
+            "%s (content_mode=%s)",
+            RAQM_REQUIRED_ERROR,
+            content_mode,
+        )
+        raise HTTPException(status_code=503, detail=RAQM_REQUIRED_ERROR)
+
+
 def _record_video_history(user_id, videos, content_mode, quality, styles):
-    expired_filenames = []
-    expired_object_paths = []
     with HISTORY_LOCK:
         history = _read_video_history_unlocked()
         entries = history["users"].get(user_id, [])
@@ -616,46 +625,8 @@ def _record_video_history(user_id, videos, content_mode, quality, styles):
             for video in reversed(videos)
             if isinstance(video, dict) and isinstance(video.get("filename"), str)
         ]
-        retained_entries = new_entries + entries
-        expired_entries = retained_entries[MAX_HISTORY_PER_USER:]
-        history["users"][user_id] = retained_entries[:MAX_HISTORY_PER_USER]
+        history["users"][user_id] = new_entries + entries
         _write_video_history_unlocked(history)
-        retained_filenames = {
-            entry.get("filename")
-            for entry in history["users"][user_id]
-            if isinstance(entry.get("filename"), str)
-        }
-        expired_filenames = [
-            entry.get("filename")
-            for entry in expired_entries
-            if isinstance(entry, dict)
-            and isinstance(entry.get("filename"), str)
-            and entry.get("filename") not in retained_filenames
-        ]
-        retained_object_paths = {
-            entry.get("object_path")
-            for entry in history["users"][user_id]
-            if isinstance(entry.get("object_path"), str)
-        }
-        expired_object_paths = [
-            entry.get("object_path")
-            for entry in expired_entries
-            if isinstance(entry, dict)
-            and isinstance(entry.get("object_path"), str)
-            and entry.get("object_path") not in retained_object_paths
-        ]
-
-    for filename in expired_filenames:
-        video_path = _safe_history_video_path(filename)
-        if video_path is not None:
-            try:
-                video_path.unlink(missing_ok=True)
-            except OSError:
-                LOGGER.exception("Could not delete pruned history video %s", filename)
-    try:
-        _delete_media_objects(expired_object_paths)
-    except Exception:
-        LOGGER.exception("Could not delete pruned history media objects")
 
 
 def _user_owns_video(user_id, filename):
@@ -789,7 +760,7 @@ def get_video_history(user=Depends(get_current_user)):
         if not isinstance(entries, list):
             entries = []
         response = []
-        for entry in entries[:MAX_HISTORY_PER_USER]:
+        for entry in entries:
             if not isinstance(entry, dict):
                 continue
             item = dict(entry)
@@ -913,8 +884,8 @@ def estimate_reel(
         raise HTTPException(status_code=400, detail="Surah, ayah range, and length are required.") from exc
     if start_ayah > end_ayah:
         raise HTTPException(status_code=400, detail="Start ayah must not exceed end ayah.")
-    if mode not in {"full", "urdu_only"}:
-        raise HTTPException(status_code=400, detail="Mode must be full or urdu_only.")
+    if mode not in {"full", "urdu_only", "arabic_only"}:
+        raise HTTPException(status_code=400, detail="Mode must be full, urdu_only, or arabic_only.")
     if not 30 <= selected_length <= 180:
         raise HTTPException(status_code=400, detail="Length must be between 30 and 180 seconds.")
     _validate_verse(surah_number, start_ayah)
@@ -1252,8 +1223,17 @@ def signin_html_page():
 def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
     if req.mode not in {"pick", "picks", "random"}:
         raise HTTPException(status_code=400, detail="Invalid generation mode.")
-    if req.content_mode not in {"full", "urdu_only"}:
-        raise HTTPException(status_code=400, detail="Content mode must be full or urdu_only.")
+    if req.content_mode not in {"full", "urdu_only", "arabic_only"}:
+        raise HTTPException(
+            status_code=400,
+            detail="Content mode must be full, urdu_only, or arabic_only.",
+        )
+    if req.content_mode == "arabic_only" and req.music:
+        raise HTTPException(
+            status_code=400,
+            detail="Background music is not available in Arabic-only mode.",
+        )
+    music_filename = _validate_music_filename(req.music) if req.music is not None else None
     if req.mode == "pick":
         verse_match = re.fullmatch(
             r"\s*(\d+)\s*:\s*(\d+)(?:\s*-\s*(\d+))?\s*",
@@ -1278,6 +1258,7 @@ def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
     if req.quality not in {"balanced", "high"}:
         raise HTTPException(status_code=400, detail="Quality must be balanced or high.")
     validate_video_styles(req.styles)
+    _require_raqm_for_generation(req.content_mode)
 
     cmd = [sys.executable, str(BASE_DIR / "make.py")]
     if req.mode == "pick" and req.verse:
@@ -1290,10 +1271,12 @@ def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
         raise HTTPException(status_code=400, detail="Verse is required for single-pick generation.")
     if req.content_mode == "urdu_only":
         cmd.append("--urdu-only")
+    elif req.content_mode == "arabic_only":
+        cmd.append("--arabic-only")
 
     # Background music argument agar select kiya gaya ho (yeh ab bilkul theek jagah par hai):
-    if req.music is not None:
-        cmd.extend(["--music", _validate_music_filename(req.music)])
+    if music_filename is not None:
+        cmd.extend(["--music", music_filename])
 
     batch_id = uuid4().hex[:10]
     work_dir = CACHE_DIR / "tmp" / batch_id
@@ -1475,6 +1458,126 @@ def generation_status(job_id: str, user=Depends(get_current_user)):
     )) or response.get("warnings", [])
     response["job_id"] = job_id
     return response
+
+
+@app.get("/api/generate/{job_id}/download-url")
+def create_batch_download_url(job_id: str, user=Depends(get_current_user)):
+    with GENERATION_JOBS_LOCK:
+        job = GENERATION_JOBS.get(job_id)
+        if not job or job["owner_id"] != user["id"]:
+            raise HTTPException(status_code=404, detail="Generation batch not found.")
+        if job["status"] in {"queued", "processing"}:
+            raise HTTPException(status_code=409, detail="Wait for the batch to finish before downloading it.")
+        videos = list(job.get("videos", []))
+        owner_id = job["owner_id"]
+        if not videos:
+            raise HTTPException(status_code=404, detail="This batch has no completed reels to download.")
+
+    filenames = []
+    for video in videos:
+        filename = video.get("filename") if isinstance(video, dict) else None
+        if not isinstance(filename, str):
+            raise HTTPException(status_code=500, detail="The batch contains an invalid video entry.")
+        _local_video_path(filename)
+        filenames.append(filename)
+
+    expires = int(time.time()) + VIDEO_URL_TTL_SECONDS
+    archive_name = f"batch-{job_id}.zip"
+    signature = _video_signature(archive_name, expires)
+    query = urlencode({"exp": expires, "sig": signature})
+    return {
+        "url": f"/api/batch-download/{quote(job_id, safe='')}?{query}",
+        "filename": f"noor-ul-quran-reels-{job_id[:10]}.zip",
+        "video_count": len(filenames),
+        "expires_at": expires,
+    }
+
+
+def _remove_temporary_archive(archive_path: Path):
+    try:
+        archive_path.unlink(missing_ok=True)
+    except OSError:
+        LOGGER.exception("Could not remove temporary reel archive %s", archive_path.name)
+
+
+@app.get("/api/batch-download/{job_id}")
+def download_generation_batch(job_id: str, exp: Optional[str] = None, sig: Optional[str] = None):
+    if (
+        not isinstance(exp, str)
+        or re.fullmatch(r"[0-9]{1,12}", exp) is None
+        or not isinstance(sig, str)
+        or re.fullmatch(r"[0-9a-f]{64}", sig) is None
+    ):
+        raise HTTPException(status_code=403, detail="Invalid or expired batch download link.")
+    expires = int(exp)
+    archive_name = f"batch-{job_id}.zip"
+    if expires <= int(time.time()) or not hmac.compare_digest(
+        sig,
+        _video_signature(archive_name, expires),
+    ):
+        raise HTTPException(status_code=403, detail="Invalid or expired batch download link.")
+
+    with GENERATION_JOBS_LOCK:
+        job = GENERATION_JOBS.get(job_id)
+        if not job or job["status"] in {"queued", "processing"}:
+            raise HTTPException(status_code=404, detail="Generation batch not found or not finished.")
+        videos = list(job.get("videos", []))
+        owner_id = job["owner_id"]
+
+    filenames = []
+    video_paths = []
+    for video in videos:
+        filename = video.get("filename") if isinstance(video, dict) else None
+        if not isinstance(filename, str):
+            raise HTTPException(status_code=500, detail="The batch contains an invalid video entry.")
+        video_paths.append(_local_video_path(filename))
+        filenames.append(filename)
+    if not video_paths:
+        raise HTTPException(status_code=404, detail="This batch has no completed reels to download.")
+
+    archive_dir = CACHE_DIR / "tmp"
+    archive_dir.mkdir(parents=True, exist_ok=True)
+    temporary_file = tempfile.NamedTemporaryFile(
+        prefix="noor-reels-",
+        suffix=".zip",
+        dir=archive_dir,
+        delete=False,
+    )
+    archive_path = Path(temporary_file.name)
+    temporary_file.close()
+    try:
+        with zipfile.ZipFile(archive_path, "w", compression=zipfile.ZIP_STORED) as archive:
+            for filename, video_path in zip(filenames, video_paths):
+                archive.write(video_path, arcname=filename)
+    except (OSError, RuntimeError, zipfile.BadZipFile) as exc:
+        _remove_temporary_archive(archive_path)
+        LOGGER.exception("Could not create reel archive for generation batch %s", job_id)
+        raise HTTPException(status_code=500, detail="Could not create the ZIP download. Please try again.") from exc
+
+    with HISTORY_LOCK:
+        history = _read_video_history_unlocked()
+        entries = history["users"].get(owner_id, [])
+        if isinstance(entries, list):
+            downloaded_at = datetime.now(timezone.utc).isoformat()
+            for entry in entries:
+                if not isinstance(entry, dict) or entry.get("filename") not in filenames:
+                    continue
+                entry["downloaded_at"] = downloaded_at
+                try:
+                    entry["download_count"] = int(entry.get("download_count") or 0) + 1
+                except (TypeError, ValueError):
+                    entry["download_count"] = 1
+            try:
+                _write_video_history_unlocked(history)
+            except OSError:
+                LOGGER.exception("Could not record bulk download for generation batch %s", job_id)
+
+    return FileResponse(
+        archive_path,
+        media_type="application/zip",
+        filename=f"noor-ul-quran-reels-{job_id[:10]}.zip",
+        background=BackgroundTask(_remove_temporary_archive, archive_path),
+    )
 
 
 # 7. Static Web Files Serve Karein (MUST BE AT THE VERY BOTTOM)

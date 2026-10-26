@@ -9,6 +9,12 @@ node_modules/
 audio/
 backgrounds/*.mp4
 backgrounds/*.mov
+backgrounds/**/*.mp4
+backgrounds/**/*.mov
+backgrounds/*.zip
+backgrounds/**/*.zip
+backgrounds.zip
+noor-wip.zip
 output/
 cache/
 data/quran.json

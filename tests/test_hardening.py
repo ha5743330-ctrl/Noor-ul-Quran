@@ -1,20 +1,71 @@
 import asyncio
+import io
 import json
 import os
 import time
+import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
+from PIL import Image
 
+import fetch_assets
 import main
 import make
 
 
 FREE_USER = {"id": "free-user", "is_admin": False, "premium_access": False}
 ADMIN_USER = {"id": "admin-user", "is_admin": True, "premium_access": True}
+
+
+def _quran_editions():
+    editions = [[], [], []]
+    for surah_number in range(1, 115):
+        for edition, text in zip(editions, ("عَرَبِيّ", "اردو", "English")):
+            edition.append({
+                "number": surah_number,
+                "name": f"سورة {surah_number}",
+                "englishName": f"Surah {surah_number}",
+                "ayahs": [{"numberInSurah": 1, "text": text}],
+            })
+    return editions
+
+
+def test_quran_data_builder_aligns_all_three_editions():
+    arabic, urdu, english = _quran_editions()
+
+    result = fetch_assets.build_quran_data(arabic, urdu, english)
+
+    assert len(result["surahs"]) == 114
+    assert "Marmaduke William Pickthall" in result["english_translation"]
+    assert "en.pickthall" in result["english_translation"]
+    assert result["surahs"]["1"]["arabic"]["1"] == "عَرَبِيّ"
+    assert result["surahs"]["1"]["ayahs"]["1"] == "اردو"
+    assert result["surahs"]["1"]["english_ayahs"]["1"] == "English"
+
+
+@pytest.mark.parametrize("edition_index", [0, 1, 2])
+def test_quran_data_builder_rejects_missing_surahs(edition_index):
+    editions = _quran_editions()
+    editions[edition_index].pop()
+
+    with pytest.raises(RuntimeError, match="114 surahs"):
+        fetch_assets.build_quran_data(*editions)
+
+
+def test_quran_data_builder_rejects_misaligned_or_empty_translation():
+    editions = _quran_editions()
+    editions[2][0]["ayahs"][0]["numberInSurah"] = 2
+    with pytest.raises(RuntimeError, match="surah 1, ayah 1"):
+        fetch_assets.build_quran_data(*editions)
+
+    editions = _quran_editions()
+    editions[2][0]["ayahs"][0]["text"] = " "
+    with pytest.raises(RuntimeError, match="surah 1, ayah 1"):
+        fetch_assets.build_quran_data(*editions)
 
 
 @pytest.fixture
@@ -52,6 +103,16 @@ def test_authentication_required_for_history_and_generation(client):
     main.app.dependency_overrides[main.get_current_user] = lambda: FREE_USER
 
 
+def test_startup_logs_raqm_unavailable(monkeypatch, caplog):
+    monkeypatch.setattr(main, "RAQM_AVAILABLE", True)
+    monkeypatch.setattr(main.features, "check", lambda feature: False)
+
+    main.cleanup_output_on_startup()
+
+    assert not main.RAQM_AVAILABLE
+    assert main.RAQM_REQUIRED_ERROR in caplog.text
+
+
 def test_free_user_is_gated_from_picks_random_and_long_videos(client):
     for payload in (
         {"mode": "picks"},
@@ -81,7 +142,174 @@ def test_invalid_generation_requests_are_rejected(client, payload):
     assert client.post("/api/generate", json=payload).status_code == 400
 
 
+@pytest.mark.parametrize(
+    ("content_mode", "expected_flag"),
+    [
+        ("full", None),
+        ("urdu_only", "--urdu-only"),
+        ("arabic_only", "--arabic-only"),
+    ],
+)
+def test_generation_selects_renderer_flag_for_each_content_mode(
+    client, monkeypatch, content_mode, expected_flag
+):
+    monkeypatch.setattr(main, "RAQM_AVAILABLE", True)
+    captured = {}
+
+    class Executor:
+        def submit(self, *args):
+            captured["args"] = args
+
+    monkeypatch.setattr(main, "GENERATION_EXECUTOR", Executor())
+    response = client.post(
+        "/api/generate",
+        json={
+            "mode": "pick",
+            "verse": "1:1",
+            "content_mode": content_mode,
+        },
+    )
+
+    assert response.status_code == 202
+    command = captured["args"][2]
+    assert command.count("--urdu-only") == int(expected_flag == "--urdu-only")
+    assert command.count("--arabic-only") == int(expected_flag == "--arabic-only")
+
+
+def test_arabic_only_duration_estimate_uses_arabic_audio(client, monkeypatch):
+    captured = {}
+
+    def plan_duration(*args):
+        captured["args"] = args
+        return {
+            "estimated_seconds": 7,
+            "fits_up_to": 1,
+            "tolerance_fits_up_to": 1,
+            "total_count": 1,
+            "range_seconds": 7,
+        }
+
+    monkeypatch.setattr(make, "plan_duration", plan_duration)
+    response = client.get(
+        "/api/estimate",
+        params={
+            "surah": "1",
+            "start": "1",
+            "end": "1",
+            "mode": "arabic_only",
+            "length_limit": "30",
+        },
+    )
+
+    assert response.status_code == 200
+    assert captured["args"][4] == "arabic_only"
+    assert response.json()["estimated_seconds"] == 7
+
+
+@pytest.mark.parametrize(
+    ("content_mode", "expected_audio_kinds", "expected_seconds"),
+    [
+        ("full", ["urdu", "arabic"], 12.35),
+        ("urdu_only", ["urdu"], 5),
+        ("arabic_only", ["arabic"], 7),
+    ],
+)
+def test_duration_planner_uses_audio_for_selected_content_mode(
+    monkeypatch, content_mode, expected_audio_kinds, expected_seconds
+):
+    measured_kinds = []
+    monkeypatch.setattr(make, "cached_ayah_duration", lambda *args: None)
+
+    def measure_audio(surah, ayah, kind):
+        measured_kinds.append(kind)
+        return {"arabic": 7, "urdu": 5}[kind]
+
+    monkeypatch.setattr(make, "measure_ayah_audio", measure_audio)
+    quran = {"surahs": {"1": {"n": 1}}}
+    plan = make.plan_duration(1, 1, 1, 30, content_mode, quran)
+
+    assert measured_kinds == expected_audio_kinds
+    assert plan["range_seconds"] == pytest.approx(expected_seconds)
+
+
+def test_arabic_only_reel_uses_english_text_without_urdu_audio(monkeypatch):
+    fetched_audio = []
+    monkeypatch.setattr(make, "_clip_cache", {})
+
+    def fetch_audio(kind, surah, ayah):
+        fetched_audio.append(kind)
+        return f"{kind}.mp3"
+
+    monkeypatch.setattr(make, "fetch_ayah", fetch_audio)
+    monkeypatch.setattr(make, "cached_ayah_duration", lambda *args: 7)
+    clip = make.ayah_clip(1, 1, "arabic_only")
+
+    assert fetched_audio == ["arabic"]
+    assert clip["segs"] == [("arabic.mp3", 7, 0.0)]
+    assert clip["len"] == 7
+
+    monkeypatch.setattr(
+        make,
+        "plan_duration",
+        lambda *args: {
+            "fit_items": [{
+                "ayah": 1, "ar_dur": 7, "u0": 0, "ur_dur": 0, "len": 7,
+            }],
+            "fits_up_to": 1,
+        },
+    )
+    monkeypatch.setattr(
+        make,
+        "admin_content",
+        lambda: {"verses": {}},
+    )
+    quran = {
+        "surahs": {
+            "1": {
+                "n": 1,
+                "name": "سورة الفاتحة",
+                "arabic": {"1": "الْحَمْدُ لِلَّهِ"},
+                "english_ayahs": {"1": "All praise is due to Allah."},
+                "ayahs": {"1": "اردو ترجمہ"},
+            }
+        }
+    }
+    plan = make.plan_reel(quran, 1, 1, 1, 30, "arabic_only")
+
+    assert plan["items"][0]["english"] == "All praise is due to Allah."
+    assert plan["items"][0]["text"] == ""
+
+
+def test_bilingual_video_frame_attributes_pickthall_translation(monkeypatch, tmp_path):
+    from PIL import ImageFont
+
+    base = tmp_path / "base.png"
+    Image.new("RGBA", (1080, 1920), (0, 0, 0, 0)).save(base)
+    font_path = make.FONTS["amiri_regular"]
+    font = ImageFont.truetype(str(font_path), 30)
+    captured_text = []
+    monkeypatch.setattr(make, "load_font", lambda *args: font)
+    monkeypatch.setattr(
+        make,
+        "put",
+        lambda draw, position, text, *args, **kwargs: captured_text.append(text),
+    )
+
+    make.chunk_bilingual_png(
+        tmp_path / "attributed.png",
+        ["Arabic ayah"],
+        ["English translation"],
+        font,
+        font,
+        base,
+        {},
+    )
+
+    assert "Translation: Mohammed Marmaduke William Pickthall" in captured_text
+
+
 def test_dropdown_music_filename_is_the_only_filename_passed_to_renderer(client, monkeypatch):
+    monkeypatch.setattr(main, "RAQM_AVAILABLE", True)
     music = main.BACKGROUND_DIR / "music" / "permitted.mp3"
     music.write_bytes(b"audio")
     captured = {}
@@ -108,20 +336,20 @@ def test_music_symlink_cannot_escape_music_directory(client):
     link = main.BACKGROUND_DIR / "music" / "linked.mp3"
     try:
         link.symlink_to(outside)
-    except (OSError, NotImplementedError):
-        pytest.skip("Symlinks are not available on this platform.")
+    except (OSError, NotImplementedError) as exc:
+        pytest.skip(f"Symlink creation is unavailable on this platform: {exc}")
     assert main._available_music_filenames() == ["linked.mp3"]
     with pytest.raises(HTTPException) as exc:
         main._validate_music_filename("linked.mp3")
     assert exc.value.status_code == 400
 
 
-def test_history_is_capped_at_five_and_prunes_local_and_storage_files(client, monkeypatch):
+def test_history_keeps_all_generated_videos_without_pruning(client, monkeypatch):
     monkeypatch.setattr(main, "SUPABASE_SERVICE_KEY", "configured")
     deleted_objects = []
     monkeypatch.setattr(main, "_delete_media_objects", lambda paths: deleted_objects.extend(paths))
     videos = []
-    for index in range(6):
+    for index in range(10):
         filename = f"video{index}.mp4"
         (main.OUTPUT_DIR / filename).write_bytes(b"video")
         videos.append({"filename": filename, "object_path": f"videos/object-{index}.mp4"})
@@ -129,10 +357,58 @@ def test_history_is_capped_at_five_and_prunes_local_and_storage_files(client, mo
     main._record_video_history("free-user", videos, "full", "balanced", {})
     history = json.loads(main.HISTORY_FILE.read_text(encoding="utf-8"))
     entries = history["users"]["free-user"]
-    assert len(entries) == 5
-    assert (main.OUTPUT_DIR / "video0.mp4").exists() is False
-    assert deleted_objects == ["videos/object-0.mp4"]
+    assert len(entries) == 10
+    assert all((main.OUTPUT_DIR / f"video{index}.mp4").exists() for index in range(10))
+    assert deleted_objects == []
     assert all(entry["object_path"] for entry in entries)
+    response = client.get("/api/history")
+    assert response.status_code == 200
+    assert len(response.json()["videos"]) == 10
+    assert all(video["has_file"] for video in response.json()["videos"])
+
+
+def test_batch_download_returns_owner_scoped_zip_for_completed_reels(client):
+    filenames = ["batch_001.mp4", "batch_002.mp4"]
+    for index, filename in enumerate(filenames):
+        (main.OUTPUT_DIR / filename).write_bytes(f"reel-{index + 1}".encode())
+    main.GENERATION_JOBS["batch-job"] = {
+        "owner_id": "free-user",
+        "status": "completed",
+        "videos": [{"filename": filename} for filename in filenames],
+    }
+    _write_history({
+        "free-user": [
+            {"id": f"entry-{index}", "filename": filename, "download_count": 0}
+            for index, filename in enumerate(filenames)
+        ]
+    })
+
+    main.app.dependency_overrides[main.get_current_user] = lambda: {"id": "another-user"}
+    assert client.get("/api/generate/batch-job/download-url").status_code == 404
+    main.app.dependency_overrides[main.get_current_user] = lambda: FREE_USER
+
+    url_response = client.get("/api/generate/batch-job/download-url")
+    assert url_response.status_code == 200
+    assert url_response.json()["video_count"] == 2
+    archive_response = client.get(url_response.json()["url"])
+    assert archive_response.status_code == 200
+    assert archive_response.headers["content-type"] == "application/zip"
+    with zipfile.ZipFile(io.BytesIO(archive_response.content)) as archive:
+        assert archive.namelist() == filenames
+        assert [archive.read(filename) for filename in filenames] == [b"reel-1", b"reel-2"]
+
+    history = json.loads(main.HISTORY_FILE.read_text(encoding="utf-8"))
+    assert all(entry["download_count"] == 1 for entry in history["users"]["free-user"])
+
+
+def test_batch_download_url_waits_for_generation_completion(client):
+    main.GENERATION_JOBS["batch-job"] = {
+        "owner_id": "free-user",
+        "status": "processing",
+        "videos": [],
+    }
+    response = client.get("/api/generate/batch-job/download-url")
+    assert response.status_code == 409
 
 
 def test_history_ownership_and_delete(client, monkeypatch):
@@ -216,21 +492,22 @@ def test_signed_urls_reject_tampered_expired_non_ascii_and_wrong_type(client):
     assert len(valid_signature) == 64
 
 
-def test_cleanup_removes_only_old_unreferenced_mp4_and_temporary_files(client):
+def test_cleanup_preserves_all_mp4_files_and_removes_old_temporary_files(client):
     now = time.time()
     _write_history({"free-user": [{"id": "keep", "filename": "referenced.mp4"}]})
-    filenames = ["referenced.mp4", "orphan.mp4", "orphan.tmp", "recent.mp4"]
+    filenames = ["referenced.mp4", "orphan.mp4", "orphan.tmp", "recent.mp4", "recent.part"]
     for filename in filenames:
         path = main.OUTPUT_DIR / filename
         path.write_bytes(b"data")
-        timestamp = now - 25 * 60 * 60 if filename != "recent.mp4" else now
+        timestamp = now - 25 * 60 * 60 if filename in {"referenced.mp4", "orphan.mp4", "orphan.tmp"} else now
         os.utime(path, (timestamp, timestamp))
 
-    assert main._cleanup_orphaned_output_files(now=now) == 2
+    assert main._cleanup_orphaned_output_files(now=now) == 1
     assert (main.OUTPUT_DIR / "referenced.mp4").exists()
-    assert not (main.OUTPUT_DIR / "orphan.mp4").exists()
+    assert (main.OUTPUT_DIR / "orphan.mp4").exists()
     assert not (main.OUTPUT_DIR / "orphan.tmp").exists()
     assert (main.OUTPUT_DIR / "recent.mp4").exists()
+    assert (main.OUTPUT_DIR / "recent.part").exists()
 
 
 def test_admin_diagnostics_are_admin_only_and_never_return_secret_values(client, monkeypatch, tmp_path):
@@ -291,6 +568,37 @@ def test_ffmpeg_cpu_render_uses_single_codec_thread(monkeypatch, tmp_path):
     assert make.FFMPEG_FILTER_THREADS == (
         "-filter_threads", "1", "-filter_complex_threads", "1"
     )
+
+
+@pytest.mark.parametrize("content_mode", ["full", "urdu_only", "arabic_only"])
+def test_generation_refuses_script_modes_without_raqm(client, monkeypatch, content_mode):
+    monkeypatch.setattr(main, "RAQM_AVAILABLE", False)
+    response = client.post(
+        "/api/generate",
+        json={
+            "mode": "pick",
+            "verse": "1:1",
+            "content_mode": content_mode,
+        },
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == main.RAQM_REQUIRED_ERROR
+
+
+def test_arabic_only_generation_rejects_music_in_api(client):
+    response = client.post(
+        "/api/generate",
+        json={
+            "mode": "pick",
+            "verse": "1:1",
+            "content_mode": "arabic_only",
+            "music": "nasheed.mp3",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Background music is not available in Arabic-only mode."
 
 
 @pytest.mark.parametrize(
