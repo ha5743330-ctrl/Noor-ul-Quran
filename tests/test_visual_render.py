@@ -32,15 +32,29 @@ def test_qpc_hafs_data_matches_checksummed_source():
 def test_ayah_text_without_bismillah_for_surah_23():
     quran = json.loads((make.ROOT / "data" / "quran.json").read_text(encoding="utf-8"))
     text = quran["surahs"]["23"]["arabic"]["1"]
+    prefix_size = len(make.QPC_BISMILLAH_TEXT.split()) - 1
+    normalize = lambda value: [
+        make.strip_harakat_surah(word).replace("ٱ", "ا")
+        for word in value.split()[:prefix_size]
+    ]
 
-    assert not make.ayah_text_without_bismillah(text, 23).startswith("بِسْمِ")
+    assert normalize(make.ayah_text_without_bismillah(text, 23)) != normalize(
+        make.QPC_BISMILLAH_TEXT
+    )
 
 
 def test_ayah_text_without_bismillah_for_surah_112():
     quran = json.loads((make.ROOT / "data" / "quran.json").read_text(encoding="utf-8"))
     text = quran["surahs"]["112"]["arabic"]["1"]
+    prefix_size = len(make.QPC_BISMILLAH_TEXT.split()) - 1
+    normalize = lambda value: [
+        make.strip_harakat_surah(word).replace("ٱ", "ا")
+        for word in value.split()[:prefix_size]
+    ]
 
-    assert not make.ayah_text_without_bismillah(text, 112).startswith("بِسْمِ")
+    assert normalize(make.ayah_text_without_bismillah(text, 112)) != normalize(
+        make.QPC_BISMILLAH_TEXT
+    )
 
 
 def test_ayah_text_keeps_bismillah_for_surah_1():
@@ -48,7 +62,6 @@ def test_ayah_text_keeps_bismillah_for_surah_1():
     text = quran["surahs"]["1"]["arabic"]["1"]
 
     assert make.ayah_text_without_bismillah(text, 1) == text.lstrip("\ufeff")
-    assert make.ayah_text_without_bismillah(text, 1).startswith("بِس")
 
 
 @pytest.mark.skipif(
@@ -178,7 +191,7 @@ def test_quranic_arabic_line_bounds_do_not_overlap():
 )
 def test_surah_title_glyphs_exist_in_quran_font():
     quran = json.loads((make.ROOT / "data" / "quran.json").read_text(encoding="utf-8"))
-    font = make.load_font(make.QURAN_ARABIC_FONT, 48)
+    font = make.load_font("amiri_bold", 48)
     missing_glyph = bytes(font.getmask("\U0010ffff"))
     title_characters = {
         character
@@ -188,6 +201,7 @@ def test_surah_title_glyphs_exist_in_quran_font():
         )
         if not character.isspace()
     }
+    title_characters.update(character for character in "آيات ١ تا ٤" if not character.isspace())
 
     missing = [
         character for character in sorted(title_characters)

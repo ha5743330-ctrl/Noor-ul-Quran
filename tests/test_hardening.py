@@ -692,6 +692,7 @@ def test_upload_background_rejects_malformed_content_length(client):
 
 
 def test_ffmpeg_cpu_render_uses_single_codec_thread(monkeypatch, tmp_path):
+    monkeypatch.delenv("RENDER_MEMORY_PROFILE", raising=False)
     captured = {}
     monkeypatch.setattr(make, "detect_hardware_encoder", lambda: "")
     monkeypatch.setattr(make, "run", lambda command, **kwargs: captured.update(command=command))
@@ -700,10 +701,59 @@ def test_ffmpeg_cpu_render_uses_single_codec_thread(monkeypatch, tmp_path):
 
     command = captured["command"]
     assert command[command.index("-threads") + 1] == "1"
+    assert command[command.index("-preset") + 1] == "medium"
+    assert command[command.index("-crf") + 1] == "18"
+    assert command[command.index("-tune") + 1] == "film"
+    assert command[command.index("-pix_fmt") + 1] == "yuv420p"
+    assert command[command.index("-color_range") + 1] == "tv"
     assert command[-1] == str(tmp_path / "output.mp4")
     assert make.FFMPEG_FILTER_THREADS == (
         "-filter_threads", "1", "-filter_complex_threads", "1"
     )
+
+
+def test_ffmpeg_low_memory_profile_keeps_low_memory_encoder_settings(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("RENDER_MEMORY_PROFILE", "low")
+    captured = {}
+    monkeypatch.setattr(make, "detect_hardware_encoder", lambda: "")
+    monkeypatch.setattr(
+        make, "run", lambda command, **kwargs: captured.update(command=command)
+    )
+
+    make.encode_video(["ffmpeg", "-i", "input.mp4"], tmp_path / "output.mp4")
+
+    command = captured["command"]
+    assert command[command.index("-preset") + 1] == "ultrafast"
+    assert command[command.index("-crf") + 1] == "24"
+    assert "-tune" not in command
+
+
+def test_video_header_uses_source_bismillah_and_amiri_for_title_and_label(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr(make, "ROOT", tmp_path)
+    monkeypatch.setattr(make, "W", 1080)
+    monkeypatch.setattr(make, "H", 1920)
+    fonts = []
+    texts = []
+    monkeypatch.setattr(
+        make, "load_font", lambda name, *args, **kwargs: fonts.append(name) or name
+    )
+    monkeypatch.setattr(
+        make, "put", lambda draw, position, text, font, *args, **kwargs: texts.append((text, font))
+    )
+
+    make.base_overlay(tmp_path / "with-bismillah.png", "title", "label", True)
+
+    assert (make.QPC_BISMILLAH_TEXT, make.QURAN_ARABIC_FONT) in texts
+    assert fonts[:3] == [make.QURAN_ARABIC_FONT, "amiri_bold", "amiri_bold"]
+
+    fonts.clear()
+    texts.clear()
+    make.base_overlay(tmp_path / "without-bismillah.png", "title", "label", False)
+    assert make.QPC_BISMILLAH_TEXT not in [text for text, _font in texts]
 
 
 @pytest.mark.parametrize("content_mode", ["full", "urdu_only", "arabic_only"])

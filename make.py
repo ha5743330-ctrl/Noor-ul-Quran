@@ -53,9 +53,11 @@ DEFAULT_ARABIC_RECITER_ID = RECITER_CONFIG["defaults"]["ar"]
 DEFAULT_URDU_VOICE_ID = RECITER_CONFIG["defaults"]["ur"]
 CURRENT_RECITER_ID = DEFAULT_ARABIC_RECITER_ID
 CURRENT_URDU_VOICE_ID = DEFAULT_URDU_VOICE_ID
-BISMILLAH = "بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ"
 # --------------------------------------------------
 ROOT = Path(__file__).parent
+QPC_QURAN_PATH = ROOT / "data" / "quran_qpc_hafs.json"
+QPC_QURAN = json.loads(QPC_QURAN_PATH.read_text(encoding="utf-8"))
+QPC_BISMILLAH_TEXT = QPC_QURAN["surahs"]["1"]["1"]
 FONTS = {
     QURAN_ARABIC_FONT: ROOT / "fonts" / "KFGQPC-Uthmanic-Hafs-V22.ttf",
     "amiri_regular": ROOT / "fonts" / "Amiri-Regular.ttf",
@@ -213,6 +215,25 @@ def detect_hardware_encoder():
     return _hardware_encoder
 
 def encode_video(cmd, outfile):
+    low_memory = os.getenv("RENDER_MEMORY_PROFILE", "").lower() == "low"
+    if not low_memory:
+        run(
+            cmd
+            + [
+                "-c:v", "libx264",
+                "-preset", "medium",
+                "-crf", "18",
+                "-tune", "film",
+                *list(FFMPEG_CODEC_THREADS),
+                "-pix_fmt", "yuv420p",
+                "-color_range", "tv",
+                "-c:a", "aac",
+                "-b:a", "192k",
+                str(outfile),
+            ]
+        )
+        return
+
     encoder = detect_hardware_encoder()
     audio_args = ["-c:a", "aac", "-b:a", "192k", str(outfile)]
 
@@ -347,10 +368,12 @@ def is_generated_reel(path):
     ) is not None
 
 def remove_leading_bismillah(text):
+    prefix = re.sub(r"\s*[٠-٩]+$", "", QPC_BISMILLAH_TEXT).split()
     words = text.lstrip("\ufeff").split()
-    expected = ["بسم", "الله", "الرحمن", "الرحيم"]
-    actual = [strip_harakat_surah(word).replace("ٱ", "ا") for word in words[:4]]
-    return " ".join(words[4:]) if actual == expected and len(words) >= 4 else text
+    normalize = lambda word: strip_harakat_surah(word).replace("ٱ", "ا")
+    expected = [normalize(word) for word in prefix]
+    actual = [normalize(word) for word in words[:len(expected)]]
+    return " ".join(words[len(expected):]) if actual == expected else text
 
 def ayah_text_without_bismillah(text, surah_number):
     if surah_number not in {1, 9}:
@@ -613,29 +636,31 @@ def base_overlay(path, surah, label, show_bismillah, styles=None):
     ov = ROOT / "public" / "assets" / "overlay.png"
     if ov.exists():
         im.alpha_composite(Image.open(ov).convert("RGBA").resize((W, H)))
-    else:
-        if show_bismillah:
-            bismillah_color = styled_color(styles, "bismillah", (255, 255, 255, 255))
-            bismillah_font = load_font(QURAN_ARABIC_FONT, int(round(64 * scale)))
-            put(
-                d, (W // 2, int(round(170 * scale))), BISMILLAH, bismillah_font,
-                bismillah_color, stroke=int(round(3 * scale)), language="ar",
-            )
-        surah_color = styled_color(styles, "surah", (255, 224, 140, 255))
-        surah_font = load_font(QURAN_ARABIC_FONT, int(round(92 * scale)))
+    if show_bismillah:
+        bismillah_color = styled_color(styles, "bismillah", (255, 255, 255, 255))
+        bismillah_font = load_font(QURAN_ARABIC_FONT, int(round(64 * scale)))
         put(
-            d, (W // 2, int(round(330 * scale))), surah, surah_font,
-            surah_color, int(round(3 * scale)), language="ar",
+            d, (W // 2, int(round(170 * scale))), QPC_BISMILLAH_TEXT, bismillah_font,
+            bismillah_color, stroke=int(round(3 * scale)), language="ar",
         )
-        label_color = styled_color(styles, "label", (255, 255, 255, 255))
-        label_font = load_font(QURAN_ARABIC_FONT, int(round(54 * scale)))
-        put(d, (W // 2, int(round(480 * scale))), label, label_font, label_color, int(round(3 * scale)))
-        channel_color = styled_color(styles, "channel", (255, 255, 255, 220))
-        channel_font = load_font(styled_font(styles, "channel", "amiri_bold"), int(round(50 * scale)))
-        put(
-            d, (W // 2, H - int(round(220 * scale))), CHANNEL, channel_font,
-            channel_color, int(round(2 * scale)), direction="ltr", language="en",
-        )
+    surah_color = styled_color(styles, "surah", (255, 224, 140, 255))
+    surah_font = load_font("amiri_bold", int(round(92 * scale)))
+    put(
+        d, (W // 2, int(round(330 * scale))), surah, surah_font,
+        surah_color, int(round(3 * scale)), direction="rtl", language="ur",
+    )
+    label_color = styled_color(styles, "label", (255, 255, 255, 255))
+    label_font = load_font("amiri_bold", int(round(54 * scale)))
+    put(
+        d, (W // 2, int(round(480 * scale))), label, label_font,
+        label_color, int(round(3 * scale)), direction="rtl", language="ur",
+    )
+    channel_color = styled_color(styles, "channel", (255, 255, 255, 220))
+    channel_font = load_font(styled_font(styles, "channel", "amiri_bold"), int(round(50 * scale)))
+    put(
+        d, (W // 2, H - int(round(220 * scale))), CHANNEL, channel_font,
+        channel_color, int(round(2 * scale)), direction="ltr", language="en",
+    )
     im.save(path)
 
 def chunk_png(path, lines, font, spacing, base, is_arabic=False, color=None):
@@ -1000,7 +1025,7 @@ def build(
         styled_font(styles, "english", "amiri_regular"),
         "amiri_regular",
     )
-    label_font_key = resolve_font_name(styled_font(styles, "label", "amiri_bold"), "amiri_bold")
+    label_font_key = "amiri_bold"
     allowed = max(len(items), int(total / SECONDS_PER_CHUNK))
     font_sizes = [max(1, int(round(size * scale))) for size in FONT_SIZES]
     wrap_width = int(round(W - 200 * scale))
