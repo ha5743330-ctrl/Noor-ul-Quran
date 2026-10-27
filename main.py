@@ -1,9 +1,11 @@
+import base64
 import json
 import hashlib
 import hmac
 import logging
 import ntpath
 import os
+import random
 import re
 import secrets
 import shutil
@@ -87,6 +89,8 @@ app = FastAPI(title="Noor ul Quran API Engine")
 GENERATION_LOCK = Lock()
 GENERATION_JOBS_LOCK = Lock()
 HISTORY_LOCK = Lock()
+FEATURED_IMAGE_LOCK = Lock()
+LAST_FEATURED_AYAH = None
 GENERATION_JOBS = {}
 GENERATION_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="quran-render")
 
@@ -116,7 +120,7 @@ class GenerateRequest(BaseModel):
     verse: Optional[str] = None  # e.g. "55:1-8"
     random_count: int = 1
     max_duration: int = 60
-    quality: str = "balanced"
+    quality: str = "high"
     content_mode: str = "full"
     styles: Any = Field(default_factory=dict)
     music: Optional[str] = None  # Background music filename (e.g. "soft_tone.mp3")
@@ -129,6 +133,10 @@ class PremiumAccessRequest(BaseModel):
 class VerseContentRequest(BaseModel):
     arabic_text: str = ""
     urdu_text: str = ""
+
+
+class GenerateImageRequest(BaseModel):
+    ayah: Optional[str] = Field(default=None, max_length=16)
 
 
 def validate_video_styles(styles):
@@ -398,6 +406,84 @@ def _latest_generated_video() -> Optional[str]:
         return None
     videos = sorted(OUTPUT_DIR.glob("*.mp4"), key=lambda p: p.stat().st_mtime, reverse=True)
     return videos[0].name if videos else None
+
+
+def _featured_ayah_references():
+    featured_path = BASE_DIR / "data" / "featured_ayahs.json"
+    try:
+        featured = json.loads(featured_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        LOGGER.exception("Could not load curated ayah data.")
+        raise HTTPException(status_code=500, detail="Curated ayah data is unavailable.") from exc
+    references = featured.get("ayahs") if isinstance(featured, dict) else None
+    if not isinstance(references, list) or not references or any(
+        not isinstance(reference, str)
+        or re.fullmatch(r"\d{1,3}:\d{1,3}", reference) is None
+        for reference in references
+    ):
+        raise HTTPException(status_code=500, detail="Curated ayah data is invalid.")
+    return references
+
+
+def _select_featured_ayah(reference=None):
+    global LAST_FEATURED_AYAH
+    references = _featured_ayah_references()
+    with FEATURED_IMAGE_LOCK:
+        if reference is not None:
+            if reference not in references:
+                raise HTTPException(status_code=400, detail="Ayah must be in the curated featured list.")
+            LAST_FEATURED_AYAH = reference
+            return reference
+        choices = [ayah for ayah in references if ayah != LAST_FEATURED_AYAH]
+        selected = random.choice(choices or references)
+        LAST_FEATURED_AYAH = selected
+        return selected
+
+
+@app.post("/api/generate-image")
+def generate_ayah_image(req: GenerateImageRequest, user=Depends(get_current_user)):
+    _require_raqm_for_generation("arabic_only")
+    reference = _select_featured_ayah(req.ayah)
+    surah_number, ayah_number = (int(value) for value in reference.split(":"))
+    try:
+        quran = json.loads((BASE_DIR / "data" / "quran.json").read_text(encoding="utf-8"))
+        surah = quran["surahs"][str(surah_number)]
+        arabic_text = surah["arabic"][str(ayah_number)]
+        english_text = surah["english_ayahs"][str(ayah_number)]
+        surah_name = surah["english"]
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, KeyError, TypeError) as exc:
+        LOGGER.exception("Curated ayah %s is missing from Quran data.", reference)
+        raise HTTPException(status_code=500, detail="Selected ayah is unavailable.") from exc
+
+    images_dir = BACKGROUND_DIR / "images"
+    background_paths = sorted(
+        path for path in images_dir.iterdir()
+        if path.is_file() and path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"}
+    ) if images_dir.is_dir() else []
+    if not background_paths:
+        raise HTTPException(status_code=503, detail="No image backgrounds are available.")
+    background_path = random.choice(background_paths)
+
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    filename = f"ayah-image-{uuid4().hex}.png"
+    image_path = OUTPUT_DIR / filename
+    import make as renderer
+
+    renderer.render_ayah_image(
+        arabic_text,
+        english_text,
+        f"Surah {surah_name} {surah_number}:{ayah_number}",
+        background_path,
+        image_path,
+    )
+    if SUPABASE_SERVICE_KEY:
+        _upload_media_file(image_path, f"ayah-images/{filename}", "image/png")
+    image_data = base64.b64encode(image_path.read_bytes()).decode("ascii")
+    return {
+        "filename": filename,
+        "reference": reference,
+        "image_data": f"data:image/png;base64,{image_data}",
+    }
 
 
 # 6. API Endpoints
@@ -1357,7 +1443,7 @@ def _run_generation_job(
     styles=None,
     user_id=None,
     content_mode="full",
-    quality="balanced",
+    quality="high",
 ):
     with GENERATION_JOBS_LOCK:
         job = GENERATION_JOBS.get(job_id)

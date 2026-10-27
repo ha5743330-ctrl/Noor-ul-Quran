@@ -31,10 +31,69 @@ document.addEventListener("DOMContentLoaded", () => {
         initializeVideoStyleControls();
         initializeDurationEstimate();
         initializeStudio();
+        document.getElementById("generate-image-button")?.addEventListener("click", generateAyahImage);
     } else {
         initializeLandingAuth();
     }
 });
+
+async function generateAyahImage(event) {
+    event.preventDefault();
+    const button = document.getElementById("generate-image-button");
+    const status = document.getElementById("image-generation-status");
+    const reference = document.getElementById("image-ayah")?.value.trim() || "";
+    if (button?.disabled) return;
+    if (button) {
+        button.disabled = true;
+        button.setAttribute("aria-busy", "true");
+    }
+    if (status) {
+        status.textContent = "Creating your image...";
+        status.classList.remove("hidden");
+    }
+    try {
+        const { data: { session }, error } = await window.supabaseClient.auth.getSession();
+        if (error) throw error;
+        if (!session) {
+            redirectToAuth();
+            return;
+        }
+        const response = await fetch(`${API_BASE_URL}/generate-image`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: "Bearer " + session.access_token
+            },
+            body: JSON.stringify(reference ? { ayah: reference } : {})
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.detail || `Image generation failed (HTTP ${response.status}).`);
+
+        const image = document.getElementById("generated-ayah-image");
+        const download = document.getElementById("download-image-btn");
+        const resultBox = document.getElementById("image-result-box");
+        const resultReference = document.getElementById("image-result-reference");
+        if (!image || !download || !resultBox || !result.image_data) {
+            throw new Error("The generated image response was incomplete.");
+        }
+        image.src = result.image_data;
+        download.href = result.image_data;
+        download.download = result.filename || "noor-ul-quran-ayah.png";
+        if (resultReference) resultReference.textContent = result.reference || "";
+        resultBox.classList.remove("hidden");
+        document.getElementById("empty-results")?.classList.add("hidden");
+        if (status) status.textContent = `Image ready: ${result.reference}`;
+        resultBox.scrollIntoView({ behavior: "smooth", block: "center" });
+    } catch (error) {
+        console.error("Ayah image generation error:", error);
+        if (status) status.textContent = error.message || "Could not generate the ayah image.";
+    } finally {
+        if (button) {
+            button.disabled = false;
+            button.removeAttribute("aria-busy");
+        }
+    }
+}
 
 function redirectToAuth() {
     const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;

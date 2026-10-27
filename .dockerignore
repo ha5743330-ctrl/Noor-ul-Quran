@@ -17,4 +17,6 @@ backgrounds.zip
 noor-wip.zip
 output/
 cache/
-data/quran.json
+!data/quran.json
+!data/quran_qpc_hafs.json
+!data/quran_qpc_hafs.sha256

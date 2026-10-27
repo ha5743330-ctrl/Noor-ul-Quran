@@ -35,7 +35,6 @@ $dockerArgs = @(
     "-e", "OUTPUT_DIR=/app/output",
     "-e", "BACKGROUNDS_DIR=/app/backgrounds",
     "-e", "CACHE_DIR=/app/cache",
-    "-e", "RENDER_MEMORY_PROFILE=low",
     "-v", "${projectRoot}\audio:/app/audio",
     "-v", "${projectRoot}\backgrounds:/app/backgrounds",
     "-v", "${projectRoot}\cache:/app/cache",

@@ -12,6 +12,7 @@ Har ayat ki audio (**Arabic Tilawat + Urdu Tarjuma**) EveryAyah.com se khud-ba-k
 - **Custom Durations:** Standard (20-60 sec) aur Long Waqia/Story videos (up to 90 sec ya us se zyada).
 - **No-Repeat System:** Random mode mein koi bhi ayat repeat nahi hoti (`cache/used.json` track rakhta hai).
 - **Auto Captions:** Har video ke sath CSV file mein tayar caption aur hashtags milte hain.
+- **Ayah Images:** Generate a 1080×1350 still with Arabic, Pickthall's English translation, and a random image background; optionally enter a curated `Surah:Ayah`.
 
 ---
 
@@ -96,7 +97,8 @@ Run this once, whenever `data/quran.json` is missing, or to add the English tran
 
 This downloads Uthmani Arabic text, the Urdu translation, and Marmaduke William Pickthall's
 English translation into `data/quran.json`. The Arabic-only option shows the translator
-attribution in the generator UI.
+attribution in the generator UI and generated ayah images. The image feature's curated
+references in `data/featured_ayahs.json` are explicitly marked **Needs human review**.
 
 The English text comes from the AlQuran Cloud API endpoint
 `https://api.alquran.cloud/v1/quran/en.pickthall` (edition ID `en.pickthall`). AlQuran Cloud's
@@ -145,6 +147,10 @@ See [DEPLOYING.md](DEPLOYING.md) for the Docker RAQM build check, required Supab
 and signed-in production smoke-test steps.
 
 ## Credits & licenses
+
+Quranic Arabic text in images and videos uses Amiri Quran (Google Fonts, Amiri Project
+authors), bundled under the SIL Open Font License 1.1; see `fonts/AmiriQuran-OFL.txt`.
+Urdu typography remains unchanged.
 
 Record the source and applicable license for each media category before release:
 

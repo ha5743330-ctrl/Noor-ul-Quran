@@ -22,16 +22,24 @@ ADMIN_USER = {"id": "admin-user", "is_admin": True, "premium_access": True}
 
 
 def _quran_editions():
-    editions = [[], [], []]
+    qpc_hafs = {}
+    urdu = []
+    english = []
     for surah_number in range(1, 115):
-        for edition, text in zip(editions, ("عَرَبِيّ", "اردو", "English")):
-            edition.append({
-                "number": surah_number,
-                "name": f"سورة {surah_number}",
-                "englishName": f"Surah {surah_number}",
-                "ayahs": [{"numberInSurah": 1, "text": text}],
-            })
-    return editions
+        qpc_hafs[str(surah_number)] = {"1": "عَرَبِيّ"}
+        urdu.append({
+            "number": surah_number,
+            "name": f"سورة {surah_number}",
+            "englishName": f"Surah {surah_number}",
+            "ayahs": [{"numberInSurah": 1, "text": "اردو"}],
+        })
+        english.append({
+            "number": surah_number,
+            "name": f"سورة {surah_number}",
+            "englishName": f"Surah {surah_number}",
+            "ayahs": [{"numberInSurah": 1, "text": "English"}],
+        })
+    return qpc_hafs, urdu, english
 
 
 def test_quran_data_builder_aligns_all_three_editions():
@@ -50,7 +58,10 @@ def test_quran_data_builder_aligns_all_three_editions():
 @pytest.mark.parametrize("edition_index", [0, 1, 2])
 def test_quran_data_builder_rejects_missing_surahs(edition_index):
     editions = _quran_editions()
-    editions[edition_index].pop()
+    if edition_index == 0:
+        editions[edition_index].pop("1")
+    else:
+        editions[edition_index].pop()
 
     with pytest.raises(RuntimeError, match="114 surahs"):
         fetch_assets.build_quran_data(*editions)
@@ -100,7 +111,75 @@ def test_authentication_required_for_history_and_generation(client):
     main.app.dependency_overrides.clear()
     assert client.get("/api/history").status_code == 401
     assert client.post("/api/generate", json={"mode": "pick", "verse": "1:1"}).status_code == 401
+    assert client.post("/api/generate-image", json={}).status_code == 401
     main.app.dependency_overrides[main.get_current_user] = lambda: FREE_USER
+
+
+def test_featured_ayah_selection_supports_specific_and_random_references(monkeypatch):
+    monkeypatch.setattr(main.random, "choice", lambda values: values[-1])
+    monkeypatch.setattr(main, "LAST_FEATURED_AYAH", None)
+
+    assert main._select_featured_ayah("2:152") == "2:152"
+    random_ayah = main._select_featured_ayah()
+    assert random_ayah == main._featured_ayah_references()[-1]
+    assert random_ayah != "2:152"
+    assert main._select_featured_ayah() != random_ayah
+
+
+def test_featured_ayah_list_is_valid_and_under_word_limit():
+    featured = json.loads((main.BASE_DIR / "data" / "featured_ayahs.json").read_text(encoding="utf-8"))
+    quran = json.loads((main.BASE_DIR / "data" / "quran.json").read_text(encoding="utf-8"))
+
+    assert "Needs human review" in featured["status"]
+    assert len(featured["ayahs"]) == 96
+    assert len(set(featured["ayahs"])) == 96
+    assert not {"18:24", "12:64", "16:126", "62:10"}.intersection(featured["ayahs"])
+    for reference in featured["ayahs"]:
+        surah, ayah = reference.split(":")
+        english = quran["surahs"][surah]["english_ayahs"][ayah]
+        assert len(english.split()) <= 40
+
+
+@pytest.mark.parametrize("ayah", ["not-an-ayah", "1:8", "114:7"])
+def test_ayah_image_api_rejects_unlisted_or_invalid_reference(client, monkeypatch, ayah):
+    monkeypatch.setattr(main, "RAQM_AVAILABLE", True)
+
+    response = client.post("/api/generate-image", json={"ayah": ayah})
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Ayah must be in the curated featured list."
+
+
+def test_ayah_image_api_uses_raqm_guard(client, monkeypatch):
+    monkeypatch.setattr(main, "RAQM_AVAILABLE", False)
+
+    response = client.post("/api/generate-image", json={"ayah": "2:152"})
+
+    assert response.status_code == 503
+    assert "lacks RAQM text shaping" in response.json()["detail"]
+
+
+def test_ayah_image_api_renders_and_returns_downloadable_image(client, monkeypatch):
+    monkeypatch.setattr(main, "RAQM_AVAILABLE", True)
+    images_dir = main.BACKGROUND_DIR / "images"
+    images_dir.mkdir()
+    Image.new("RGB", (50, 80), (20, 30, 40)).save(images_dir / "background.png")
+    rendered = {}
+
+    def render_image(arabic, english, label, background, destination):
+        rendered["args"] = (arabic, english, label, background)
+        destination.write_bytes(b"rendered-png")
+
+    monkeypatch.setattr(make, "render_ayah_image", render_image)
+    response = client.post("/api/generate-image", json={"ayah": "2:152"})
+
+    assert response.status_code == 200
+    result = response.json()
+    assert result["reference"] == "2:152"
+    assert result["image_data"] == "data:image/png;base64,cmVuZGVyZWQtcG5n"
+    assert result["filename"].endswith(".png")
+    assert rendered["args"][2] == "Surah Al-Baqara 2:152"
+    assert rendered["args"][3].name == "background.png"
 
 
 def test_startup_logs_raqm_unavailable(monkeypatch, caplog):
