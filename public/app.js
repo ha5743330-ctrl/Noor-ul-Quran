@@ -3,6 +3,7 @@ window.userAccess = null;
 window.videoStyles = {};
 let generatedVideos = [];
 let currentVideoIndex = 0;
+let latestBatchJobId = null;
 let estimateTimer = null;
 let estimateRequestId = 0;
 let lastEstimateRangeSeconds = 0;
@@ -13,6 +14,7 @@ const VIDEO_STYLE_LABELS = {
     label: "Ayat Range",
     arabic: "Arabic Ayaat",
     urdu: "Urdu Tarjuma",
+    english: "English Translation",
     channel: "Channel Name"
 };
 const VIDEO_STYLE_FONT_LABELS = {
@@ -29,10 +31,69 @@ document.addEventListener("DOMContentLoaded", () => {
         initializeVideoStyleControls();
         initializeDurationEstimate();
         initializeStudio();
+        document.getElementById("generate-image-button")?.addEventListener("click", generateAyahImage);
     } else {
         initializeLandingAuth();
     }
 });
+
+async function generateAyahImage(event) {
+    event.preventDefault();
+    const button = document.getElementById("generate-image-button");
+    const status = document.getElementById("image-generation-status");
+    const reference = document.getElementById("image-ayah")?.value.trim() || "";
+    if (button?.disabled) return;
+    if (button) {
+        button.disabled = true;
+        button.setAttribute("aria-busy", "true");
+    }
+    if (status) {
+        status.textContent = "Creating your image...";
+        status.classList.remove("hidden");
+    }
+    try {
+        const { data: { session }, error } = await window.supabaseClient.auth.getSession();
+        if (error) throw error;
+        if (!session) {
+            redirectToAuth();
+            return;
+        }
+        const response = await fetch(`${API_BASE_URL}/generate-image`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: "Bearer " + session.access_token
+            },
+            body: JSON.stringify(reference ? { ayah: reference } : {})
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.detail || `Image generation failed (HTTP ${response.status}).`);
+
+        const image = document.getElementById("generated-ayah-image");
+        const download = document.getElementById("download-image-btn");
+        const resultBox = document.getElementById("image-result-box");
+        const resultReference = document.getElementById("image-result-reference");
+        if (!image || !download || !resultBox || !result.image_data) {
+            throw new Error("The generated image response was incomplete.");
+        }
+        image.src = result.image_data;
+        download.href = result.image_data;
+        download.download = result.filename || "noor-ul-quran-ayah.png";
+        if (resultReference) resultReference.textContent = result.reference || "";
+        resultBox.classList.remove("hidden");
+        document.getElementById("empty-results")?.classList.add("hidden");
+        if (status) status.textContent = `Image ready: ${result.reference}`;
+        resultBox.scrollIntoView({ behavior: "smooth", block: "center" });
+    } catch (error) {
+        console.error("Ayah image generation error:", error);
+        if (status) status.textContent = error.message || "Could not generate the ayah image.";
+    } finally {
+        if (button) {
+            button.disabled = false;
+            button.removeAttribute("aria-busy");
+        }
+    }
+}
 
 function redirectToAuth() {
     const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
@@ -114,6 +175,14 @@ function scheduleDurationEstimate() {
     if (panel) panel.classList.toggle("hidden", mode !== "pick");
     if (mode !== "pick") return;
     estimateTimer = window.setTimeout(requestDurationEstimate, 400);
+}
+
+function updateMusicAvailability() {
+    const arabicOnly = document.getElementById("input-content-mode")?.value === "arabic_only";
+    const musicSelect = document.getElementById("input-music");
+    const note = document.getElementById("arabic-only-audio-note");
+    if (musicSelect) musicSelect.disabled = arabicOnly;
+    if (note) note.classList.toggle("hidden", !arabicOnly);
 }
 
 async function requestDurationEstimate() {
@@ -210,7 +279,11 @@ function initializeDurationEstimate() {
         if (syncRangeControls()) scheduleDurationEstimate();
     });
     document.getElementById("input-max-dur")?.addEventListener("change", scheduleDurationEstimate);
-    document.getElementById("input-content-mode")?.addEventListener("change", scheduleDurationEstimate);
+    document.getElementById("input-content-mode")?.addEventListener("change", () => {
+        updateMusicAvailability();
+        scheduleDurationEstimate();
+    });
+    updateMusicAvailability();
     document.getElementById("choose-estimated-length")?.addEventListener("click", () => {
         const lengthSelect = document.getElementById("input-max-dur");
         if (!lengthSelect) return;
@@ -372,6 +445,7 @@ async function generateVideo(event) {
     if (event) event.preventDefault();
 
     const mode = document.getElementById("mode-select")?.value || "pick";
+    const contentMode = document.getElementById("input-content-mode")?.value || "full";
     const verse = document.getElementById("input-pick")?.value || "";
     const duration = document.getElementById("input-max-dur")?.value || 60;
 
@@ -388,6 +462,8 @@ async function generateVideo(event) {
         return;
     }
     if (generateButton?.disabled) return;
+    latestBatchJobId = null;
+    document.getElementById("download-all-btn")?.classList.add("hidden");
 
     if (outputBox) outputBox.classList.remove("hidden");
     if (logMsg) logMsg.innerText = "> Sending request to Python FFmpeg Rendering Engine...";
@@ -423,13 +499,16 @@ async function generateVideo(event) {
                 max_duration: parseInt(duration, 10),
                 random_count: parseInt(document.getElementById("input-random-count")?.value || "1", 10),
                 quality: document.getElementById("input-quality")?.value || "balanced",
-                content_mode: document.getElementById("input-content-mode")?.value || "full",
+                content_mode: contentMode,
                 styles: window.videoStyles,
-                music: document.getElementById("input-music")?.value || null // Background music value successfully passed
+                music: contentMode === "arabic_only"
+                    ? null
+                    : document.getElementById("input-music")?.value || null
             })
         });
 
         let result = await response.json().catch(() => ({ detail: `Server returned HTTP ${response.status}.` }));
+        const generationJobId = result.job_id;
         if (response.status === 202 && result.job_id) {
             result = await waitForGeneration(result.job_id, session.access_token, statusBox, logMsg, statusPercent);
         }
@@ -449,11 +528,15 @@ async function generateVideo(event) {
                 statusBox.style.color = result.status === "partial" ? "#d97706" : "#059669";
             }
             const videos = Array.isArray(result.videos) ? result.videos : result.filename ? [result] : [];
+            setBatchDownload(result.job_id || generationJobId, videos);
             renderGenerationWarnings(result.warnings || videos.flatMap((video) => video.warnings || []));
             showGeneratedVideos(videos);
             await refreshRecentVideos();
         } else {
-            if (result.videos?.length) showGeneratedVideos(result.videos);
+            if (result.videos?.length) {
+                setBatchDownload(result.job_id || generationJobId, result.videos);
+                showGeneratedVideos(result.videos);
+            }
             const errorMessage = result.error || result.detail || "Generation failed.";
             if (logMsg) logMsg.innerText = "❌ Error: " + errorMessage;
             if (statusPercent) statusPercent.innerText = "0%";
@@ -487,13 +570,37 @@ async function generateVideo(event) {
 
 async function waitForGeneration(jobId, accessToken, statusBox, logMsg, statusPercent) {
     let lastVideoCount = 0;
+    let pollDelayMs = 2000;
+    let retryStartedAt = null;
     while (true) {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        await new Promise((resolve) => setTimeout(resolve, pollDelayMs));
         const response = await fetch(`${API_BASE_URL}/generate/${encodeURIComponent(jobId)}`, {
             headers: { Authorization: `Bearer ${accessToken}` }
         });
         const job = await response.json().catch(() => ({ error: `Status check returned HTTP ${response.status}.` }));
-        if (!response.ok) throw new Error(job.detail || job.error || "Could not read generation status.");
+        if (!response.ok) {
+            const message = job.detail || job.error || `Status check returned HTTP ${response.status}.`;
+            if (![408, 425, 429].includes(response.status) && response.status < 500) {
+                throw new Error(message);
+            }
+            if (retryStartedAt === null) retryStartedAt = Date.now();
+            if (Date.now() - retryStartedAt >= 5 * 60 * 1000) {
+                throw new Error(`Generation status is still unavailable after 5 minutes: ${message}`);
+            }
+            const retryInSeconds = Math.ceil(pollDelayMs / 1000);
+            const reconnectMessage = `Temporary connection issue while checking generation status. Retrying in ${retryInSeconds}s.`;
+            if (statusBox) {
+                statusBox.innerText = `⚠ ${reconnectMessage}`;
+                statusBox.style.color = "#d97706";
+            }
+            const statusHeading = document.getElementById("status-heading");
+            if (statusHeading) statusHeading.textContent = "Status: reconnecting";
+            if (logMsg) logMsg.innerText = `⚠ ${reconnectMessage}`;
+            pollDelayMs = Math.min(pollDelayMs * 2, 15000);
+            continue;
+        }
+        retryStartedAt = null;
+        pollDelayMs = 2000;
 
         const videos = Array.isArray(job.videos) ? job.videos : [];
         renderGenerationWarnings(job.warnings || videos.flatMap((video) => video.warnings || []));
@@ -611,6 +718,7 @@ function renderRecentVideos(videos) {
         const badges = document.createElement("div");
         badges.className = "flex flex-wrap gap-1.5";
         if (video.content_mode === "urdu_only") badges.appendChild(createHistoryBadge("Urdu-only", "amber"));
+        if (video.content_mode === "arabic_only") badges.appendChild(createHistoryBadge("Arabic + English", "amber"));
         if (video.styled) badges.appendChild(createHistoryBadge("Styled", "amber"));
         if (video.downloaded_at || Number(video.download_count) > 0) {
             badges.appendChild(createHistoryBadge("Downloaded", "green"));
@@ -806,6 +914,44 @@ function showNextVideo() {
     if (currentVideoIndex >= generatedVideos.length - 1) return;
     currentVideoIndex += 1;
     renderCurrentVideo();
+}
+
+function setBatchDownload(jobId, videos) {
+    const button = document.getElementById("download-all-btn");
+    if (!button) return;
+    latestBatchJobId = typeof jobId === "string" && videos.length > 1 ? jobId : null;
+    button.classList.toggle("hidden", !latestBatchJobId);
+}
+
+async function downloadAllGeneratedVideos() {
+    const button = document.getElementById("download-all-btn");
+    if (!button || !latestBatchJobId || button.disabled) return;
+    const originalText = button.innerHTML;
+    button.disabled = true;
+    button.innerHTML = '<i class="fa-solid fa-spinner animate-spin" aria-hidden="true"></i>Preparing ZIP...';
+    try {
+        const { data: { session }, error } = await window.supabaseClient.auth.getSession();
+        if (error) throw error;
+        if (!session) throw new Error("Sign in again to download this batch.");
+        const response = await fetch(
+            `${API_BASE_URL}/generate/${encodeURIComponent(latestBatchJobId)}/download-url`,
+            { headers: { Authorization: "Bearer " + session.access_token } }
+        );
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.detail || "Could not prepare the ZIP download.");
+        const downloadUrl = new URL(result.url, new URL(API_BASE_URL, window.location.origin).origin);
+        window.location.assign(downloadUrl.href);
+    } catch (error) {
+        console.error("Bulk reel download error:", error);
+        const statusBox = document.getElementById("status-box");
+        if (statusBox) {
+            statusBox.innerText = "Download error: " + (error.message || "Could not download the reel ZIP.");
+            statusBox.style.color = "#dc2626";
+        }
+    } finally {
+        button.disabled = false;
+        button.innerHTML = originalText;
+    }
 }
 
 document.addEventListener("keydown", (event) => {

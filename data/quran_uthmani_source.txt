@@ -1,0 +1,10 @@
+Superseded Arabic data source; retained for provenance only.
+
+The original Quran.com API v4 text_uthmani values are preserved in
+quran_uthmani_backup.json. The active Arabic source is text_qpc_hafs in
+quran_qpc_hafs.json; data/quran.json is verified byte-for-byte against that
+source corpus by its SHA-256 sidecar.
+
+The active font is KFGQPC HAFS Uthmanic Script Regular, Version 2.2, from the
+QUL font CDN. Its redistribution terms are in
+../fonts/KFGQPC-Uthmanic-Hafs-LICENSE.txt.
