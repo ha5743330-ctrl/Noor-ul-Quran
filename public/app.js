@@ -31,6 +31,7 @@ document.addEventListener("DOMContentLoaded", () => {
         initializeVideoStyleControls();
         initializeDurationEstimate();
         initializeStudio();
+        initializeReciterChoices();
         document.getElementById("generate-image-button")?.addEventListener("click", generateAyahImage);
     } else {
         initializeLandingAuth();
@@ -183,6 +184,46 @@ function updateMusicAvailability() {
     const note = document.getElementById("arabic-only-audio-note");
     if (musicSelect) musicSelect.disabled = arabicOnly;
     if (note) note.classList.toggle("hidden", !arabicOnly);
+    document.getElementById("urdu-voice-control")?.classList.toggle("hidden", arabicOnly);
+}
+
+async function initializeReciterChoices() {
+    const arabicSelect = document.getElementById("input-reciter");
+    const urduSelect = document.getElementById("input-urdu-voice");
+    if (!arabicSelect || !urduSelect) return;
+    const status = document.getElementById("reciter-load-status");
+    try {
+        const response = await fetch(`${API_BASE_URL}/reciters`);
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || !Array.isArray(result.reciters) || !result.defaults) {
+            throw new Error(result.detail || "Reciter choices could not be loaded.");
+        }
+        for (const [select, language, defaultId] of [
+            [arabicSelect, "ar", result.defaults.ar],
+            [urduSelect, "ur", result.defaults.ur]
+        ]) {
+            const choices = result.reciters.filter((item) => item.language === language);
+            if (!choices.some((item) => item.id === defaultId)) {
+                throw new Error(`Default ${language} reciter is missing from the list.`);
+            }
+            select.replaceChildren(...choices.map((item) => {
+                const option = document.createElement("option");
+                option.value = item.id;
+                option.textContent = item.display_name;
+                return option;
+            }));
+            select.value = defaultId;
+        }
+        status?.classList.add("hidden");
+        [arabicSelect, urduSelect].forEach((select) => {
+            select.addEventListener("change", scheduleDurationEstimate);
+        });
+    } catch (error) {
+        if (status) {
+            status.textContent = error.message || "Reciter choices could not be loaded.";
+            status.classList.remove("hidden");
+        }
+    }
 }
 
 async function requestDurationEstimate() {
@@ -220,6 +261,10 @@ async function requestDurationEstimate() {
             mode: contentMode,
             length_limit: String(length)
         });
+        params.set("reciter_id", document.getElementById("input-reciter")?.value || "");
+        if (contentMode !== "arabic_only") {
+            params.set("urdu_voice_id", document.getElementById("input-urdu-voice")?.value || "");
+        }
         const response = await fetch(`${API_BASE_URL}/estimate?${params}`, {
             headers: { Authorization: `Bearer ${session.access_token}` }
         });
@@ -500,6 +545,10 @@ async function generateVideo(event) {
                 random_count: parseInt(document.getElementById("input-random-count")?.value || "1", 10),
                 quality: document.getElementById("input-quality")?.value || "balanced",
                 content_mode: contentMode,
+                reciter_id: document.getElementById("input-reciter")?.value || null,
+                urdu_voice_id: contentMode === "arabic_only"
+                    ? null
+                    : document.getElementById("input-urdu-voice")?.value || null,
                 styles: window.videoStyles,
                 music: contentMode === "arabic_only"
                     ? null

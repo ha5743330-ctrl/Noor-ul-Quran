@@ -1,0 +1,44 @@
+{
+  "defaults": {
+    "ar": "alafasy",
+    "ur": "shamshad_ali_khan"
+  },
+  "reciters": [
+    {
+      "id": "alafasy",
+      "display_name": "Mishary Rashid Alafasy",
+      "folder": "Alafasy_128kbps",
+      "language": "ar"
+    },
+    {
+      "id": "abdul_basit_murattal",
+      "display_name": "Abdul Basit (Murattal)",
+      "folder": "Abdul_Basit_Murattal_192kbps",
+      "language": "ar"
+    },
+    {
+      "id": "abdul_basit_mujawwad",
+      "display_name": "Abdul Basit (Mujawwad)",
+      "folder": "Abdul_Basit_Mujawwad_128kbps",
+      "language": "ar"
+    },
+    {
+      "id": "husary",
+      "display_name": "Mahmoud Khalil Al-Husary",
+      "folder": "Husary_128kbps",
+      "language": "ar"
+    },
+    {
+      "id": "minshawy_murattal",
+      "display_name": "Mohamed Siddiq Al-Minshawy (Murattal)",
+      "folder": "Minshawy_Murattal_128kbps",
+      "language": "ar"
+    },
+    {
+      "id": "shamshad_ali_khan",
+      "display_name": "Shamshad Ali Khan (Urdu)",
+      "folder": "translations/urdu_shamshad_ali_khan_46kbps",
+      "language": "ur"
+    }
+  ]
+}

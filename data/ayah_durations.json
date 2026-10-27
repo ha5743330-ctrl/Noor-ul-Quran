@@ -1,706 +1,304 @@
 {
-  "112:1": {
-    "arabic": 2.916984,
-    "urdu": 5.093875
-  },
-  "112:2": {
-    "arabic": 2.485782,
-    "urdu": 3.265375
-  },
-  "112:3": {
-    "arabic": 2.916984,
-    "urdu": 3.448125
-  },
-  "112:4": {
-    "arabic": 4.804535,
-    "urdu": 2.40325
-  },
-  "12:1": {
-    "arabic": 11.588027,
-    "urdu": 4.64975
-  },
-  "12:2": {
-    "arabic": 13.983628,
-    "urdu": 4.649875
-  },
-  "12:3": {
-    "arabic": 21.226145,
-    "urdu": 12.512625
-  },
-  "12:4": {
-    "arabic": 18.960544,
-    "urdu": 10.004875
-  },
-  "12:5": {
-    "arabic": 21.820408,
-    "urdu": 11.729
-  },
-  "12:6": {
-    "arabic": 38.013946,
-    "urdu": 22.491375
-  },
-  "12:7": {
-    "arabic": 13.389365,
-    "urdu": 5.48575
-  },
-  "12:8": {
-    "arabic": 19.721927,
-    "urdu": 11.57225
-  },
-  "12:9": {
-    "arabic": 22.043265,
-    "urdu": 10.71025
-  },
-  "12:10": {
-    "arabic": 22.1361,
-    "urdu": 12.408125
-  },
-  "12:11": {
-    "arabic": 15.506417,
-    "urdu": 10.5535
-  },
-  "12:12": {
-    "arabic": 11.718027,
-    "urdu": 7.601625
-  },
-  "12:13": {
-    "arabic": 18.496281,
-    "urdu": 13.165625
-  },
-  "12:14": {
-    "arabic": 12.850839,
-    "urdu": 9.587
-  },
-  "12:15": {
-    "arabic": 26.073061,
-    "urdu": 16.979625
-  },
-  "2:255": {
-    "arabic": 51.917982,
-    "urdu": 40.411375
-  },
-  "1:1": {
-    "arabic": 6.031111,
-    "urdu": 4.780375
-  },
-  "114:1": {
-    "arabic": 6.070522,
-    "urdu": 3.99675
-  },
-  "114:2": {
-    "arabic": 5.211497,
-    "urdu": 2.899625
-  },
-  "114:3": {
-    "arabic": 5.292336,
-    "urdu": 2.29875
-  },
-  "114:4": {
-    "arabic": 7.9439,
-    "urdu": 6.4
-  },
-  "114:5": {
-    "arabic": 7.852268,
-    "urdu": 3.422
-  },
-  "114:6": {
-    "arabic": 8.191678,
-    "urdu": 3.7355
-  },
-  "100:1": {
-    "arabic": 3.229864,
-    "urdu": 3.631
-  },
-  "100:2": {
-    "arabic": 3.201156,
-    "urdu": 2.8735
-  },
-  "100:3": {
-    "arabic": 3.043265,
-    "urdu": 2.19425
-  },
-  "100:4": {
-    "arabic": 3.028912,
-    "urdu": 2.298875
-  },
-  "100:5": {
-    "arabic": 3.258571,
-    "urdu": 2.795
-  },
-  "100:6": {
-    "arabic": 7.622494,
-    "urdu": 4.963375
-  },
-  "100:7": {
-    "arabic": 6.718141,
-    "urdu": 2.19425
-  },
-  "100:8": {
-    "arabic": 7.062653,
-    "urdu": 2.56
-  },
-  "15:1": {
-    "arabic": 12.230544,
-    "urdu": 7.575625
-  },
-  "15:15": {
-    "arabic": 11.857982,
-    "urdu": 5.8775
-  },
-  "15:16": {
-    "arabic": 11.59737,
-    "urdu": 5.38125
-  },
-  "15:17": {
-    "arabic": 6.589841,
-    "urdu": 3.84
-  },
-  "15:18": {
-    "arabic": 8.321066,
-    "urdu": 5.955875
-  },
-  "15:19": {
-    "arabic": 16.735215,
-    "urdu": 7.262125
-  },
-  "15:20": {
-    "arabic": 9.214603,
-    "urdu": 7.915
-  },
-  "113:1": {
-    "arabic": 3.417574,
-    "urdu": 3.7355
-  },
-  "113:2": {
-    "arabic": 3.591814,
-    "urdu": 3.187
-  },
-  "113:3": {
-    "arabic": 4.988912,
-    "urdu": 4.33625
-  },
-  "113:4": {
-    "arabic": 5.964331,
-    "urdu": 3.866125
-  },
-  "113:5": {
-    "arabic": 5.603628,
-    "urdu": 4.493125
-  },
-  "111:1": {
-    "arabic": 7.343129,
-    "urdu": 3.813875
-  },
-  "111:2": {
-    "arabic": 7.112562,
-    "urdu": 4.702125
-  },
-  "111:3": {
-    "arabic": 5.117143,
-    "urdu": 3.291375
-  },
-  "111:4": {
-    "arabic": 5.533946,
-    "urdu": 3.709375
-  },
-  "111:5": {
-    "arabic": 6.389048,
-    "urdu": 2.40325
-  },
-  "110:1": {
-    "arabic": 6.876531,
-    "urdu": 3.918375
-  },
-  "110:2": {
-    "arabic": 8.134331,
-    "urdu": 5.59025
-  },
-  "110:3": {
-    "arabic": 9.994694,
-    "urdu": 8.04575
-  },
-  "109:1": {
-    "arabic": 7.461111,
-    "urdu": 8.124125
-  },
-  "109:2": {
-    "arabic": 7.40449,
-    "urdu": 3.631
-  },
-  "109:3": {
-    "arabic": 8.174376,
-    "urdu": 4.780375
-  },
-  "109:4": {
-    "arabic": 6.600635,
-    "urdu": 6.896375
-  },
-  "109:5": {
-    "urdu": 5.12,
-    "arabic": 8.378186
-  },
-  "109:6": {
-    "urdu": 3.187
-  },
-  "108:1": {
-    "arabic": 6.65907,
-    "urdu": 6.582875
-  },
-  "108:2": {
-    "arabic": 3.504331,
-    "urdu": 4.85875
-  },
-  "108:3": {
-    "arabic": 5.1922,
-    "urdu": 4.179625
-  },
-  "106:1": {
-    "urdu": 2.298875
-  },
-  "106:2": {
-    "urdu": 3.892125
-  },
-  "106:3": {
-    "urdu": 4.5715
-  },
-  "106:4": {
-    "urdu": 4.44075
-  },
-  "1:2": {
-    "urdu": 5.982
-  },
-  "1:3": {
-    "urdu": 2.795125
-  },
-  "1:4": {
-    "urdu": 2.011375
-  },
-  "1:5": {
-    "urdu": 4.9895
-  },
-  "1:6": {
-    "urdu": 1.8285
-  },
-  "1:7": {
-    "urdu": 7.862875
-  },
-  "105:1": {
-    "arabic": 7.890544,
-    "urdu": 5.198375
-  },
-  "105:2": {
-    "arabic": 6.208458,
-    "urdu": 3.369875
-  },
-  "105:3": {
-    "arabic": 6.850703,
-    "urdu": 3.030125
-  },
-  "105:4": {
-    "arabic": 9.277007,
-    "urdu": 2.6645
-  },
-  "105:5": {
-    "arabic": 8.992041,
-    "urdu": 3.056375
-  },
-  "90:1": {
-    "arabic": 5.695125,
-    "urdu": 2.298875
-  },
-  "90:2": {
-    "arabic": 5.647075,
-    "urdu": 2.142
-  },
-  "90:3": {
-    "arabic": 3.772721,
-    "urdu": 3.5265
-  },
-  "90:4": {
-    "arabic": 5.358707,
-    "urdu": 3.761625
-  },
-  "90:5": {
-    "arabic": 5.430794,
-    "urdu": 3.68325
-  },
-  "90:6": {
-    "arabic": 4.349433,
-    "urdu": 3.187
-  },
-  "90:7": {
-    "arabic": 5.262585,
-    "urdu": 3.26525
-  },
-  "90:8": {
-    "arabic": 5.526916,
-    "urdu": 2.40325
-  },
-  "90:9": {
-    "urdu": 2.533875
-  },
-  "90:10": {
-    "urdu": 4.911125
-  },
-  "90:11": {
-    "urdu": 2.50775
-  },
-  "90:12": {
-    "urdu": 2.61225
-  },
-  "90:13": {
-    "urdu": 2.011375
-  },
-  "90:14": {
-    "urdu": 2.142
-  },
-  "90:15": {
-    "urdu": 1.54125
-  },
-  "90:16": {
-    "urdu": 1.985375
-  },
-  "5:110": {
-    "urdu": 49.319125
-  },
-  "10:67": {
-    "urdu": 13.1135
-  },
-  "10:68": {
-    "urdu": 22.491375
-  },
-  "47:33": {
-    "urdu": 6.89625
-  },
-  "47:34": {
-    "urdu": 7.444875
-  },
-  "47:35": {
-    "urdu": 11.57225
-  },
-  "34:51": {
-    "urdu": 7.706125
-  },
-  "34:52": {
-    "urdu": 7.392625
-  },
-  "34:53": {
-    "urdu": 6.24325
-  },
-  "23:52": {
-    "urdu": 7.131375
-  },
-  "23:53": {
-    "urdu": 8.69875
-  },
-  "23:54": {
-    "urdu": 3.474375
-  },
-  "23:55": {
-    "urdu": 5.982
-  },
-  "26:65": {
-    "urdu": 3.3175
-  },
-  "26:66": {
-    "urdu": 2.116
-  },
-  "26:67": {
-    "urdu": 4.832625
-  },
-  "26:68": {
-    "urdu": 3.47425
-  },
-  "26:69": {
-    "urdu": 2.769
-  },
-  "26:70": {
-    "urdu": 5.198375
-  },
-  "18:1": {
-    "arabic": 11.116961,
-    "urdu": 9.848125
-  },
-  "18:2": {
-    "arabic": 20.731043,
-    "urdu": 13.37475
-  },
-  "18:3": {
-    "arabic": 3.191859,
-    "urdu": 2.2465
-  },
-  "18:4": {
-    "arabic": 6.047483,
-    "urdu": 4.284125
-  },
-  "18:5": {
-    "arabic": 17.710499,
-    "urdu": 10.318375
-  },
-  "18:6": {
-    "arabic": 11.759002,
-    "urdu": 8.2285
-  },
-  "18:7": {
-    "arabic": 10.271134,
-    "urdu": 8.15025
-  },
-  "18:8": {
-    "arabic": 7.727347,
-    "urdu": 4.257875
-  },
-  "18:9": {
-    "arabic": 9.455193,
-    "urdu": 4.702125
-  },
-  "18:10": {
-    "arabic": 23.326032,
-    "urdu": 9.56075
-  },
-  "88:2": {
-    "urdu": 2.4555
-  },
-  "88:3": {
-    "urdu": 2.56
-  },
-  "88:4": {
-    "urdu": 2.2465
-  },
-  "88:5": {
-    "urdu": 3.291375
-  },
-  "88:6": {
-    "urdu": 3.99675
-  },
-  "88:7": {
-    "urdu": 3.004125
-  },
-  "88:8": {
-    "urdu": 3.13475
-  },
-  "18:44": {
-    "urdu": 7.758375
-  },
-  "18:45": {
-    "urdu": 17.21475
-  },
-  "3:77": {
-    "urdu": 18.494625
-  },
-  "3:78": {
-    "urdu": 23.902125
-  },
-  "3:146": {
-    "urdu": 19.330625
-  },
-  "3:147": {
-    "urdu": 14.445625
-  },
-  "7:150": {
-    "urdu": 38.66125
-  },
-  "53:43": {
-    "urdu": 2.6645
-  },
-  "53:44": {
-    "urdu": 2.71675
-  },
-  "53:45": {
-    "urdu": 4.205625
-  },
-  "53:46": {
-    "urdu": 2.586125
-  },
-  "53:47": {
-    "urdu": 3.78775
-  },
-  "53:48": {
-    "urdu": 3.605
-  },
-  "53:49": {
-    "urdu": 2.50775
-  },
-  "7:92": {
-    "urdu": 12.19925
-  },
-  "7:93": {
-    "urdu": 14.759125
-  },
-  "92:5": {
-    "urdu": 3.57875
-  },
-  "92:6": {
-    "urdu": 2.50775
-  },
-  "92:7": {
-    "urdu": 2.899625
-  },
-  "92:8": {
-    "urdu": 3.004
-  },
-  "92:9": {
-    "urdu": 1.880875
-  },
-  "92:10": {
-    "urdu": 2.220375
-  },
-  "92:11": {
-    "urdu": 4.884875
-  },
-  "33:39": {
-    "urdu": 9.247375
-  },
-  "33:40": {
-    "urdu": 14.628625
-  },
-  "40:55": {
-    "urdu": 10.109375
-  },
-  "40:56": {
-    "urdu": 16.822875
-  },
-  "21:1": {
-    "arabic": 10.11415,
-    "urdu": 6.844
-  },
-  "21:2": {
-    "arabic": 13.016485,
-    "urdu": 7.3405
-  },
-  "71:3": {
-    "arabic": 5.683243,
-    "urdu": 3.578875
-  },
-  "71:4": {
-    "arabic": 22.313379,
-    "urdu": 10.422875
-  },
-  "55:31": {
-    "arabic": 6.491202,
-    "urdu": 3.604875
-  },
-  "55:32": {
-    "arabic": 8.751882,
-    "urdu": 3.89225
-  },
-  "9:48": {
-    "arabic": 26.636009,
-    "urdu": 12.016375
-  },
-  "14:27": {
-    "arabic": 26.794807,
-    "urdu": 11.937875
-  },
-  "57:20": {
-    "arabic": 57.045351,
-    "urdu": 34.795
-  },
-  "55:13": {
-    "arabic": 9.584785,
-    "urdu": 5.302875
-  },
-  "55:14": {
-    "arabic": 10.867143,
-    "urdu": 3.631
-  },
-  "3:35": {
-    "arabic": 21.142404,
-    "urdu": 16.352625
-  },
-  "55:4": {
-    "arabic": 4.878322,
-    "urdu": 1.880875
-  },
-  "55:5": {
-    "arabic": 6.266463,
-    "urdu": 3.3175
-  },
-  "55:6": {
-    "arabic": 6.332562,
-    "urdu": 2.40325
-  },
-  "6:3": {
-    "urdu": 8.46375
-  },
-  "6:4": {
-    "urdu": 6.13875
-  },
-  "6:5": {
-    "urdu": 9.5085
-  },
-  "65:1": {
-    "urdu": 35.13475
-  },
-  "43:22": {
-    "urdu": 6.687375
-  },
-  "43:23": {
-    "urdu": 13.58375
-  },
-  "11:95": {
-    "urdu": 7.706125
-  },
-  "11:96": {
-    "urdu": 3.89225
-  },
-  "11:97": {
-    "urdu": 6.818
-  },
-  "11:98": {
-    "urdu": 8.620375
-  },
-  "20:98": {
-    "urdu": 6.45225
-  },
-  "20:99": {
-    "urdu": 7.7845
-  },
-  "20:100": {
-    "urdu": 4.075125
-  },
-  "20:101": {
-    "urdu": 5.642375
-  },
-  "20:47": {
-    "urdu": 17.476
-  },
-  "20:48": {
-    "urdu": 5.6685
-  },
-  "38:77": {
-    "urdu": 3.13475
-  },
-  "38:78": {
-    "urdu": 3.552625
-  },
-  "38:79": {
-    "urdu": 4.911
-  },
-  "38:80": {
-    "urdu": 2.29875
-  },
-  "38:81": {
-    "urdu": 2.351125
-  },
-  "38:82": {
-    "urdu": 4.466875
-  },
-  "18:74": {
-    "urdu": 12.930625
-  },
-  "18:75": {
-    "urdu": 5.329
-  },
-  "18:76": {
-    "urdu": 11.755125
-  },
-  "41:33": {
-    "urdu": 8.097875
-  },
-  "41:34": {
-    "urdu": 15.41225
-  },
-  "29:8": {
-    "urdu": 22.857125
-  }
+  "arabic:alafasy:112:1": 2.916984,
+  "urdu:shamshad_ali_khan:112:1": 5.093875,
+  "arabic:alafasy:112:2": 2.485782,
+  "urdu:shamshad_ali_khan:112:2": 3.265375,
+  "arabic:alafasy:112:3": 2.916984,
+  "urdu:shamshad_ali_khan:112:3": 3.448125,
+  "arabic:alafasy:112:4": 4.804535,
+  "urdu:shamshad_ali_khan:112:4": 2.40325,
+  "arabic:alafasy:12:1": 11.588027,
+  "urdu:shamshad_ali_khan:12:1": 4.64975,
+  "arabic:alafasy:12:2": 13.983628,
+  "urdu:shamshad_ali_khan:12:2": 4.649875,
+  "arabic:alafasy:12:3": 21.226145,
+  "urdu:shamshad_ali_khan:12:3": 12.512625,
+  "arabic:alafasy:12:4": 18.960544,
+  "urdu:shamshad_ali_khan:12:4": 10.004875,
+  "arabic:alafasy:12:5": 21.820408,
+  "urdu:shamshad_ali_khan:12:5": 11.729,
+  "arabic:alafasy:12:6": 38.013946,
+  "urdu:shamshad_ali_khan:12:6": 22.491375,
+  "arabic:alafasy:12:7": 13.389365,
+  "urdu:shamshad_ali_khan:12:7": 5.48575,
+  "arabic:alafasy:12:8": 19.721927,
+  "urdu:shamshad_ali_khan:12:8": 11.57225,
+  "arabic:alafasy:12:9": 22.043265,
+  "urdu:shamshad_ali_khan:12:9": 10.71025,
+  "arabic:alafasy:12:10": 22.1361,
+  "urdu:shamshad_ali_khan:12:10": 12.408125,
+  "arabic:alafasy:12:11": 15.506417,
+  "urdu:shamshad_ali_khan:12:11": 10.5535,
+  "arabic:alafasy:12:12": 11.718027,
+  "urdu:shamshad_ali_khan:12:12": 7.601625,
+  "arabic:alafasy:12:13": 18.496281,
+  "urdu:shamshad_ali_khan:12:13": 13.165625,
+  "arabic:alafasy:12:14": 12.850839,
+  "urdu:shamshad_ali_khan:12:14": 9.587,
+  "arabic:alafasy:12:15": 26.073061,
+  "urdu:shamshad_ali_khan:12:15": 16.979625,
+  "arabic:alafasy:2:255": 51.917982,
+  "urdu:shamshad_ali_khan:2:255": 40.411375,
+  "arabic:alafasy:1:1": 6.031111,
+  "urdu:shamshad_ali_khan:1:1": 4.780375,
+  "arabic:alafasy:114:1": 6.070522,
+  "urdu:shamshad_ali_khan:114:1": 3.99675,
+  "arabic:alafasy:114:2": 5.211497,
+  "urdu:shamshad_ali_khan:114:2": 2.899625,
+  "arabic:alafasy:114:3": 5.292336,
+  "urdu:shamshad_ali_khan:114:3": 2.29875,
+  "arabic:alafasy:114:4": 7.9439,
+  "urdu:shamshad_ali_khan:114:4": 6.4,
+  "arabic:alafasy:114:5": 7.852268,
+  "urdu:shamshad_ali_khan:114:5": 3.422,
+  "arabic:alafasy:114:6": 8.191678,
+  "urdu:shamshad_ali_khan:114:6": 3.7355,
+  "arabic:alafasy:100:1": 3.229864,
+  "urdu:shamshad_ali_khan:100:1": 3.631,
+  "arabic:alafasy:100:2": 3.201156,
+  "urdu:shamshad_ali_khan:100:2": 2.8735,
+  "arabic:alafasy:100:3": 3.043265,
+  "urdu:shamshad_ali_khan:100:3": 2.19425,
+  "arabic:alafasy:100:4": 3.028912,
+  "urdu:shamshad_ali_khan:100:4": 2.298875,
+  "arabic:alafasy:100:5": 3.258571,
+  "urdu:shamshad_ali_khan:100:5": 2.795,
+  "arabic:alafasy:100:6": 7.622494,
+  "urdu:shamshad_ali_khan:100:6": 4.963375,
+  "arabic:alafasy:100:7": 6.718141,
+  "urdu:shamshad_ali_khan:100:7": 2.19425,
+  "arabic:alafasy:100:8": 7.062653,
+  "urdu:shamshad_ali_khan:100:8": 2.56,
+  "arabic:alafasy:15:1": 12.230544,
+  "urdu:shamshad_ali_khan:15:1": 7.575625,
+  "arabic:alafasy:15:15": 11.857982,
+  "urdu:shamshad_ali_khan:15:15": 5.8775,
+  "arabic:alafasy:15:16": 11.59737,
+  "urdu:shamshad_ali_khan:15:16": 5.38125,
+  "arabic:alafasy:15:17": 6.589841,
+  "urdu:shamshad_ali_khan:15:17": 3.84,
+  "arabic:alafasy:15:18": 8.321066,
+  "urdu:shamshad_ali_khan:15:18": 5.955875,
+  "arabic:alafasy:15:19": 16.735215,
+  "urdu:shamshad_ali_khan:15:19": 7.262125,
+  "arabic:alafasy:15:20": 9.214603,
+  "urdu:shamshad_ali_khan:15:20": 7.915,
+  "arabic:alafasy:113:1": 3.417574,
+  "urdu:shamshad_ali_khan:113:1": 3.7355,
+  "arabic:alafasy:113:2": 3.591814,
+  "urdu:shamshad_ali_khan:113:2": 3.187,
+  "arabic:alafasy:113:3": 4.988912,
+  "urdu:shamshad_ali_khan:113:3": 4.33625,
+  "arabic:alafasy:113:4": 5.964331,
+  "urdu:shamshad_ali_khan:113:4": 3.866125,
+  "arabic:alafasy:113:5": 5.603628,
+  "urdu:shamshad_ali_khan:113:5": 4.493125,
+  "arabic:alafasy:111:1": 7.343129,
+  "urdu:shamshad_ali_khan:111:1": 3.813875,
+  "arabic:alafasy:111:2": 7.112562,
+  "urdu:shamshad_ali_khan:111:2": 4.702125,
+  "arabic:alafasy:111:3": 5.117143,
+  "urdu:shamshad_ali_khan:111:3": 3.291375,
+  "arabic:alafasy:111:4": 5.533946,
+  "urdu:shamshad_ali_khan:111:4": 3.709375,
+  "arabic:alafasy:111:5": 6.389048,
+  "urdu:shamshad_ali_khan:111:5": 2.40325,
+  "arabic:alafasy:110:1": 6.876531,
+  "urdu:shamshad_ali_khan:110:1": 3.918375,
+  "arabic:alafasy:110:2": 8.134331,
+  "urdu:shamshad_ali_khan:110:2": 5.59025,
+  "arabic:alafasy:110:3": 9.994694,
+  "urdu:shamshad_ali_khan:110:3": 8.04575,
+  "arabic:alafasy:109:1": 7.461111,
+  "urdu:shamshad_ali_khan:109:1": 8.124125,
+  "arabic:alafasy:109:2": 7.40449,
+  "urdu:shamshad_ali_khan:109:2": 3.631,
+  "arabic:alafasy:109:3": 8.174376,
+  "urdu:shamshad_ali_khan:109:3": 4.780375,
+  "arabic:alafasy:109:4": 6.600635,
+  "urdu:shamshad_ali_khan:109:4": 6.896375,
+  "arabic:alafasy:109:5": 8.378186,
+  "urdu:shamshad_ali_khan:109:5": 5.12,
+  "urdu:shamshad_ali_khan:109:6": 3.187,
+  "arabic:alafasy:108:1": 6.65907,
+  "urdu:shamshad_ali_khan:108:1": 6.582875,
+  "arabic:alafasy:108:2": 3.504331,
+  "urdu:shamshad_ali_khan:108:2": 4.85875,
+  "arabic:alafasy:108:3": 5.1922,
+  "urdu:shamshad_ali_khan:108:3": 4.179625,
+  "urdu:shamshad_ali_khan:106:1": 2.298875,
+  "urdu:shamshad_ali_khan:106:2": 3.892125,
+  "urdu:shamshad_ali_khan:106:3": 4.5715,
+  "urdu:shamshad_ali_khan:106:4": 4.44075,
+  "urdu:shamshad_ali_khan:1:2": 5.982,
+  "urdu:shamshad_ali_khan:1:3": 2.795125,
+  "urdu:shamshad_ali_khan:1:4": 2.011375,
+  "urdu:shamshad_ali_khan:1:5": 4.9895,
+  "urdu:shamshad_ali_khan:1:6": 1.8285,
+  "urdu:shamshad_ali_khan:1:7": 7.862875,
+  "arabic:alafasy:105:1": 7.890544,
+  "urdu:shamshad_ali_khan:105:1": 5.198375,
+  "arabic:alafasy:105:2": 6.208458,
+  "urdu:shamshad_ali_khan:105:2": 3.369875,
+  "arabic:alafasy:105:3": 6.850703,
+  "urdu:shamshad_ali_khan:105:3": 3.030125,
+  "arabic:alafasy:105:4": 9.277007,
+  "urdu:shamshad_ali_khan:105:4": 2.6645,
+  "arabic:alafasy:105:5": 8.992041,
+  "urdu:shamshad_ali_khan:105:5": 3.056375,
+  "arabic:alafasy:90:1": 5.695125,
+  "urdu:shamshad_ali_khan:90:1": 2.298875,
+  "arabic:alafasy:90:2": 5.647075,
+  "urdu:shamshad_ali_khan:90:2": 2.142,
+  "arabic:alafasy:90:3": 3.772721,
+  "urdu:shamshad_ali_khan:90:3": 3.5265,
+  "arabic:alafasy:90:4": 5.358707,
+  "urdu:shamshad_ali_khan:90:4": 3.761625,
+  "arabic:alafasy:90:5": 5.430794,
+  "urdu:shamshad_ali_khan:90:5": 3.68325,
+  "arabic:alafasy:90:6": 4.349433,
+  "urdu:shamshad_ali_khan:90:6": 3.187,
+  "arabic:alafasy:90:7": 5.262585,
+  "urdu:shamshad_ali_khan:90:7": 3.26525,
+  "arabic:alafasy:90:8": 5.526916,
+  "urdu:shamshad_ali_khan:90:8": 2.40325,
+  "urdu:shamshad_ali_khan:90:9": 2.533875,
+  "urdu:shamshad_ali_khan:90:10": 4.911125,
+  "urdu:shamshad_ali_khan:90:11": 2.50775,
+  "urdu:shamshad_ali_khan:90:12": 2.61225,
+  "urdu:shamshad_ali_khan:90:13": 2.011375,
+  "urdu:shamshad_ali_khan:90:14": 2.142,
+  "urdu:shamshad_ali_khan:90:15": 1.54125,
+  "urdu:shamshad_ali_khan:90:16": 1.985375,
+  "urdu:shamshad_ali_khan:5:110": 49.319125,
+  "urdu:shamshad_ali_khan:10:67": 13.1135,
+  "urdu:shamshad_ali_khan:10:68": 22.491375,
+  "urdu:shamshad_ali_khan:47:33": 6.89625,
+  "urdu:shamshad_ali_khan:47:34": 7.444875,
+  "urdu:shamshad_ali_khan:47:35": 11.57225,
+  "urdu:shamshad_ali_khan:34:51": 7.706125,
+  "urdu:shamshad_ali_khan:34:52": 7.392625,
+  "urdu:shamshad_ali_khan:34:53": 6.24325,
+  "urdu:shamshad_ali_khan:23:52": 7.131375,
+  "urdu:shamshad_ali_khan:23:53": 8.69875,
+  "urdu:shamshad_ali_khan:23:54": 3.474375,
+  "urdu:shamshad_ali_khan:23:55": 5.982,
+  "urdu:shamshad_ali_khan:26:65": 3.3175,
+  "urdu:shamshad_ali_khan:26:66": 2.116,
+  "urdu:shamshad_ali_khan:26:67": 4.832625,
+  "urdu:shamshad_ali_khan:26:68": 3.47425,
+  "urdu:shamshad_ali_khan:26:69": 2.769,
+  "urdu:shamshad_ali_khan:26:70": 5.198375,
+  "arabic:alafasy:18:1": 11.116961,
+  "urdu:shamshad_ali_khan:18:1": 9.848125,
+  "arabic:alafasy:18:2": 20.731043,
+  "urdu:shamshad_ali_khan:18:2": 13.37475,
+  "arabic:alafasy:18:3": 3.191859,
+  "urdu:shamshad_ali_khan:18:3": 2.2465,
+  "arabic:alafasy:18:4": 6.047483,
+  "urdu:shamshad_ali_khan:18:4": 4.284125,
+  "arabic:alafasy:18:5": 17.710499,
+  "urdu:shamshad_ali_khan:18:5": 10.318375,
+  "arabic:alafasy:18:6": 11.759002,
+  "urdu:shamshad_ali_khan:18:6": 8.2285,
+  "arabic:alafasy:18:7": 10.271134,
+  "urdu:shamshad_ali_khan:18:7": 8.15025,
+  "arabic:alafasy:18:8": 7.727347,
+  "urdu:shamshad_ali_khan:18:8": 4.257875,
+  "arabic:alafasy:18:9": 9.455193,
+  "urdu:shamshad_ali_khan:18:9": 4.702125,
+  "arabic:alafasy:18:10": 23.326032,
+  "urdu:shamshad_ali_khan:18:10": 9.56075,
+  "urdu:shamshad_ali_khan:88:2": 2.4555,
+  "urdu:shamshad_ali_khan:88:3": 2.56,
+  "urdu:shamshad_ali_khan:88:4": 2.2465,
+  "urdu:shamshad_ali_khan:88:5": 3.291375,
+  "urdu:shamshad_ali_khan:88:6": 3.99675,
+  "urdu:shamshad_ali_khan:88:7": 3.004125,
+  "urdu:shamshad_ali_khan:88:8": 3.13475,
+  "urdu:shamshad_ali_khan:18:44": 7.758375,
+  "urdu:shamshad_ali_khan:18:45": 17.21475,
+  "urdu:shamshad_ali_khan:3:77": 18.494625,
+  "urdu:shamshad_ali_khan:3:78": 23.902125,
+  "urdu:shamshad_ali_khan:3:146": 19.330625,
+  "urdu:shamshad_ali_khan:3:147": 14.445625,
+  "urdu:shamshad_ali_khan:7:150": 38.66125,
+  "urdu:shamshad_ali_khan:53:43": 2.6645,
+  "urdu:shamshad_ali_khan:53:44": 2.71675,
+  "urdu:shamshad_ali_khan:53:45": 4.205625,
+  "urdu:shamshad_ali_khan:53:46": 2.586125,
+  "urdu:shamshad_ali_khan:53:47": 3.78775,
+  "urdu:shamshad_ali_khan:53:48": 3.605,
+  "urdu:shamshad_ali_khan:53:49": 2.50775,
+  "urdu:shamshad_ali_khan:7:92": 12.19925,
+  "urdu:shamshad_ali_khan:7:93": 14.759125,
+  "urdu:shamshad_ali_khan:92:5": 3.57875,
+  "urdu:shamshad_ali_khan:92:6": 2.50775,
+  "urdu:shamshad_ali_khan:92:7": 2.899625,
+  "urdu:shamshad_ali_khan:92:8": 3.004,
+  "urdu:shamshad_ali_khan:92:9": 1.880875,
+  "urdu:shamshad_ali_khan:92:10": 2.220375,
+  "urdu:shamshad_ali_khan:92:11": 4.884875,
+  "urdu:shamshad_ali_khan:33:39": 9.247375,
+  "urdu:shamshad_ali_khan:33:40": 14.628625,
+  "urdu:shamshad_ali_khan:40:55": 10.109375,
+  "urdu:shamshad_ali_khan:40:56": 16.822875,
+  "arabic:alafasy:21:1": 10.11415,
+  "urdu:shamshad_ali_khan:21:1": 6.844,
+  "arabic:alafasy:21:2": 13.016485,
+  "urdu:shamshad_ali_khan:21:2": 7.3405,
+  "arabic:alafasy:71:3": 5.683243,
+  "urdu:shamshad_ali_khan:71:3": 3.578875,
+  "arabic:alafasy:71:4": 22.313379,
+  "urdu:shamshad_ali_khan:71:4": 10.422875,
+  "arabic:alafasy:55:31": 6.491202,
+  "urdu:shamshad_ali_khan:55:31": 3.604875,
+  "arabic:alafasy:55:32": 8.751882,
+  "urdu:shamshad_ali_khan:55:32": 3.89225,
+  "arabic:alafasy:9:48": 26.636009,
+  "urdu:shamshad_ali_khan:9:48": 12.016375,
+  "arabic:alafasy:14:27": 26.794807,
+  "urdu:shamshad_ali_khan:14:27": 11.937875,
+  "arabic:alafasy:57:20": 57.045351,
+  "urdu:shamshad_ali_khan:57:20": 34.795,
+  "arabic:alafasy:55:13": 9.584785,
+  "urdu:shamshad_ali_khan:55:13": 5.302875,
+  "arabic:alafasy:55:14": 10.867143,
+  "urdu:shamshad_ali_khan:55:14": 3.631,
+  "arabic:alafasy:3:35": 21.142404,
+  "urdu:shamshad_ali_khan:3:35": 16.352625,
+  "arabic:alafasy:55:4": 4.878322,
+  "urdu:shamshad_ali_khan:55:4": 1.880875,
+  "arabic:alafasy:55:5": 6.266463,
+  "urdu:shamshad_ali_khan:55:5": 3.3175,
+  "arabic:alafasy:55:6": 6.332562,
+  "urdu:shamshad_ali_khan:55:6": 2.40325,
+  "urdu:shamshad_ali_khan:6:3": 8.46375,
+  "urdu:shamshad_ali_khan:6:4": 6.13875,
+  "urdu:shamshad_ali_khan:6:5": 9.5085,
+  "urdu:shamshad_ali_khan:65:1": 35.13475,
+  "urdu:shamshad_ali_khan:43:22": 6.687375,
+  "urdu:shamshad_ali_khan:43:23": 13.58375,
+  "urdu:shamshad_ali_khan:11:95": 7.706125,
+  "urdu:shamshad_ali_khan:11:96": 3.89225,
+  "urdu:shamshad_ali_khan:11:97": 6.818,
+  "urdu:shamshad_ali_khan:11:98": 8.620375,
+  "urdu:shamshad_ali_khan:20:98": 6.45225,
+  "urdu:shamshad_ali_khan:20:99": 7.7845,
+  "urdu:shamshad_ali_khan:20:100": 4.075125,
+  "urdu:shamshad_ali_khan:20:101": 5.642375,
+  "urdu:shamshad_ali_khan:20:47": 17.476,
+  "urdu:shamshad_ali_khan:20:48": 5.6685,
+  "urdu:shamshad_ali_khan:38:77": 3.13475,
+  "urdu:shamshad_ali_khan:38:78": 3.552625,
+  "urdu:shamshad_ali_khan:38:79": 4.911,
+  "urdu:shamshad_ali_khan:38:80": 2.29875,
+  "urdu:shamshad_ali_khan:38:81": 2.351125,
+  "urdu:shamshad_ali_khan:38:82": 4.466875,
+  "urdu:shamshad_ali_khan:18:74": 12.930625,
+  "urdu:shamshad_ali_khan:18:75": 5.329,
+  "urdu:shamshad_ali_khan:18:76": 11.755125,
+  "urdu:shamshad_ali_khan:41:33": 8.097875,
+  "urdu:shamshad_ali_khan:41:34": 15.41225,
+  "urdu:shamshad_ali_khan:29:8": 22.857125
 }

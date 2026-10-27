@@ -55,6 +55,13 @@ CACHE_DIR = Path(os.getenv("CACHE_DIR", BASE_DIR / "cache"))
 VIDEO_URL_SECRET = os.getenv("VIDEO_URL_SECRET") or secrets.token_urlsafe(32)
 VIDEO_URL_TTL_SECONDS = 10 * 60
 VIDEO_FILENAME_PATTERN = re.compile(r"[A-Za-z0-9_.-]+\.mp4\Z")
+RECITERS_PATH = BASE_DIR / "data" / "reciters.json"
+RECITER_CONFIG = json.loads(RECITERS_PATH.read_text(encoding="utf-8"))
+RECITERS_BY_ID = {
+    item["id"]: item for item in RECITER_CONFIG["reciters"]
+}
+DEFAULT_ARABIC_RECITER_ID = RECITER_CONFIG["defaults"]["ar"]
+DEFAULT_URDU_VOICE_ID = RECITER_CONFIG["defaults"]["ur"]
 ADMIN_CONTENT_FILE = BASE_DIR / "data" / "admin_content.json"
 ADMIN_AUDIO_DIR = BASE_DIR / "audio" / "admin"
 MAX_BACKGROUND_BYTES = 50 * 1024 * 1024
@@ -122,6 +129,8 @@ class GenerateRequest(BaseModel):
     max_duration: int = 60
     quality: str = "high"
     content_mode: str = "full"
+    reciter_id: Optional[str] = None
+    urdu_voice_id: Optional[str] = None
     styles: Any = Field(default_factory=dict)
     music: Optional[str] = None  # Background music filename (e.g. "soft_tone.mp3")
 
@@ -490,6 +499,34 @@ def generate_ayah_image(req: GenerateImageRequest, user=Depends(get_current_user
 @app.api_route("/api/health", methods=["GET", "HEAD"])
 def health_check():
     return {"status": "online", "system": "Noor ul Quran Engine"}
+
+@app.get("/api/reciters")
+def list_reciters():
+    return {
+        "defaults": {
+            "ar": DEFAULT_ARABIC_RECITER_ID,
+            "ur": DEFAULT_URDU_VOICE_ID,
+        },
+        "reciters": [
+            {
+                "id": item["id"],
+                "display_name": item["display_name"],
+                "language": item["language"],
+            }
+            for item in RECITER_CONFIG["reciters"]
+        ],
+    }
+
+
+def _validate_reciter_id(reciter_id, language, default_id):
+    selected_id = reciter_id or default_id
+    reciter = RECITERS_BY_ID.get(selected_id)
+    if reciter is None or reciter["language"] != language:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown {'Arabic reciter' if language == 'ar' else 'Urdu voice'} id.",
+        )
+    return selected_id
 
 
 # Background music ki files list karne ke liye endpoint:
@@ -959,6 +996,8 @@ def estimate_reel(
     end: Optional[str] = None,
     mode: Optional[str] = None,
     length_limit: Optional[str] = "60",
+    reciter_id: Optional[str] = None,
+    urdu_voice_id: Optional[str] = None,
     user=Depends(get_current_user),
 ):
     try:
@@ -972,6 +1011,15 @@ def estimate_reel(
         raise HTTPException(status_code=400, detail="Start ayah must not exceed end ayah.")
     if mode not in {"full", "urdu_only", "arabic_only"}:
         raise HTTPException(status_code=400, detail="Mode must be full, urdu_only, or arabic_only.")
+    reciter_id = _validate_reciter_id(
+        reciter_id, "ar", DEFAULT_ARABIC_RECITER_ID
+    )
+    if mode == "arabic_only":
+        urdu_voice_id = DEFAULT_URDU_VOICE_ID
+    else:
+        urdu_voice_id = _validate_reciter_id(
+            urdu_voice_id, "ur", DEFAULT_URDU_VOICE_ID
+        )
     if not 30 <= selected_length <= 180:
         raise HTTPException(status_code=400, detail="Length must be between 30 and 180 seconds.")
     _validate_verse(surah_number, start_ayah)
@@ -986,6 +1034,9 @@ def estimate_reel(
             end_ayah,
             selected_length,
             mode,
+            None,
+            reciter_id,
+            urdu_voice_id,
         )
     except (OSError, RuntimeError, requests.RequestException) as exc:
         raise HTTPException(status_code=502, detail="Ayah audio durations could not be measured.") from exc
@@ -1319,6 +1370,15 @@ def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
             status_code=400,
             detail="Background music is not available in Arabic-only mode.",
         )
+    reciter_id = _validate_reciter_id(
+        req.reciter_id, "ar", DEFAULT_ARABIC_RECITER_ID
+    )
+    if req.content_mode == "arabic_only":
+        urdu_voice_id = DEFAULT_URDU_VOICE_ID
+    else:
+        urdu_voice_id = _validate_reciter_id(
+            req.urdu_voice_id, "ur", DEFAULT_URDU_VOICE_ID
+        )
     music_filename = _validate_music_filename(req.music) if req.music is not None else None
     if req.mode == "pick":
         verse_match = re.fullmatch(
@@ -1359,6 +1419,9 @@ def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
         cmd.append("--urdu-only")
     elif req.content_mode == "arabic_only":
         cmd.append("--arabic-only")
+    cmd.extend(["--reciter", reciter_id])
+    if req.content_mode != "arabic_only":
+        cmd.extend(["--urdu-voice", urdu_voice_id])
 
     # Background music argument agar select kiya gaya ho (yeh ab bilkul theek jagah par hai):
     if music_filename is not None:

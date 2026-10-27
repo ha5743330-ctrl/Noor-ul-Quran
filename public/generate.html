@@ -101,6 +101,22 @@
                         <p dir="rtl" lang="ur" class="mt-2 text-right text-sm text-slate-300">صرف اردو یا عربی تلاوت کے ساتھ عربی متن اور انگریزی ترجمے کے لیے اختیار منتخب کریں۔</p>
                     </div>
 
+                    <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <div>
+                            <label for="input-reciter" class="mb-1.5 block text-sm font-semibold text-slate-200">Arabic reciter</label>
+                            <select id="input-reciter" class="control">
+                                <option value="alafasy">Mishary Rashid Alafasy</option>
+                            </select>
+                        </div>
+                        <div id="urdu-voice-control">
+                            <label for="input-urdu-voice" class="mb-1.5 block text-sm font-semibold text-slate-200">Urdu voice</label>
+                            <select id="input-urdu-voice" class="control">
+                                <option value="shamshad_ali_khan">Shamshad Ali Khan (Urdu)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <p id="reciter-load-status" class="mt-2 hidden text-xs text-red-300" role="status"></p>
+
                     <div id="mode-pick" class="mt-5 space-y-4">
                         <div>
                             <p class="mb-3 text-sm font-semibold text-slate-200">Surah aur ayat select karein</p>

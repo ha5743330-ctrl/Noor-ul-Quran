@@ -215,6 +215,8 @@ def test_free_user_is_gated_from_picks_random_and_long_videos(client):
         {"mode": "pick", "verse": "1:1", "music": ""},
         {"mode": "pick", "verse": "1:1", "music": "not-listed.mp3"},
         {"mode": "pick", "verse": "1:1", "music": "bad\x00name.mp3"},
+        {"mode": "pick", "verse": "1:1", "reciter_id": "unknown"},
+        {"mode": "pick", "verse": "1:1", "urdu_voice_id": "unknown"},
     ],
 )
 def test_invalid_generation_requests_are_rejected(client, payload):
@@ -253,6 +255,45 @@ def test_generation_selects_renderer_flag_for_each_content_mode(
     command = captured["args"][2]
     assert command.count("--urdu-only") == int(expected_flag == "--urdu-only")
     assert command.count("--arabic-only") == int(expected_flag == "--arabic-only")
+    assert command[command.index("--reciter") + 1] == "alafasy"
+    if content_mode != "arabic_only":
+        assert command[command.index("--urdu-voice") + 1] == "shamshad_ali_khan"
+
+
+def test_arabic_only_ignores_invalid_urdu_voice(client, monkeypatch):
+    monkeypatch.setattr(main, "RAQM_AVAILABLE", True)
+    captured = {}
+
+    class Executor:
+        def submit(self, *args):
+            captured["args"] = args
+
+    monkeypatch.setattr(main, "GENERATION_EXECUTOR", Executor())
+    response = client.post(
+        "/api/generate",
+        json={
+            "mode": "pick",
+            "verse": "1:1",
+            "content_mode": "arabic_only",
+            "urdu_voice_id": "not-a-voice",
+        },
+    )
+
+    assert response.status_code == 202
+    command = captured["args"][2]
+    assert "--urdu-voice" not in command
+
+
+def test_reciters_endpoint_returns_choices_and_defaults(client):
+    response = client.get("/api/reciters")
+
+    assert response.status_code == 200
+    assert response.json()["defaults"] == {
+        "ar": "alafasy",
+        "ur": "shamshad_ali_khan",
+    }
+    assert len([r for r in response.json()["reciters"] if r["language"] == "ar"]) == 5
+    assert len([r for r in response.json()["reciters"] if r["language"] == "ur"]) == 1
 
 
 def test_arabic_only_duration_estimate_uses_arabic_audio(client, monkeypatch):
@@ -299,7 +340,7 @@ def test_duration_planner_uses_audio_for_selected_content_mode(
     measured_kinds = []
     monkeypatch.setattr(make, "cached_ayah_duration", lambda *args: None)
 
-    def measure_audio(surah, ayah, kind):
+    def measure_audio(surah, ayah, kind, reciter_id=None):
         measured_kinds.append(kind)
         return {"arabic": 7, "urdu": 5}[kind]
 
@@ -315,7 +356,7 @@ def test_arabic_only_reel_uses_english_text_without_urdu_audio(monkeypatch):
     fetched_audio = []
     monkeypatch.setattr(make, "_clip_cache", {})
 
-    def fetch_audio(kind, surah, ayah):
+    def fetch_audio(kind, surah, ayah, reciter_id=None):
         fetched_audio.append(kind)
         return f"{kind}.mp3"
 
@@ -357,6 +398,22 @@ def test_arabic_only_reel_uses_english_text_without_urdu_audio(monkeypatch):
 
     assert plan["items"][0]["english"] == "All praise is due to Allah."
     assert plan["items"][0]["text"] == ""
+
+
+def test_audio_cache_paths_and_durations_are_reciter_specific(monkeypatch, tmp_path):
+    monkeypatch.setattr(make, "DURATION_CACHE_FILE", tmp_path / "durations.json")
+    monkeypatch.setattr(make, "_duration_cache", None)
+    alafasy_path = make.audio_cache_path("arabic", 112, 1, "alafasy")
+    husary_path = make.audio_cache_path("arabic", 112, 1, "husary")
+    assert alafasy_path != husary_path
+    assert alafasy_path.parts[-3:] == ("ar", "alafasy", "112001.mp3")
+    assert husary_path.parts[-3:] == ("ar", "husary", "112001.mp3")
+
+    make.save_ayah_duration(112, 1, "arabic", 2.5, "alafasy")
+    make.save_ayah_duration(112, 1, "arabic", 3.75, "husary")
+
+    assert make.cached_ayah_duration(112, 1, "arabic", "alafasy") == 2.5
+    assert make.cached_ayah_duration(112, 1, "arabic", "husary") == 3.75
 
 
 def test_bilingual_video_frame_attributes_pickthall_translation(monkeypatch, tmp_path):

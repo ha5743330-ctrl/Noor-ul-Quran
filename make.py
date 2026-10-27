@@ -46,8 +46,13 @@ NORMALIZE_AUDIO = True
 FFMPEG_CODEC_THREADS = ("-threads", "1")
 FFMPEG_FILTER_THREADS = ("-filter_threads", "1", "-filter_complex_threads", "1")
 BASE_URL = "https://everyayah.com/data/"
-ARABIC_FOLDER = "Alafasy_128kbps"
-URDU_FOLDER = "translations/urdu_shamshad_ali_khan_46kbps"
+RECITERS_PATH = Path(__file__).parent / "data" / "reciters.json"
+RECITER_CONFIG = json.loads(RECITERS_PATH.read_text(encoding="utf-8"))
+RECITERS_BY_ID = {reciter["id"]: reciter for reciter in RECITER_CONFIG["reciters"]}
+DEFAULT_ARABIC_RECITER_ID = RECITER_CONFIG["defaults"]["ar"]
+DEFAULT_URDU_VOICE_ID = RECITER_CONFIG["defaults"]["ur"]
+CURRENT_RECITER_ID = DEFAULT_ARABIC_RECITER_ID
+CURRENT_URDU_VOICE_ID = DEFAULT_URDU_VOICE_ID
 BISMILLAH = "بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ"
 # --------------------------------------------------
 ROOT = Path(__file__).parent
@@ -80,6 +85,9 @@ def dur(path):
                        capture_output=True, text=True, check=True)
     return float(r.stdout.strip())
 
+def _duration_key(kind, reciter_id, surah, ayah):
+    return f"{kind}:{reciter_id}:{surah}:{ayah}"
+
 def _read_duration_cache():
     try:
         raw = json.loads(DURATION_CACHE_FILE.read_text(encoding="utf-8"))
@@ -87,17 +95,23 @@ def _read_duration_cache():
         return {}
     if not isinstance(raw, dict):
         return {}
-    return {
-        key: {
-            kind: float(value[kind])
-            for kind in ("arabic", "urdu")
-            if isinstance(value, dict)
-            and isinstance(value.get(kind), (int, float))
-            and value[kind] > 0
-        }
-        for key, value in raw.items()
-        if isinstance(key, str) and isinstance(value, dict)
-    }
+    cache = {}
+    for key, value in raw.items():
+        if not isinstance(key, str):
+            continue
+        if ":" in key and isinstance(value, (int, float)) and value > 0:
+            cache[key] = float(value)
+            continue
+        if re.fullmatch(r"\d+:\d+", key) and isinstance(value, dict):
+            surah, ayah = key.split(":")
+            for kind, reciter_id in (
+                ("arabic", DEFAULT_ARABIC_RECITER_ID),
+                ("urdu", DEFAULT_URDU_VOICE_ID),
+            ):
+                seconds = value.get(kind)
+                if isinstance(seconds, (int, float)) and seconds > 0:
+                    cache[_duration_key(kind, reciter_id, surah, ayah)] = float(seconds)
+    return cache
 
 def load_duration_cache():
     global _duration_cache
@@ -106,17 +120,16 @@ def load_duration_cache():
             _duration_cache = _read_duration_cache()
         return _duration_cache
 
-def save_ayah_duration(surah, ayah, kind, seconds):
+def save_ayah_duration(surah, ayah, kind, seconds, reciter_id=None):
     global _duration_cache
     if kind not in {"arabic", "urdu"} or seconds <= 0:
         raise ValueError("Invalid ayah audio duration.")
+    reciter_id = resolve_reciter_id(kind, reciter_id)
     with _duration_cache_lock:
         cache = _read_duration_cache()
         if _duration_cache:
-            for key, values in _duration_cache.items():
-                cache.setdefault(key, {}).update(values)
-        entry = cache.setdefault(f"{surah}:{ayah}", {})
-        entry[kind] = round(float(seconds), 6)
+            cache.update(_duration_cache)
+        cache[_duration_key(kind, reciter_id, surah, ayah)] = round(float(seconds), 6)
         DURATION_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
         temp_path = DURATION_CACHE_FILE.with_name(
             f"{DURATION_CACHE_FILE.stem}.{os.getpid()}.{get_ident()}.tmp"
@@ -125,18 +138,14 @@ def save_ayah_duration(surah, ayah, kind, seconds):
         temp_path.replace(DURATION_CACHE_FILE)
         _duration_cache = cache
 
-def invalidate_ayah_duration(surah, ayah, kind):
+def invalidate_ayah_duration(surah, ayah, kind, reciter_id=None):
     global _duration_cache
+    reciter_id = resolve_reciter_id(kind, reciter_id)
     with _duration_cache_lock:
         cache = _read_duration_cache()
         if _duration_cache:
-            for key, values in _duration_cache.items():
-                cache.setdefault(key, {}).update(values)
-        entry = cache.get(f"{surah}:{ayah}")
-        if entry:
-            entry.pop(kind, None)
-            if not entry:
-                cache.pop(f"{surah}:{ayah}", None)
+            cache.update(_duration_cache)
+        cache.pop(_duration_key(kind, reciter_id, surah, ayah), None)
         DURATION_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
         temp_path = DURATION_CACHE_FILE.with_name(
             f"{DURATION_CACHE_FILE.stem}.{os.getpid()}.{get_ident()}.tmp"
@@ -144,17 +153,38 @@ def invalidate_ayah_duration(surah, ayah, kind):
         temp_path.write_text(json.dumps(cache, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         temp_path.replace(DURATION_CACHE_FILE)
         _duration_cache = cache
-        for content_mode in ("full", "urdu_only", "arabic_only"):
-            _clip_cache.pop((surah, ayah, content_mode), None)
+        for key in list(_clip_cache):
+            if key[:2] == (surah, ayah):
+                _clip_cache.pop(key, None)
 
-def cached_ayah_duration(surah, ayah, kind):
-    return load_duration_cache().get(f"{surah}:{ayah}", {}).get(kind)
+def resolve_reciter_id(kind, reciter_id=None):
+    if kind not in {"arabic", "urdu"}:
+        raise ValueError("Audio kind must be arabic or urdu.")
+    selected = reciter_id or (
+        CURRENT_RECITER_ID if kind == "arabic" else CURRENT_URDU_VOICE_ID
+    )
+    reciter = RECITERS_BY_ID.get(selected)
+    expected_language = "ar" if kind == "arabic" else "ur"
+    if reciter is None or reciter["language"] != expected_language:
+        raise ValueError(f"Unknown {expected_language} audio reciter: {selected}")
+    return selected
 
-def measure_ayah_audio(surah, ayah, kind):
-    audio_path = fetch_ayah(kind, surah, ayah)
+def audio_cache_path(kind, surah, ayah, reciter_id=None):
+    reciter_id = resolve_reciter_id(kind, reciter_id)
+    language = "ar" if kind == "arabic" else "ur"
+    return ROOT / "audio" / language / reciter_id / f"{surah:03d}{ayah:03d}.mp3"
+
+def cached_ayah_duration(surah, ayah, kind, reciter_id=None):
+    reciter_id = resolve_reciter_id(kind, reciter_id)
+    return load_duration_cache().get(
+        _duration_key(kind, reciter_id, surah, ayah)
+    )
+
+def measure_ayah_audio(surah, ayah, kind, reciter_id=None):
+    audio_path = fetch_ayah(kind, surah, ayah, reciter_id)
     if audio_path is None:
         return None
-    return cached_ayah_duration(surah, ayah, kind)
+    return cached_ayah_duration(surah, ayah, kind, reciter_id)
 
 def detect_hardware_encoder():
     global _hardware_encoder
@@ -383,7 +413,8 @@ def admin_content():
             _admin_content = {"verses": {}}
     return _admin_content
 
-def fetch_ayah(kind, s, a):
+def fetch_ayah(kind, s, a, reciter_id=None):
+    reciter_id = resolve_reciter_id(kind, reciter_id)
     verse = admin_content()["verses"].get(f"{s}:{a}", {})
     custom_extension = verse.get("audio", {}).get(kind)
     if custom_extension:
@@ -392,9 +423,9 @@ def fetch_ayah(kind, s, a):
             return None
         audio_path = custom_path
     else:
-        audio_path = ROOT / "audio" / kind / f"{s:03d}{a:03d}.mp3"
+        audio_path = audio_cache_path(kind, s, a, reciter_id)
         if not audio_path.exists() or audio_path.stat().st_size <= 1000:
-            folder = ARABIC_FOLDER if kind == "arabic" else URDU_FOLDER
+            folder = RECITERS_BY_ID[reciter_id]["folder"]
             url = f"{BASE_URL}{folder}/{s:03d}{a:03d}.mp3"
             audio_path.parent.mkdir(parents=True, exist_ok=True)
             for _ in range(3):
@@ -410,24 +441,26 @@ def fetch_ayah(kind, s, a):
             else:
                 return None
 
-    if cached_ayah_duration(s, a, kind) is None:
-        save_ayah_duration(s, a, kind, dur(audio_path))
+    if cached_ayah_duration(s, a, kind, reciter_id) is None:
+        save_ayah_duration(s, a, kind, dur(audio_path), reciter_id)
     return audio_path
 
 _clip_cache = {}
-def ayah_clip(s, a, content_mode=None):
+def ayah_clip(s, a, content_mode=None, reciter_id=None, urdu_voice_id=None):
     content_mode = content_mode or (
         CONTENT_MODE if CONTENT_MODE == "arabic_only"
         else "full" if INCLUDE_ARABIC_AUDIO else "urdu_only"
     )
-    cache_key = (s, a, content_mode)
+    reciter_id = resolve_reciter_id("arabic", reciter_id)
+    urdu_voice_id = resolve_reciter_id("urdu", urdu_voice_id)
+    cache_key = (s, a, content_mode, reciter_id, urdu_voice_id)
     if cache_key in _clip_cache: return _clip_cache[cache_key]
     if content_mode == "arabic_only":
-        ar = fetch_ayah("arabic", s, a)
+        ar = fetch_ayah("arabic", s, a, reciter_id)
         if ar is None:
             c = None
         else:
-            da = cached_ayah_duration(s, a, "arabic")
+            da = cached_ayah_duration(s, a, "arabic", reciter_id)
             c = {
                 "segs": [(str(ar), da, 0.0)],
                 "ar_dur": da,
@@ -438,14 +471,14 @@ def ayah_clip(s, a, content_mode=None):
         _clip_cache[cache_key] = c
         return c
     include_arabic = content_mode == "full"
-    ur = fetch_ayah("urdu", s, a)
-    ar = fetch_ayah("arabic", s, a) if include_arabic else None
+    ur = fetch_ayah("urdu", s, a, urdu_voice_id)
+    ar = fetch_ayah("arabic", s, a, reciter_id) if include_arabic else None
     if ur is None or (include_arabic and ar is None):
         c = None
     else:
         segs, u0 = [], 0.0
-        da = cached_ayah_duration(s, a, "arabic") if ar else 0.0
-        du = cached_ayah_duration(s, a, "urdu")
+        da = cached_ayah_duration(s, a, "arabic", reciter_id) if ar else 0.0
+        du = cached_ayah_duration(s, a, "urdu", urdu_voice_id)
         if ar:
             segs.append((str(ar), da, GAP_AFTER_ARABIC))
             u0 = da + GAP_AFTER_ARABIC
@@ -822,7 +855,16 @@ def render_ayah_image(arabic_text, english_text, reference, background_path, out
     )
     image.convert("RGB").save(output_path, format="PNG", optimize=True)
 
-def plan_duration(s, start, end, length_limit, content_mode, Q=None):
+def plan_duration(
+    s,
+    start,
+    end,
+    length_limit,
+    content_mode,
+    Q=None,
+    reciter_id=None,
+    urdu_voice_id=None,
+):
     if content_mode not in {"full", "urdu_only", "arabic_only"}:
         raise ValueError("Content mode must be full, urdu_only, or arabic_only.")
     if Q is None:
@@ -834,18 +876,21 @@ def plan_duration(s, start, end, length_limit, content_mode, Q=None):
     if not 1 <= start <= end <= verse_count:
         raise ValueError(f"Ayah range must be between 1 and {verse_count} for this surah.")
     length_limit = min(max(float(length_limit), 1.0), 180.0)
+    reciter_id = resolve_reciter_id("arabic", reciter_id)
+    urdu_voice_id = resolve_reciter_id("urdu", urdu_voice_id)
 
     items = []
     for ayah in range(start, end + 1):
         audio_kind = "arabic" if content_mode == "arabic_only" else "urdu"
-        audio_seconds = cached_ayah_duration(s, ayah, audio_kind)
+        audio_reciter_id = reciter_id if audio_kind == "arabic" else urdu_voice_id
+        audio_seconds = cached_ayah_duration(s, ayah, audio_kind, audio_reciter_id)
         if audio_seconds is None:
-            audio_seconds = measure_ayah_audio(s, ayah, audio_kind)
+            audio_seconds = measure_ayah_audio(s, ayah, audio_kind, audio_reciter_id)
         arabic_seconds = 0.0
         if content_mode == "full":
-            arabic_seconds = cached_ayah_duration(s, ayah, "arabic")
+            arabic_seconds = cached_ayah_duration(s, ayah, "arabic", reciter_id)
             if arabic_seconds is None:
-                arabic_seconds = measure_ayah_audio(s, ayah, "arabic")
+                arabic_seconds = measure_ayah_audio(s, ayah, "arabic", reciter_id)
         if audio_seconds is None or (content_mode == "full" and arabic_seconds is None):
             raise RuntimeError(f"Audio duration could not be measured for ayah {s}:{ayah}.")
         urdu_start = arabic_seconds + GAP_AFTER_ARABIC if content_mode == "full" else 0.0
@@ -891,8 +936,12 @@ def plan_duration(s, start, end, length_limit, content_mode, Q=None):
         "total_count": len(items),
     }
 
-def plan_reel(Q, s, a0, a1, length_limit, content_mode):
-    plan = plan_duration(s, a0, a1, length_limit, content_mode, Q)
+def plan_reel(
+    Q, s, a0, a1, length_limit, content_mode, reciter_id=None, urdu_voice_id=None
+):
+    plan = plan_duration(
+        s, a0, a1, length_limit, content_mode, Q, reciter_id, urdu_voice_id
+    )
     items = []
     surah_data = Q["surahs"][str(s)]
     for item in plan["fit_items"]:
@@ -905,7 +954,7 @@ def plan_reel(Q, s, a0, a1, length_limit, content_mode):
                     "English Quran text is missing. Run `python fetch_assets.py` "
                     "to download the required translation."
                 )
-        clip = ayah_clip(s, a, content_mode)
+        clip = ayah_clip(s, a, content_mode, reciter_id, urdu_voice_id)
         if clip is None:
             raise RuntimeError(f"Audio could not be prepared for ayah {s}:{a}.")
         item.update(clip)
@@ -922,10 +971,16 @@ def plan_reel(Q, s, a0, a1, length_limit, content_mode):
     plan["items"] = items
     return plan
 
-def build(Q, s, a0, a1, outfile, bgs, rng, tmp, styles=None, max_duration=MAX_DUR, content_mode="full", music_filename=None):
+def build(
+    Q, s, a0, a1, outfile, bgs, rng, tmp, styles=None,
+    max_duration=MAX_DUR, content_mode="full", music_filename=None,
+    reciter_id=None, urdu_voice_id=None,
+):
     require_raqm()
     styles = styles or {}
-    plan = plan_reel(Q, s, a0, a1, max_duration, content_mode)
+    plan = plan_reel(
+        Q, s, a0, a1, max_duration, content_mode, reciter_id, urdu_voice_id
+    )
     items = plan["items"]
     total = plan["fit_seconds"]
     used_a1 = plan["fits_up_to"]
@@ -1293,7 +1348,7 @@ def ensure_required_tools():
 
 
 def main():
-    global INCLUDE_ARABIC_AUDIO, CONTENT_MODE
+    global INCLUDE_ARABIC_AUDIO, CONTENT_MODE, CURRENT_RECITER_ID, CURRENT_URDU_VOICE_ID
     ensure_required_tools()
     ap = argparse.ArgumentParser()
     ap.add_argument("--picks")
@@ -1319,12 +1374,20 @@ def main():
     ap.add_argument("--check", nargs="*", type=int)
     ap.add_argument("--dry", action="store_true")
     ap.add_argument("--music", help="Background music filename from backgrounds/music/")
+    ap.add_argument("--reciter", default=DEFAULT_ARABIC_RECITER_ID)
+    ap.add_argument("--urdu-voice", default=DEFAULT_URDU_VOICE_ID)
     a = ap.parse_args()
     a.max_dur = min(max(1, a.max_dur), 180)
     a.min_dur = min(max(1, a.min_dur), a.max_dur)
     styles = load_video_styles(a.style_json)
     CONTENT_MODE = "arabic_only" if a.arabic_only else "urdu_only" if a.urdu_only else "full"
     INCLUDE_ARABIC_AUDIO = CONTENT_MODE != "urdu_only"
+    try:
+        CURRENT_RECITER_ID = resolve_reciter_id("arabic", a.reciter)
+        if CONTENT_MODE != "arabic_only":
+            CURRENT_URDU_VOICE_ID = resolve_reciter_id("urdu", a.urdu_voice)
+    except ValueError as exc:
+        ap.error(str(exc))
     set_video_quality(a.quality)
     
     qf = ROOT / "data/quran.json"
@@ -1333,7 +1396,13 @@ def main():
     
     if a.check is not None:
         for s in a.check:
-            n = Q["surahs"][str(s)]["n"]; got = [ayah_clip(s, x) for x in range(1, min(n, 5) + 1)]
+            n = Q["surahs"][str(s)]["n"]; got = [
+                ayah_clip(
+                    s, x, reciter_id=CURRENT_RECITER_ID,
+                    urdu_voice_id=CURRENT_URDU_VOICE_ID,
+                )
+                for x in range(1, min(n, 5) + 1)
+            ]
             ok = sum(1 for c in got if c)
             print(f"Surah {s}: pehli {len(got)} ayaat mein se {ok} ki audio mili", end="")
             print("  [" + ", ".join(f"{c['len']:.1f}s" for c in got if c) + "]" if ok else "  -> internet/link check karo")
@@ -1384,7 +1453,9 @@ def main():
             print(f"[{i}/{len(picks)}] Surah {s}:{a0}-{a1}", end=" ")
             content_mode = CONTENT_MODE
             res = build(
-                Q, s, a0, a1, outfile, bgs, rng, tmp, styles, a.max_dur, content_mode, a.music
+                Q, s, a0, a1, outfile, bgs, rng, tmp, styles,
+                a.max_dur, content_mode, a.music,
+                CURRENT_RECITER_ID, CURRENT_URDU_VOICE_ID,
             )
             if res is None: print("SKIP (audio download nahi hui)"); continue
             S, total, used_a1, warnings = res
