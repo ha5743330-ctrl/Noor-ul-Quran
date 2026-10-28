@@ -4,7 +4,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 WORKDIR /app
 
-RUN apt-get update \\n    && apt-get install -y --no-install-recommends \
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
         build-essential \
         ffmpeg \
         fonts-noto-core \
@@ -14,13 +15,17 @@ RUN apt-get update \\n    && apt-get install -y --no-install-recommends \
         libharfbuzz-dev \
         libjpeg62-turbo-dev \
         libraqm-dev \
-        zlib1g-dev \\n    && rm -rf /var/lib/apt/lists/*
+        zlib1g-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt ./requirements.txt
-RUN pip install --no-cache-dir --no-binary=Pillow -r requirements.txt \\n    && python -c "from PIL import features; assert features.check('raqm'), 'Pillow was built without RAQM'; print('RAQM:', features.check('raqm'))"
+RUN pip install --no-cache-dir --no-binary=Pillow -r requirements.txt \
+    && python -c "from PIL import features; assert features.check('raqm'), 'Pillow was built without RAQM'; print('RAQM:', features.check('raqm'))"
 
 COPY data/quran_qpc_hafs.json data/quran_qpc_hafs.sha256 ./data/
 COPY . .
-RUN python fetch_assets.py \n    && test -f public/index.html && test -f data/quran.json && test -f data/reciters.json \n    && test -f fonts/AmiriQuran-Regular.ttf && ls backgrounds/images/*.png
+RUN python fetch_assets.py \
+    && test -f public/index.html && test -f data/quran.json && test -f data/reciters.json \
+    && test -f fonts/AmiriQuran-Regular.ttf && ls backgrounds/images/*.png
 
 CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-10000} --workers 1"]
