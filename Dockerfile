@@ -4,8 +4,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 WORKDIR /app
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
+RUN apt-get update \\n    && apt-get install -y --no-install-recommends \
         build-essential \
         ffmpeg \
         fonts-noto-core \
@@ -15,12 +14,10 @@ RUN apt-get update \
         libharfbuzz-dev \
         libjpeg62-turbo-dev \
         libraqm-dev \
-        zlib1g-dev \
-    && rm -rf /var/lib/apt/lists/*
+        zlib1g-dev \\n    && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt ./requirements.txt
-RUN pip install --no-cache-dir --no-binary=Pillow -r requirements.txt \
-    && python -c "from PIL import features; assert features.check('raqm'), 'Pillow was built without RAQM'; print('RAQM:', features.check('raqm'))"
+RUN pip install --no-cache-dir --no-binary=Pillow -r requirements.txt \\n    && python -c "from PIL import features; assert features.check('raqm'), 'Pillow was built without RAQM'; print('RAQM:', features.check('raqm'))"
 
 COPY data/quran_qpc_hafs.json data/quran_qpc_hafs.sha256 ./data/
 COPY . .
