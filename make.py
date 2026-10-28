@@ -1268,7 +1268,7 @@ def build(
             previous_label = f"[{mixed_label}]"
             elapsed += playlist[idx][2] - 0.5
         fc.append(f"{previous_label}null[vbg]")
-    fc += [f"[{overlay_input}:v]fps={FPS},format=rgba[ov]", "[vbg][ov]overlay=shortest=1[v1]",
+    fc += [f"[{overlay_input}:v]format=rgba[ov]", "[vbg][ov]overlay=shortest=1[v1]",
           f"[v1]fade=t=in:d=0.6,fade=t=out:st={total-0.7:.2f}:d=0.7[vout]"]
     
     idx, labels = overlay_input + 1, []
