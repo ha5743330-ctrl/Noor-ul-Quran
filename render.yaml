@@ -8,21 +8,23 @@ services:
     dockerContext: .
     healthCheckPath: /api/health
     envVars:
+      - key: RENDER_MEMORY_PROFILE
+        value: low
+      - key: OUTPUT_DIR
+        value: /tmp/noor/output
+      - key: CACHE_DIR
+        value: /tmp/noor/cache
+      - key: SUPABASE_BACKGROUNDS_BUCKET
+        value: backgrounds
+      - key: SUPABASE_MEDIA_BUCKET
+        value: noor-media
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_ANON_KEY
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
-      - key: SUPABASE_MEDIA_BUCKET
-        value: noor-media
       - key: FRONTEND_ORIGINS
         sync: false
-      - key: OUTPUT_DIR
-        value: /tmp/noor/output
-      - key: BACKGROUNDS_DIR
-        value: /tmp/noor/backgrounds
-      - key: CACHE_DIR
-        value: /tmp/noor/cache
-      - key: RENDER_MEMORY_PROFILE
-        value: low
+      - key: VIDEO_URL_SECRET
+        generateValue: true

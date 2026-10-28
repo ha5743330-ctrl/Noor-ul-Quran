@@ -22,8 +22,8 @@ COPY requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir --no-binary=Pillow -r requirements.txt \
     && python -c "from PIL import features; assert features.check('raqm'), 'Pillow was built without RAQM'; print('RAQM:', features.check('raqm'))"
 
-COPY data/quran.json data/quran_qpc_hafs.json data/quran_qpc_hafs.sha256 ./data/
+COPY data/quran_qpc_hafs.json data/quran_qpc_hafs.sha256 ./data/
 COPY . .
-RUN python fetch_assets.py && test -f public/index.html && test -f data/quran_qpc_hafs.json
+RUN python fetch_assets.py \n    && test -f public/index.html && test -f data/quran.json && test -f data/reciters.json \n    && test -f fonts/AmiriQuran-Regular.ttf && ls backgrounds/images/*.png
 
-CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-10000}"]
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-10000} --workers 1"]

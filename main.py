@@ -50,10 +50,12 @@ SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
 SUPABASE_KEY = os.getenv("SUPABASE_ANON_KEY", "")
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 MEDIA_BUCKET = os.getenv("SUPABASE_MEDIA_BUCKET", "noor-media")
+BACKGROUNDS_BUCKET = os.getenv("SUPABASE_BACKGROUNDS_BUCKET", "backgrounds")
 OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", BASE_DIR / "output"))
 HISTORY_FILE = OUTPUT_DIR / "history.json"
 BACKGROUND_DIR = Path(os.getenv("BACKGROUNDS_DIR", BASE_DIR / "backgrounds"))
 CACHE_DIR = Path(os.getenv("CACHE_DIR", BASE_DIR / "cache"))
+CLIP_CACHE_DIR = CACHE_DIR / "backgrounds"
 VIDEO_URL_SECRET = os.getenv("VIDEO_URL_SECRET") or secrets.token_urlsafe(32)
 VIDEO_URL_TTL_SECONDS = 10 * 60
 VIDEO_FILENAME_PATTERN = re.compile(r"[A-Za-z0-9_.-]+\.mp4\Z")
@@ -227,10 +229,10 @@ def _storage_request(method: str, path: str, **kwargs):
     return response
 
 
-def _list_media_objects(prefix: str):
+def _list_media_objects(prefix: str, bucket: str = MEDIA_BUCKET):
     response = _storage_request(
         "POST",
-        f"/object/list/{quote(MEDIA_BUCKET, safe='')}",
+        f"/object/list/{quote(bucket, safe='')}",
         json={"prefix": prefix, "limit": 100, "offset": 0, "sortBy": {"column": "name", "order": "asc"}},
     )
     return response.json()
@@ -274,10 +276,10 @@ def _delete_media_objects(object_paths):
         )
 
 
-def _download_media_file(object_path: str, local_path: Path) -> bool:
+def _download_media_file(object_path: str, local_path: Path, bucket: str = MEDIA_BUCKET) -> bool:
     response = _storage_request(
         "GET",
-        f"/object/authenticated/{quote(MEDIA_BUCKET, safe='')}/{quote(object_path, safe='/')}",
+        f"/object/authenticated/{quote(bucket, safe='')}/{quote(object_path, safe='/')}",
         stream=True,
     )
     if response.status_code == 404:
@@ -309,16 +311,17 @@ def _prepare_ephemeral_media():
     if not SUPABASE_SERVICE_KEY:
         return
 
-    for item in _list_media_objects("backgrounds"):
-        object_name = item.get("name", "")
-        filename = Path(object_name).name
-        extension = Path(filename).suffix.lower()
-        if extension not in {".mp4", ".mov"}:
-            continue
-        object_path = object_name if object_name.startswith("backgrounds/") else f"backgrounds/{filename}"
-        local_path = BACKGROUND_DIR / filename
-        if not local_path.exists():
-            _download_media_file(object_path, local_path)
+    # Clips live in their own bucket and are cached under cache/; none is fine (still-image fallback).
+    try:
+        for item in _list_media_objects("", BACKGROUNDS_BUCKET):
+            filename = Path(item.get("name", "")).name
+            if Path(filename).suffix.lower() not in {".mp4", ".mov"}:
+                continue
+            local_path = CLIP_CACHE_DIR / filename
+            if not local_path.exists():
+                _download_media_file(filename, local_path, BACKGROUNDS_BUCKET)
+    except Exception as exc:
+        LOGGER.warning("Background clips unavailable, using still image: %s", _redact_secrets(str(exc)))
 
     music_dir = BACKGROUND_DIR / "music"
     music_dir.mkdir(parents=True, exist_ok=True)

@@ -85,7 +85,7 @@ BACKGROUND_DIR = Path(os.getenv("BACKGROUNDS_DIR", ROOT / "backgrounds"))
 CACHE_DIR = Path(os.getenv("CACHE_DIR", ROOT / "cache"))
 # Measured durations are runtime state: written under cache/, seeded from the shipped data file.
 DURATION_CACHE_FILE = CACHE_DIR / "ayah_durations.json"
-DURATION_SEED_FILE = ROOT / "data" / "ayah_durations.json"
+CLIP_CACHE_DIR = CACHE_DIR / "backgrounds"
 _hardware_encoder = None
 _duration_cache = None
 _duration_cache_lock = Lock()
@@ -109,7 +109,7 @@ def _read_duration_file(path):
     return raw if isinstance(raw, dict) else {}
 
 def _read_duration_cache():
-    raw = {**_read_duration_file(DURATION_SEED_FILE), **_read_duration_file(DURATION_CACHE_FILE)}
+    raw = _read_duration_file(DURATION_CACHE_FILE)
     cache = {}
     for key, value in raw.items():
         if not isinstance(key, str):
@@ -368,6 +368,20 @@ def is_generated_reel(path):
         path.stem,
         re.IGNORECASE,
     ) is not None
+
+def still_background():
+    """Loop a backgrounds/images/ still into a short clip so renders work with no video clips."""
+    images = sorted(p for p in (BACKGROUND_DIR / "images").glob("*") if p.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp"))
+    if not images: return None
+    out = CACHE_DIR / "still-background.mp4"
+    if not out.exists():
+        out.parent.mkdir(parents=True, exist_ok=True)
+        tmp_out = out.with_suffix(".tmp.mp4")
+        run(["ffmpeg", "-nostdin", "-y", "-v", "error", "-loop", "1", "-framerate", "5", "-t", "10", "-i", str(images[0]),
+             "-vf", "scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280,format=yuv420p",
+             "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28", str(tmp_out)])
+        tmp_out.replace(out)
+    return out
 
 def remove_leading_bismillah(text):
     prefix = re.sub(r"\s*[٠-٩]+$", "", QPC_BISMILLAH_TEXT).split()
@@ -1428,7 +1442,7 @@ def main():
         picks = [(int(m[1]), int(m[2]), int(m[3] or m[2]))] if m else []
     else:
         picks = parse_picks(a.picks) if a.picks else pick_random(Q, a.random, rng, a.min_dur, a.max_dur) if a.random else sys.exit("--picks, --pick ya --random do")
-    background_files = [p for p in BACKGROUND_DIR.glob("*") if p.suffix.lower() in (".mp4", ".mov")]
+    background_files = [p for d in (BACKGROUND_DIR, CLIP_CACHE_DIR) for p in d.glob("*") if p.suffix.lower() in (".mp4", ".mov")]
     generated_reels = [p for p in background_files if is_generated_reel(p)]
     bgs = [p for p in background_files if not is_generated_reel(p)]
     if generated_reels:
@@ -1437,7 +1451,10 @@ def main():
             + ", ".join(path.name for path in generated_reels),
             file=sys.stderr,
         )
-    if not bgs: sys.exit("backgrounds/ folder mein original MP4/MOV footage daalo; generated reels cannot be used as backgrounds")
+    if not bgs:
+        still = still_background()
+        if not still: sys.exit("No background clips (backgrounds/ or Supabase) and no backgrounds/images/ still.")
+        bgs = [still]
     out = OUTPUT_DIR; out.mkdir(exist_ok=True, parents=True)
     tmp = Path(a.work_dir) if a.work_dir else CACHE_DIR / "tmp"
     tmp.mkdir(exist_ok=True, parents=True)
