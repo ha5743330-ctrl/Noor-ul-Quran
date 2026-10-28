@@ -1,7 +1,6 @@
 const adminMessage = document.getElementById("admin-message");
 const API_BASE_URL = (window.NOOR_API_BASE_URL || window.NOOR_SUPABASE_CONFIG?.apiBaseUrl || "/api").replace(/\/$/, "");
 let adminUsers = [];
-let loadedVerseKey = "";
 
 function showAdminMessage(message, isError = false) {
     adminMessage.textContent = message;
@@ -250,105 +249,6 @@ async function loadDiagnostics() {
     }
 }
 
-function getSelectedVerse() {
-    const surah = Number(document.getElementById("verse-surah").value);
-    const ayah = Number(document.getElementById("verse-ayah").value);
-    if (!Number.isInteger(surah) || surah < 1 || surah > 114 || !Number.isInteger(ayah) || ayah < 1) {
-        throw new Error("Enter a valid Surah (1–114) and Ayah number.");
-    }
-    return { surah, ayah, key: `${surah}:${ayah}` };
-}
-
-function updateAudioStatuses(content) {
-    for (const language of ["arabic", "urdu"]) {
-        const status = document.getElementById(`${language}-audio-status`);
-        const uploaded = Boolean(content[`${language}_audio`]);
-        status.textContent = uploaded ? "Custom audio uploaded" : "Using default audio";
-        status.className = uploaded ? "text-emerald-400" : "text-slate-500";
-    }
-}
-
-async function loadVerseContent(event) {
-    event.preventDefault();
-    const button = document.getElementById("verse-load-button");
-    try {
-        const verse = getSelectedVerse();
-        button.disabled = true;
-        const content = await adminRequest(`/admin/verses/${verse.surah}/${verse.ayah}`);
-        loadedVerseKey = verse.key;
-        document.getElementById("verse-urdu-text").value = content.urdu_text || "";
-        updateAudioStatuses(content);
-        showAdminMessage(`Loaded Surah ${verse.surah}, Ayah ${verse.ayah}.`);
-    } catch (error) {
-        showAdminMessage(error.message, true);
-    } finally {
-        button.disabled = false;
-    }
-}
-
-async function saveVerseContent(event) {
-    event.preventDefault();
-    const button = document.getElementById("verse-save-button");
-    try {
-        const verse = getSelectedVerse();
-        if (loadedVerseKey !== verse.key) {
-            throw new Error("Load this Surah and Ayah before saving, so text is saved to the right verse.");
-        }
-        button.disabled = true;
-        const content = await adminRequest(`/admin/verses/${verse.surah}/${verse.ayah}`, {
-            method: "PUT",
-            body: JSON.stringify({
-                urdu_text: document.getElementById("verse-urdu-text").value
-            })
-        });
-        updateAudioStatuses(content);
-        showAdminMessage(`Text saved for Surah ${verse.surah}, Ayah ${verse.ayah}.`);
-    } catch (error) {
-        showAdminMessage(error.message, true);
-    } finally {
-        button.disabled = false;
-    }
-}
-
-async function uploadVerseAudio(event) {
-    event.preventDefault();
-    const input = document.getElementById("verse-audio-file");
-    const button = document.getElementById("verse-audio-upload-button");
-    const file = input.files[0];
-    if (!file) {
-        showAdminMessage("Choose an audio file first.", true);
-        return;
-    }
-    if (file.size > 50 * 1024 * 1024) {
-        showAdminMessage("Audio file must be 50 MB or smaller.", true);
-        return;
-    }
-
-    try {
-        const verse = getSelectedVerse();
-        const language = document.getElementById("verse-audio-language").value;
-        button.disabled = true;
-        button.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>Uploading';
-        const filename = encodeURIComponent(file.name);
-        const content = await adminRequest(
-            `/admin/verses/${verse.surah}/${verse.ayah}/audio/${language}?filename=${filename}`,
-            {
-                method: "POST",
-                body: file,
-                headers: { "Content-Type": file.type || "application/octet-stream" }
-            }
-        );
-        updateAudioStatuses(content);
-        input.value = "";
-        showAdminMessage(`${language === "arabic" ? "Arabic" : "Urdu"} audio uploaded for Surah ${verse.surah}, Ayah ${verse.ayah}.`);
-    } catch (error) {
-        showAdminMessage(error.message, true);
-    } finally {
-        button.disabled = false;
-        button.innerHTML = '<i class="fa-solid fa-upload mr-2"></i>Upload audio';
-    }
-}
-
 async function uploadBackground(event) {
     event.preventDefault();
     const input = document.getElementById("background-file");
@@ -416,7 +316,4 @@ document.getElementById("refresh-diagnostics").addEventListener("click", loadDia
 document.getElementById("user-search").addEventListener("input", renderUsers);
 document.getElementById("background-upload-form").addEventListener("submit", uploadBackground);
 document.getElementById("music-upload-form").addEventListener("submit", uploadMusic);
-document.getElementById("verse-lookup-form").addEventListener("submit", loadVerseContent);
-document.getElementById("verse-content-form").addEventListener("submit", saveVerseContent);
-document.getElementById("verse-audio-form").addEventListener("submit", uploadVerseAudio);
 document.addEventListener("DOMContentLoaded", initializeAdmin);

@@ -378,11 +378,6 @@ def test_arabic_only_reel_uses_english_text_without_urdu_audio(monkeypatch):
             "fits_up_to": 1,
         },
     )
-    monkeypatch.setattr(
-        make,
-        "admin_content",
-        lambda: {"verses": {}},
-    )
     quran = {
         "surahs": {
             "1": {
@@ -888,21 +883,30 @@ def test_estimate_requires_exact_reciter_ids(client):
     assert client.get("/api/estimate", params={**params, "reciter_id": "shamshad_ali_khan"}).status_code == 400
 
 
-def test_quran_text_font_and_admin_arabic_override_are_rejected(client):
+def test_quran_text_font_is_rejected(client):
     response = client.post("/api/generate", json={
         "mode": "pick", "verse": "1:1", "styles": {"arabic": {"font": "amiri_bold"}},
     })
     assert response.status_code == 400
-    assert "arabic_text" not in main.VerseContentRequest.model_fields
 
 
 def test_render_arabic_always_comes_from_verified_qpc(monkeypatch):
-    monkeypatch.setattr(make, "admin_content", lambda: {"verses": {"1:2": {"arabic_text": "hand typed"}}})
     monkeypatch.setattr(make, "ayah_clip", lambda *args, **kwargs: {"dur": 1.0})
     monkeypatch.setattr(make, "plan_duration", lambda *args, **kwargs: {"fit_items": [{"ayah": 2}]})
     quran = {"surahs": {"1": {"ayahs": {"2": "urdu"}, "arabic": {"2": "hand typed"}}}}
     plan = make.plan_reel(quran, 1, 2, 2, 30, "full")
     assert plan["items"][0]["arabic"] == make.QPC_QURAN["surahs"]["1"]["2"]
+
+
+def test_verse_studio_routes_are_gone(client):
+    main.app.dependency_overrides[main.get_current_user] = lambda: ADMIN_USER
+    for method, path in (
+        ("get", "/api/admin/verses/1/1"),
+        ("put", "/api/admin/verses/1/1"),
+        ("post", "/api/admin/verses/1/1/audio/arabic"),
+    ):
+        assert getattr(client, method)(path).status_code in (404, 405), path  # 405 = static mount at "/" rejecting non-GET
+    assert not hasattr(make, "admin_content")
 
 
 def test_x264_preset_follows_quality(monkeypatch, tmp_path):

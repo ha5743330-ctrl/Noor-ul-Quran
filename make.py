@@ -83,12 +83,9 @@ STYLE_ELEMENTS = {"bismillah", "surah", "label", "arabic", "urdu", "english", "c
 OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", ROOT / "output"))
 BACKGROUND_DIR = Path(os.getenv("BACKGROUNDS_DIR", ROOT / "backgrounds"))
 CACHE_DIR = Path(os.getenv("CACHE_DIR", ROOT / "cache"))
-ADMIN_CONTENT_FILE = ROOT / "data" / "admin_content.json"
-ADMIN_AUDIO_DIR = ROOT / "audio" / "admin"
 # Measured durations are runtime state: written under cache/, seeded from the shipped data file.
 DURATION_CACHE_FILE = CACHE_DIR / "ayah_durations.json"
 DURATION_SEED_FILE = ROOT / "data" / "ayah_durations.json"
-_admin_content = None
 _hardware_encoder = None
 _duration_cache = None
 _duration_cache_lock = Lock()
@@ -155,30 +152,6 @@ def save_ayah_duration(surah, ayah, kind, seconds, reciter_id=None):
         temp_path.write_text(json.dumps(cache, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         temp_path.replace(DURATION_CACHE_FILE)
         _duration_cache = cache
-
-def invalidate_ayah_duration(surah, ayah, kind, reciter_id=None, all_reciters=False):
-    global _duration_cache
-    if all_reciters:
-        language = "ar" if kind == "arabic" else "ur"
-        reciter_ids = [rid for rid, item in RECITERS_BY_ID.items() if item["language"] == language]
-    else:
-        reciter_ids = [resolve_reciter_id(kind, reciter_id)]
-    with _duration_cache_lock:
-        cache = _read_duration_cache()
-        if _duration_cache:
-            cache.update(_duration_cache)
-        for rid in reciter_ids:
-            cache.pop(_duration_key(kind, rid, surah, ayah), None)
-        DURATION_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        temp_path = DURATION_CACHE_FILE.with_name(
-            f"{DURATION_CACHE_FILE.stem}.{os.getpid()}.{get_ident()}.tmp"
-        )
-        temp_path.write_text(json.dumps(cache, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        temp_path.replace(DURATION_CACHE_FILE)
-        _duration_cache = cache
-        for key in list(_clip_cache):
-            if key[:2] == (surah, ayah):
-                _clip_cache.pop(key, None)
 
 def verified_arabic_text(surah, ayah):
     """Arabic ayah text, only ever from the hash-verified KFGQPC Hafs file."""
@@ -456,42 +429,25 @@ def require_raqm():
             "Python is not sufficient; use a Pillow build with libraqm enabled."
         )
 
-def admin_content():
-    global _admin_content
-    if _admin_content is None:
-        if ADMIN_CONTENT_FILE.exists():
-            _admin_content = json.loads(ADMIN_CONTENT_FILE.read_text(encoding="utf-8"))
-        else:
-            _admin_content = {"verses": {}}
-    return _admin_content
-
 def fetch_ayah(kind, s, a, reciter_id=None):
     reciter_id = resolve_reciter_id(kind, reciter_id)
-    verse = admin_content()["verses"].get(f"{s}:{a}", {})
-    custom_extension = verse.get("audio", {}).get(kind)
-    if custom_extension:
-        custom_path = ADMIN_AUDIO_DIR / f"{s:03d}{a:03d}_{kind}.{custom_extension}"
-        if not custom_path.exists() or custom_path.stat().st_size <= 1000:
+    audio_path = audio_cache_path(kind, s, a, reciter_id)
+    if not audio_path.exists() or audio_path.stat().st_size <= 1000:
+        folder = RECITERS_BY_ID[reciter_id]["folder"]
+        url = f"{BASE_URL}{folder}/{s:03d}{a:03d}.mp3"
+        audio_path.parent.mkdir(parents=True, exist_ok=True)
+        for _ in range(3):
+            try:
+                response = requests.get(url, timeout=60)
+                if response.status_code == 200 and len(response.content) > 1000:
+                    audio_path.write_bytes(response.content)
+                    break
+                if response.status_code == 404:
+                    return None
+            except requests.RequestException:
+                time.sleep(2)
+        else:
             return None
-        audio_path = custom_path
-    else:
-        audio_path = audio_cache_path(kind, s, a, reciter_id)
-        if not audio_path.exists() or audio_path.stat().st_size <= 1000:
-            folder = RECITERS_BY_ID[reciter_id]["folder"]
-            url = f"{BASE_URL}{folder}/{s:03d}{a:03d}.mp3"
-            audio_path.parent.mkdir(parents=True, exist_ok=True)
-            for _ in range(3):
-                try:
-                    response = requests.get(url, timeout=60)
-                    if response.status_code == 200 and len(response.content) > 1000:
-                        audio_path.write_bytes(response.content)
-                        break
-                    if response.status_code == 404:
-                        return None
-                except requests.RequestException:
-                    time.sleep(2)
-            else:
-                return None
 
     if cached_ayah_duration(s, a, kind, reciter_id) is None:
         save_ayah_duration(s, a, kind, dur(audio_path), reciter_id)
@@ -1015,14 +971,13 @@ def plan_reel(
         if clip is None:
             raise RuntimeError(f"Audio could not be prepared for ayah {s}:{a}.")
         item.update(clip)
-        override = admin_content()["verses"].get(f"{s}:{a}", {})
         ar_text = verified_arabic_text(s, a)
         if a == 1:
             ar_text = ayah_text_without_bismillah(ar_text, s)
         if content_mode == "arabic_only":
             item.update(text="", english=english_text, arabic=ar_text)
         else:
-            ur_text = override.get("urdu_text") or surah_data["ayahs"][str(a)]
+            ur_text = surah_data["ayahs"][str(a)]
             item.update(text=ur_text, arabic=ar_text)
         items.append(item)
     plan["items"] = items

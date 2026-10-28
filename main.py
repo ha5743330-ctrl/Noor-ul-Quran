@@ -71,10 +71,7 @@ RECITERS_BY_ID = {
 }
 DEFAULT_ARABIC_RECITER_ID = RECITER_CONFIG["defaults"]["ar"]
 DEFAULT_URDU_VOICE_ID = RECITER_CONFIG["defaults"]["ur"]
-ADMIN_CONTENT_FILE = BASE_DIR / "data" / "admin_content.json"
-ADMIN_AUDIO_DIR = BASE_DIR / "audio" / "admin"
 MAX_BACKGROUND_BYTES = 50 * 1024 * 1024
-MAX_TEXT_LENGTH = 5000
 VIDEO_STYLE_ELEMENTS = {"bismillah", "surah", "label", "arabic", "urdu", "english", "channel"}
 # Quran text always renders in the verified KFGQPC font; only its color can change.
 QURAN_STYLE_ELEMENTS = {"bismillah", "arabic"}
@@ -155,10 +152,6 @@ class PremiumAccessRequest(BaseModel):
     enabled: bool
 
 
-class VerseContentRequest(BaseModel):
-    urdu_text: str = ""
-
-
 class HistoryBulkRequest(BaseModel):
     ids: list[str] = Field(min_length=1, max_length=MAX_BULK_HISTORY_ITEMS)
 
@@ -187,42 +180,6 @@ def validate_video_styles(styles):
             not isinstance(font, str) or font not in VIDEO_STYLE_FONTS
         ):
             raise HTTPException(status_code=400, detail="Invalid video style font.")
-
-
-def _load_admin_content():
-    if not ADMIN_CONTENT_FILE.exists():
-        return {"verses": {}}
-    try:
-        content = json.loads(ADMIN_CONTENT_FILE.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise HTTPException(status_code=500, detail="Admin verse content could not be read.") from exc
-    if not isinstance(content, dict) or not isinstance(content.get("verses"), dict):
-        raise HTTPException(status_code=500, detail="Admin verse content has an invalid format.")
-    return content
-
-
-def _save_admin_content(content):
-    ADMIN_CONTENT_FILE.parent.mkdir(parents=True, exist_ok=True)
-    ADMIN_CONTENT_FILE.write_text(
-        json.dumps(content, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
-    if SUPABASE_SERVICE_KEY:
-        _upload_media_file(ADMIN_CONTENT_FILE, "content/ayah-overrides.json", "application/json")
-
-
-def _get_verse_content(surah: int, ayah: int):
-    content = _load_admin_content()
-    verse = content["verses"].get(f"{surah}:{ayah}", {})
-    audio = verse.get("audio", {})
-    result = {
-        "surah": surah,
-        "ayah": ayah,
-        "urdu_text": verse.get("urdu_text", ""),
-        "arabic_audio": bool(audio.get("arabic")),
-        "urdu_audio": bool(audio.get("urdu")),
-    }
-    return result
 
 
 def _supabase_request(method: str, path: str, token: str, **kwargs):
@@ -373,19 +330,8 @@ def _prepare_ephemeral_media():
     for object_path, local_path in (
         ("metadata/captions.csv", OUTPUT_DIR / "captions.csv"),
         ("state/used.json", CACHE_DIR / "used.json"),
-        ("content/ayah-overrides.json", ADMIN_CONTENT_FILE),
     ):
         if _media_object_exists(object_path):
-            _download_media_file(object_path, local_path)
-
-    for item in _list_media_objects("content/audio"):
-        object_name = item.get("name", "")
-        filename = Path(object_name).name
-        if not filename:
-            continue
-        object_path = object_name if object_name.startswith("content/audio/") else f"content/audio/{filename}"
-        local_path = ADMIN_AUDIO_DIR / filename
-        if not local_path.exists():
             _download_media_file(object_path, local_path)
 
 
@@ -1436,103 +1382,6 @@ def _validate_verse(surah: int, ayah: int):
         raise HTTPException(status_code=500, detail="Quran data could not be read.") from exc
     if not 1 <= ayah <= verse_count:
         raise HTTPException(status_code=400, detail=f"Ayah must be between 1 and {verse_count} for this surah.")
-
-
-@app.get("/api/admin/verses/{surah}/{ayah}")
-def get_admin_verse_content(surah: int, ayah: int, user=Depends(require_admin)):
-    _validate_verse(surah, ayah)
-    return _get_verse_content(surah, ayah)
-
-
-@app.put("/api/admin/verses/{surah}/{ayah}")
-def update_admin_verse_content(
-    surah: int,
-    ayah: int,
-    req: VerseContentRequest,
-    user=Depends(require_admin),
-):
-    _validate_verse(surah, ayah)
-    if len(req.urdu_text) > MAX_TEXT_LENGTH:
-        raise HTTPException(status_code=400, detail=f"Text must be {MAX_TEXT_LENGTH} characters or fewer.")
-
-    content = _load_admin_content()
-    key = f"{surah}:{ayah}"
-    verse = content["verses"].setdefault(key, {})
-    # Arabic Quran text is never editable; it always comes from the hash-verified QPC file.
-    verse.pop("arabic_text", None)
-    verse["urdu_text"] = req.urdu_text.strip()
-    verse.setdefault("audio", {})
-    if not verse["urdu_text"] and not any(verse["audio"].values()):
-        del content["verses"][key]
-    _save_admin_content(content)
-    return _get_verse_content(surah, ayah)
-
-
-@app.post("/api/admin/verses/{surah}/{ayah}/audio/{language}")
-async def upload_admin_verse_audio(
-    surah: int,
-    ayah: int,
-    language: str,
-    request: Request,
-    user=Depends(require_admin),
-):
-    _validate_verse(surah, ayah)
-    if language not in {"arabic", "urdu"}:
-        raise HTTPException(status_code=400, detail="Audio language must be arabic or urdu.")
-    original_name = request.query_params.get("filename", "")
-    extension = Path(original_name).suffix.lower()
-    if extension not in ALLOWED_AUDIO_TYPES:
-        raise HTTPException(status_code=400, detail="Upload MP3, M4A, AAC, or WAV audio.")
-
-    content_length = request.headers.get("content-length")
-    if content_length:
-        try:
-            if int(content_length) > MAX_BACKGROUND_BYTES:
-                raise HTTPException(status_code=413, detail="Audio file must be 50 MB or smaller.")
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail="Invalid content length.") from exc
-
-    filename = f"{surah:03d}{ayah:03d}_{language}{extension}"
-    ADMIN_AUDIO_DIR.mkdir(parents=True, exist_ok=True)
-    destination = ADMIN_AUDIO_DIR / filename
-    total = 0
-    try:
-        with destination.open("wb") as output_file:
-            async for chunk in request.stream():
-                total += len(chunk)
-                if total > MAX_BACKGROUND_BYTES:
-                    raise HTTPException(status_code=413, detail="Audio file must be 50 MB or smaller.")
-                output_file.write(chunk)
-    except Exception:
-        destination.unlink(missing_ok=True)
-        raise
-
-    if total == 0:
-        destination.unlink(missing_ok=True)
-        raise HTTPException(status_code=400, detail="The uploaded audio file is empty.")
-
-    if SUPABASE_SERVICE_KEY:
-        _upload_media_file(
-            destination,
-            f"content/audio/{filename}",
-            ALLOWED_AUDIO_TYPES[extension],
-        )
-
-    content = _load_admin_content()
-    verse = content["verses"].setdefault(f"{surah}:{ayah}", {})
-    audio = verse.setdefault("audio", {})
-    previous_extension = audio.get(language)
-    audio[language] = extension.lstrip(".")
-    _save_admin_content(content)
-    import make as renderer
-
-    renderer.invalidate_ayah_duration(surah, ayah, language, all_reciters=True)
-
-    if previous_extension and previous_extension != extension.lstrip("."):
-        previous_file = ADMIN_AUDIO_DIR / f"{surah:03d}{ayah:03d}_{language}.{previous_extension}"
-        previous_file.unlink(missing_ok=True)
-
-    return _get_verse_content(surah, ayah)
 
 
 @app.api_route("/config.js", methods=["GET", "HEAD"], include_in_schema=False)
