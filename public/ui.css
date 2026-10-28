@@ -210,8 +210,14 @@ body.ui-page .bg-clip-text {
     -webkit-text-fill-color: var(--accent);
 }
 
+body.ui-page .text-red-200,
+body.ui-page .text-red-300,
 body.ui-page .text-red-400 {
     color: #b42318 !important;
+}
+
+body.ui-page .border-red-400\/50 {
+    border-color: #f0b4ad !important;
 }
 
 body.ui-page .text-emerald-400 {
@@ -392,27 +398,9 @@ body.ui-admin tbody tr {
         gap: 24px;
     }
 
-    body.ui-generate #reel-generator-form > div:first-of-type {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
     body.ui-generate #reel-generator-form > div:first-of-type > * {
+        width: 100%;
         min-width: 0;
-    }
-
-    body.ui-generate #reel-generator-form > div:first-of-type > section[aria-labelledby="content-heading"],
-    body.ui-generate #reel-generator-form > div:first-of-type > section[aria-labelledby="output-settings-heading"],
-    body.ui-generate #reel-generator-form > div:first-of-type > .advanced-style-card,
-    body.ui-generate #reel-generator-form > div:first-of-type > .generate-submit-wrap {
-        grid-column: 1 / -1;
-    }
-
-    body.ui-generate aside {
-        position: sticky;
-        top: 84px;
-        max-height: calc(100vh - 100px);
-        overflow-y: auto;
-        scrollbar-width: thin;
     }
 }
 

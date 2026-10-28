@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Noor ul Quran | Admin Access</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.tailwindcss.com/3.4.16"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/ui.css">
@@ -195,10 +195,7 @@
 
                 <div class="space-y-4">
                     <form id="verse-content-form" class="space-y-4">
-                        <div>
-                            <label for="verse-arabic-text" class="mb-1.5 block text-xs font-medium text-slate-300">Arabic text</label>
-                            <textarea id="verse-arabic-text" dir="rtl" lang="ar" rows="3" maxlength="5000" placeholder="Arabic ayah text" class="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-4 py-3 text-right text-lg leading-relaxed text-white placeholder:text-slate-600 focus:border-amber-500 focus:outline-none"></textarea>
-                        </div>
+                        <p class="text-xs text-slate-400">Arabic Quran text is locked to the verified KFGQPC Hafs source and cannot be edited.</p>
                         <div>
                             <label for="verse-urdu-text" class="mb-1.5 block text-xs font-medium text-slate-300">Urdu translation</label>
                             <textarea id="verse-urdu-text" dir="rtl" lang="ur" rows="3" maxlength="5000" placeholder="Urdu tarjuma" class="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-4 py-3 text-right text-lg leading-relaxed text-white placeholder:text-slate-600 focus:border-amber-500 focus:outline-none"></textarea>
@@ -236,9 +233,9 @@
         </footer>
     </main>
 
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js" integrity="sha384-0w2KAL2YHP6wKOkUDzkCDGgVvfmHnj02DHeQ6XcHOgTfFsGyonKOpShMH1x6nk9o" crossorigin="anonymous"></script>
     <script src="/config.js"></script>
     <script src="/auth.js?v=8"></script>
-    <script src="/admin.js?v=4"></script>
+    <script src="/admin.js?v=5"></script>
 </body>
 </html>

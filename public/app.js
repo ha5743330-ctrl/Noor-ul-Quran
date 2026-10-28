@@ -7,6 +7,12 @@ let latestBatchJobId = null;
 let estimateTimer = null;
 let estimateRequestId = 0;
 let lastEstimateRangeSeconds = 0;
+let recentItems = [];
+let recentSelecting = false;
+const recentSelected = new Set();
+const DIRECT_DOWNLOAD_LIMIT = 5;
+// Quran text always uses the verified KFGQPC font; only its color is adjustable.
+const QURAN_STYLE_ELEMENTS = new Set(["bismillah", "arabic"]);
 
 const VIDEO_STYLE_LABELS = {
     bismillah: "Bismillah",
@@ -32,6 +38,7 @@ document.addEventListener("DOMContentLoaded", () => {
         initializeDurationEstimate();
         initializeStudio();
         initializeReciterChoices();
+        initializeRecentSelection();
         document.getElementById("generate-image-button")?.addEventListener("click", generateAyahImage);
     } else {
         initializeLandingAuth();
@@ -85,6 +92,7 @@ async function generateAyahImage(event) {
         document.getElementById("empty-results")?.classList.add("hidden");
         if (status) status.textContent = `Image ready: ${result.reference}`;
         resultBox.scrollIntoView({ behavior: "smooth", block: "center" });
+        await refreshRecentVideos();
     } catch (error) {
         console.error("Ayah image generation error:", error);
         if (status) status.textContent = error.message || "Could not generate the ayah image.";
@@ -261,10 +269,10 @@ async function requestDurationEstimate() {
             mode: contentMode,
             length_limit: String(length)
         });
-        params.set("reciter_id", document.getElementById("input-reciter")?.value || "");
-        if (contentMode !== "arabic_only") {
-            params.set("urdu_voice_id", document.getElementById("input-urdu-voice")?.value || "");
-        }
+        const reciterId = document.getElementById("input-reciter")?.value;
+        const urduVoiceId = document.getElementById("input-urdu-voice")?.value;
+        if (reciterId) params.set("reciter_id", reciterId);
+        if (urduVoiceId && contentMode !== "arabic_only") params.set("urdu_voice_id", urduVoiceId);
         const response = await fetch(`${API_BASE_URL}/estimate?${params}`, {
             headers: { Authorization: `Bearer ${session.access_token}` }
         });
@@ -350,7 +358,8 @@ function renderAppliedVideoStyles() {
     list.replaceChildren();
     Object.entries(window.videoStyles).forEach(([element, style]) => {
         const item = document.createElement("li");
-        item.textContent = `${VIDEO_STYLE_LABELS[element]}: ${style.color} · ${VIDEO_STYLE_FONT_LABELS[style.font]}`;
+        const fontLabel = style.font ? VIDEO_STYLE_FONT_LABELS[style.font] : "KFGQPC Quran font";
+        item.textContent = `${VIDEO_STYLE_LABELS[element]}: ${style.color} · ${fontLabel}`;
         list.appendChild(item);
     });
     list.classList.toggle("hidden", Object.keys(window.videoStyles).length === 0);
@@ -368,13 +377,21 @@ function renderGenerationWarnings(warnings) {
     list.classList.toggle("hidden", uniqueWarnings.length === 0);
 }
 
+function syncStyleFontControl() {
+    const element = document.getElementById("video-style-element")?.value;
+    const fontSelect = document.getElementById("video-style-font");
+    if (fontSelect) fontSelect.disabled = QURAN_STYLE_ELEMENTS.has(element);
+}
+
 function initializeVideoStyleControls() {
+    document.getElementById("video-style-element")?.addEventListener("change", syncStyleFontControl);
+    syncStyleFontControl();
     document.getElementById("apply-video-style")?.addEventListener("click", () => {
         const element = document.getElementById("video-style-element")?.value;
         const color = document.getElementById("video-style-color")?.value;
         const font = document.getElementById("video-style-font")?.value;
         if (!element || !color || !font) return;
-        window.videoStyles[element] = { color, font };
+        window.videoStyles[element] = QURAN_STYLE_ELEMENTS.has(element) ? { color } : { color, font };
         renderAppliedVideoStyles();
     });
     document.getElementById("reset-video-styles")?.addEventListener("click", () => {
@@ -391,7 +408,7 @@ async function loadMusicList() {
             console.warn("No Supabase session found for loading music list.");
             return;
         }
-        const response = await fetch(`${API_BASE_URL}/admin/music`, {
+        const response = await fetch(`${API_BASE_URL}/music-list`, {
             headers: { Authorization: `Bearer ${session.access_token}` }
         });
         if (!response.ok) {
@@ -743,29 +760,102 @@ function createHistoryBadge(label, tone = "slate") {
     return badge;
 }
 
+function updateRecentSelectionUi() {
+    const actions = document.getElementById("recent-bulk-actions");
+    const toggle = document.getElementById("recent-select-toggle");
+    const count = document.getElementById("recent-selected-count");
+    const selectAll = document.getElementById("recent-select-all");
+    actions?.classList.toggle("hidden", !recentSelecting);
+    actions?.classList.toggle("flex", recentSelecting);
+    toggle?.classList.toggle("hidden", recentSelecting || recentItems.length === 0);
+    if (count) count.textContent = `${recentSelected.size} selected`;
+    if (selectAll) {
+        selectAll.checked = recentItems.length > 0 && recentSelected.size === recentItems.length;
+        selectAll.indeterminate = recentSelected.size > 0 && recentSelected.size < recentItems.length;
+    }
+    const downloadable = recentItems.some((item) => recentSelected.has(item.id) && item.has_file);
+    const downloadButton = document.getElementById("recent-download-selected");
+    const deleteButton = document.getElementById("recent-delete-selected");
+    if (downloadButton) downloadButton.disabled = !downloadable;
+    if (deleteButton) deleteButton.disabled = recentSelected.size === 0;
+}
+
+function setRecentSelecting(selecting) {
+    recentSelecting = selecting;
+    recentSelected.clear();
+    renderRecentVideos(recentItems);
+}
+
+function initializeRecentSelection() {
+    document.getElementById("recent-select-toggle")?.addEventListener("click", () => setRecentSelecting(true));
+    document.getElementById("recent-select-cancel")?.addEventListener("click", () => setRecentSelecting(false));
+    document.getElementById("recent-select-all")?.addEventListener("change", (event) => {
+        recentSelected.clear();
+        if (event.target.checked) recentItems.forEach((item) => recentSelected.add(item.id));
+        renderRecentVideos(recentItems);
+    });
+    document.getElementById("recent-download-selected")?.addEventListener("click", downloadSelectedRecent);
+    document.getElementById("recent-delete-selected")?.addEventListener("click", deleteSelectedRecent);
+}
+
 function renderRecentVideos(videos) {
     const list = document.getElementById("recent-videos-list");
     const empty = document.getElementById("recent-videos-empty");
     if (!list || !empty) return;
+    recentItems = videos;
+    const ids = new Set(videos.map((item) => item.id));
+    [...recentSelected].forEach((id) => { if (!ids.has(id)) recentSelected.delete(id); });
+    if (!videos.length) recentSelecting = false;
     list.replaceChildren();
     empty.classList.toggle("hidden", videos.length > 0);
 
     videos.forEach((video) => {
+        const isImage = video.type === "image";
         const item = document.createElement("li");
-        item.className = "rounded-xl border border-slate-700 bg-slate-900/80 p-3";
+        item.className = "flex gap-3 rounded-xl border border-slate-700 bg-slate-900/80 p-3";
 
+        if (recentSelecting) {
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.className = "mt-1 h-5 w-5 shrink-0";
+            checkbox.checked = recentSelected.has(video.id);
+            checkbox.setAttribute("aria-label", `Select ${isImage ? "image" : "video"} from ${video.created_at || "history"}`);
+            checkbox.addEventListener("change", () => {
+                if (checkbox.checked) recentSelected.add(video.id);
+                else recentSelected.delete(video.id);
+                updateRecentSelectionUi();
+            });
+            item.appendChild(checkbox);
+        }
+
+        if (isImage && video.thumb_url) {
+            const thumb = document.createElement("img");
+            thumb.src = new URL(video.thumb_url, new URL(API_BASE_URL, window.location.origin).origin).href;
+            thumb.alt = `Ayah image ${video.reference || ""}`;
+            thumb.loading = "lazy";
+            thumb.className = "h-20 w-16 shrink-0 rounded-lg border border-slate-700 object-cover";
+            item.appendChild(thumb);
+        }
+
+        const body = document.createElement("div");
+        body.className = "min-w-0 flex-1";
         const heading = document.createElement("div");
         heading.className = "flex flex-wrap items-start justify-between gap-2";
         const title = document.createElement("p");
         title.className = "text-sm font-semibold text-white";
-        const range = video.start_ayah === video.end_ayah
-            ? `${video.start_ayah ?? ""}`
-            : `${video.start_ayah ?? ""}-${video.end_ayah ?? ""}`;
-        title.textContent = `Surah ${video.surah ?? ""} · Ayat ${range}`;
+        if (isImage) {
+            title.textContent = `Ayah ${video.reference || ""}`;
+        } else {
+            const range = video.start_ayah === video.end_ayah
+                ? `${video.start_ayah ?? ""}`
+                : `${video.start_ayah ?? ""}-${video.end_ayah ?? ""}`;
+            title.textContent = `Surah ${video.surah ?? ""} · Ayat ${range}`;
+        }
         heading.appendChild(title);
 
         const badges = document.createElement("div");
         badges.className = "flex flex-wrap gap-1.5";
+        badges.appendChild(createHistoryBadge(isImage ? "Image" : "Video", "slate"));
         if (video.content_mode === "urdu_only") badges.appendChild(createHistoryBadge("Urdu-only", "amber"));
         if (video.content_mode === "arabic_only") badges.appendChild(createHistoryBadge("Arabic + English", "amber"));
         if (video.styled) badges.appendChild(createHistoryBadge("Styled", "amber"));
@@ -774,41 +864,122 @@ function renderRecentVideos(videos) {
         }
         if (!video.has_file) badges.appendChild(createHistoryBadge("Expire", "red"));
         heading.appendChild(badges);
-        item.appendChild(heading);
+        body.appendChild(heading);
 
         const createdAt = document.createElement("p");
         createdAt.className = "mt-1 text-xs text-slate-300";
         const date = new Date(video.created_at);
         createdAt.textContent = Number.isNaN(date.getTime())
             ? "Date unavailable" : date.toLocaleString();
-        item.appendChild(createdAt);
+        body.appendChild(createdAt);
 
-        const actions = document.createElement("div");
-        actions.className = "mt-3 flex flex-wrap gap-2";
-        const playButton = document.createElement("button");
-        playButton.type = "button";
-        playButton.className = "min-h-9 rounded-lg bg-amber-400 px-3 py-2 text-xs font-bold text-slate-950 hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-50";
-        playButton.textContent = "Play";
-        playButton.disabled = !video.has_file;
-        playButton.addEventListener("click", () => playRecentVideo(video));
+        if (!recentSelecting) {
+            const actions = document.createElement("div");
+            actions.className = "mt-3 flex flex-wrap gap-2";
+            const playButton = document.createElement("button");
+            playButton.type = "button";
+            playButton.className = "min-h-9 rounded-lg bg-amber-400 px-3 py-2 text-xs font-bold text-slate-950 hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-50";
+            playButton.textContent = isImage ? "Open" : "Play";
+            playButton.disabled = !video.has_file;
+            playButton.addEventListener("click", () => isImage ? openRecentImage(video) : playRecentVideo(video));
 
-        const downloadButton = document.createElement("button");
-        downloadButton.type = "button";
-        downloadButton.className = "min-h-9 rounded-lg border border-slate-500 px-3 py-2 text-xs font-semibold text-slate-100 hover:border-amber-300 hover:text-amber-200 disabled:cursor-not-allowed disabled:opacity-50";
-        downloadButton.textContent = "Download";
-        downloadButton.disabled = !video.has_file;
-        downloadButton.addEventListener("click", () => downloadRecentVideo(video));
+            const downloadButton = document.createElement("button");
+            downloadButton.type = "button";
+            downloadButton.className = "min-h-9 rounded-lg border border-slate-500 px-3 py-2 text-xs font-semibold text-slate-100 hover:border-amber-300 hover:text-amber-200 disabled:cursor-not-allowed disabled:opacity-50";
+            downloadButton.textContent = "Download";
+            downloadButton.disabled = !video.has_file;
+            downloadButton.addEventListener("click", () => downloadRecentVideo(video));
 
-        const deleteButton = document.createElement("button");
-        deleteButton.type = "button";
-        deleteButton.className = "min-h-9 rounded-lg border border-red-400/50 px-3 py-2 text-xs font-semibold text-red-200 hover:bg-red-400/10";
-        deleteButton.textContent = "Delete";
-        deleteButton.addEventListener("click", () => deleteRecentVideo(video));
+            const deleteButton = document.createElement("button");
+            deleteButton.type = "button";
+            deleteButton.className = "min-h-9 rounded-lg border border-red-400/50 px-3 py-2 text-xs font-semibold text-red-200 hover:bg-red-400/10";
+            deleteButton.textContent = "Delete";
+            deleteButton.addEventListener("click", () => deleteRecentVideo(video));
 
-        actions.append(playButton, downloadButton, deleteButton);
-        item.appendChild(actions);
+            actions.append(playButton, downloadButton, deleteButton);
+            body.appendChild(actions);
+        }
+        item.appendChild(body);
         list.appendChild(item);
     });
+    updateRecentSelectionUi();
+}
+
+async function historyRequest(path, body) {
+    const { data: { session }, error } = await window.supabaseClient.auth.getSession();
+    if (error) throw error;
+    if (!session) throw new Error("Sign in again to manage your items.");
+    const response = await fetch(`${API_BASE_URL}${path}`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify(body)
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.detail || `Request failed (HTTP ${response.status}).`);
+    return result;
+}
+
+function triggerDownload(url) {
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "";
+    link.rel = "noopener";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+}
+
+async function downloadSelectedRecent() {
+    const items = recentItems.filter((item) => recentSelected.has(item.id) && item.has_file);
+    if (!items.length) return;
+    try {
+        if (items.length <= DIRECT_DOWNLOAD_LIMIT) {
+            for (const item of items) {
+                triggerDownload(await requestRecentVideoUrl(item, "download"));
+                await new Promise((resolve) => setTimeout(resolve, 400));
+            }
+        } else {
+            const result = await historyRequest("/history/bulk-download-url", { ids: items.map((item) => item.id) });
+            triggerDownload(new URL(result.url, new URL(API_BASE_URL, window.location.origin).origin).href);
+        }
+        setRecentSelecting(false);
+        setRecentVideosStatus("");
+        await refreshRecentVideos();
+    } catch (error) {
+        console.error("Bulk download error:", error);
+        setRecentVideosStatus(error.message || "Could not download the selected items.");
+    }
+}
+
+async function deleteSelectedRecent() {
+    const ids = [...recentSelected];
+    if (!ids.length) return;
+    if (!window.confirm(`Delete ${ids.length} items? This cannot be undone.`)) return;
+    try {
+        await historyRequest("/history/bulk-delete", { ids });
+        const removed = new Set(recentItems.filter((item) => recentSelected.has(item.id)).map((item) => item.filename));
+        if (generatedVideos.some((item) => removed.has(item.filename))) {
+            showGeneratedVideos(generatedVideos.filter((item) => !removed.has(item.filename)));
+        }
+        setRecentSelecting(false);
+        setRecentVideosStatus("");
+        await refreshRecentVideos();
+    } catch (error) {
+        console.error("Bulk delete error:", error);
+        setRecentVideosStatus(error.message || "Could not delete the selected items.");
+    }
+}
+
+async function openRecentImage(video) {
+    if (!video.has_file) return;
+    try {
+        window.open(await requestRecentVideoUrl(video, "play"), "_blank", "noopener");
+    } catch (error) {
+        setRecentVideosStatus(error.message || "Could not open this image.");
+    }
 }
 
 async function refreshRecentVideos() {

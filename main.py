@@ -1,4 +1,5 @@
 import base64
+import functools
 import json
 import hashlib
 import hmac
@@ -9,6 +10,7 @@ import random
 import re
 import secrets
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -55,6 +57,13 @@ CACHE_DIR = Path(os.getenv("CACHE_DIR", BASE_DIR / "cache"))
 VIDEO_URL_SECRET = os.getenv("VIDEO_URL_SECRET") or secrets.token_urlsafe(32)
 VIDEO_URL_TTL_SECONDS = 10 * 60
 VIDEO_FILENAME_PATTERN = re.compile(r"[A-Za-z0-9_.-]+\.mp4\Z")
+MEDIA_FILENAME_PATTERN = re.compile(r"[A-Za-z0-9_.-]+\.(?:mp4|png)\Z")
+HISTORY_ID_PATTERN = re.compile(r"[A-Za-z0-9_-]{1,64}\Z")
+MAX_BULK_HISTORY_ITEMS = 100
+MAX_AYAHS_PER_REQUEST = 50
+RENDER_TIMEOUT_SECONDS = int(os.getenv("RENDER_TIMEOUT_SECONDS", "900"))
+IMAGE_COOLDOWN_SECONDS = 10
+AUTH_CACHE_SECONDS = 60
 RECITERS_PATH = BASE_DIR / "data" / "reciters.json"
 RECITER_CONFIG = json.loads(RECITERS_PATH.read_text(encoding="utf-8"))
 RECITERS_BY_ID = {
@@ -67,6 +76,9 @@ ADMIN_AUDIO_DIR = BASE_DIR / "audio" / "admin"
 MAX_BACKGROUND_BYTES = 50 * 1024 * 1024
 MAX_TEXT_LENGTH = 5000
 VIDEO_STYLE_ELEMENTS = {"bismillah", "surah", "label", "arabic", "urdu", "english", "channel"}
+# Quran text always renders in the verified KFGQPC font; only its color can change.
+QURAN_STYLE_ELEMENTS = {"bismillah", "arabic"}
+RENDER_QUALITIES = {"fast", "balanced", "high"}
 VIDEO_STYLE_FONTS = {
     "amiri_regular",
     "amiri_bold",
@@ -99,6 +111,10 @@ HISTORY_LOCK = Lock()
 FEATURED_IMAGE_LOCK = Lock()
 LAST_FEATURED_AYAH = None
 GENERATION_JOBS = {}
+AUTH_CACHE = {}
+AUTH_CACHE_LOCK = Lock()
+LAST_IMAGE_RENDER = {}
+EPHEMERAL_MEDIA_READY = False
 GENERATION_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="quran-render")
 
 # 3. CORS Setup (Frontend Integration ke liye)
@@ -140,8 +156,11 @@ class PremiumAccessRequest(BaseModel):
 
 
 class VerseContentRequest(BaseModel):
-    arabic_text: str = ""
     urdu_text: str = ""
+
+
+class HistoryBulkRequest(BaseModel):
+    ids: list[str] = Field(min_length=1, max_length=MAX_BULK_HISTORY_ITEMS)
 
 
 class GenerateImageRequest(BaseModel):
@@ -162,6 +181,8 @@ def validate_video_styles(styles):
         ):
             raise HTTPException(status_code=400, detail="Style colors must use #RRGGBB format.")
         font = style.get("font")
+        if font is not None and element in QURAN_STYLE_ELEMENTS:
+            raise HTTPException(status_code=400, detail="Quran text always uses the verified KFGQPC font.")
         if font is not None and (
             not isinstance(font, str) or font not in VIDEO_STYLE_FONTS
         ):
@@ -197,7 +218,6 @@ def _get_verse_content(surah: int, ayah: int):
     result = {
         "surah": surah,
         "ayah": ayah,
-        "arabic_text": verse.get("arabic_text", ""),
         "urdu_text": verse.get("urdu_text", ""),
         "arabic_audio": bool(audio.get("arabic")),
         "urdu_audio": bool(audio.get("urdu")),
@@ -383,6 +403,21 @@ def get_current_user(authorization: Optional[str] = Header(default=None)):
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(status_code=401, detail="Please sign in to continue.")
     token = authorization[7:].strip()
+    cache_key = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    now = time.monotonic()
+    with AUTH_CACHE_LOCK:
+        cached = AUTH_CACHE.get(cache_key)
+        if cached and cached[0] > now:
+            return dict(cached[1])
+    user = _fetch_current_user(token)
+    with AUTH_CACHE_LOCK:
+        if len(AUTH_CACHE) >= 1000:
+            AUTH_CACHE.clear()
+        AUTH_CACHE[cache_key] = (now + AUTH_CACHE_SECONDS, user)
+    return dict(user)
+
+
+def _fetch_current_user(token: str):
     user_response = _supabase_request("GET", "/auth/v1/user", token)
     _raise_supabase_error(user_response)
     user = user_response.json()
@@ -408,6 +443,29 @@ def require_admin(user=Depends(get_current_user)):
     if not user["is_admin"]:
         raise HTTPException(status_code=403, detail="Admin access required.")
     return user
+
+
+@functools.cache
+def _quran_data():
+    quran_file = BASE_DIR / "data" / "quran.json"
+    if not quran_file.exists():
+        raise HTTPException(status_code=503, detail="Quran data is unavailable on the server.")
+    try:
+        return json.loads(quran_file.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=500, detail="Quran data could not be read.") from exc
+
+
+def _validate_ayah_range(surah: int, start_ayah: int, end_ayah: int):
+    if start_ayah > end_ayah:
+        raise HTTPException(status_code=400, detail="Start ayah must not exceed end ayah.")
+    _validate_verse(surah, start_ayah)
+    _validate_verse(surah, end_ayah)
+    if end_ayah - start_ayah + 1 > MAX_AYAHS_PER_REQUEST:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Select at most {MAX_AYAHS_PER_REQUEST} ayat per request.",
+        )
 
 
 def _latest_generated_video() -> Optional[str]:
@@ -454,13 +512,14 @@ def generate_ayah_image(req: GenerateImageRequest, user=Depends(get_current_user
     _require_raqm_for_generation("arabic_only")
     reference = _select_featured_ayah(req.ayah)
     surah_number, ayah_number = (int(value) for value in reference.split(":"))
+    import make as renderer
+
     try:
-        quran = json.loads((BASE_DIR / "data" / "quran.json").read_text(encoding="utf-8"))
-        surah = quran["surahs"][str(surah_number)]
-        arabic_text = surah["arabic"][str(ayah_number)]
+        surah = _quran_data()["surahs"][str(surah_number)]
+        arabic_text = renderer.verified_arabic_text(surah_number, ayah_number)
         english_text = surah["english_ayahs"][str(ayah_number)]
         surah_name = surah["english"]
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError, KeyError, TypeError) as exc:
+    except (KeyError, TypeError) as exc:
         LOGGER.exception("Curated ayah %s is missing from Quran data.", reference)
         raise HTTPException(status_code=500, detail="Selected ayah is unavailable.") from exc
 
@@ -473,10 +532,15 @@ def generate_ayah_image(req: GenerateImageRequest, user=Depends(get_current_user
         raise HTTPException(status_code=503, detail="No image backgrounds are available.")
     background_path = random.choice(background_paths)
 
+    with FEATURED_IMAGE_LOCK:
+        last_render = LAST_IMAGE_RENDER.get(user["id"])
+        if last_render is not None and time.monotonic() - last_render < IMAGE_COOLDOWN_SECONDS:
+            raise HTTPException(status_code=429, detail="Please wait a few seconds before creating another image.")
+        LAST_IMAGE_RENDER[user["id"]] = time.monotonic()
+
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     filename = f"ayah-image-{uuid4().hex}.png"
     image_path = OUTPUT_DIR / filename
-    import make as renderer
 
     renderer.render_ayah_image(
         arabic_text,
@@ -488,6 +552,10 @@ def generate_ayah_image(req: GenerateImageRequest, user=Depends(get_current_user
     if SUPABASE_SERVICE_KEY:
         _upload_media_file(image_path, f"ayah-images/{filename}", "image/png")
     image_data = base64.b64encode(image_path.read_bytes()).decode("ascii")
+    try:
+        _record_image_history(user["id"], filename, reference)
+    except Exception as history_error:
+        LOGGER.error("Could not record ayah image history: %s", _redact_secrets(str(history_error)))
     return {
         "filename": filename,
         "reference": reference,
@@ -574,9 +642,13 @@ def _validate_music_filename(filename: str) -> str:
     return filename
 
 
-@app.get("/api/admin/music")
 @app.get("/api/music-list")
 def list_background_music(user=Depends(get_current_user)):
+    return {"music_files": _available_music_filenames()}
+
+
+@app.get("/api/admin/music")
+def list_admin_background_music(user=Depends(require_admin)):
     return {"music_files": _available_music_filenames()}
 
 
@@ -634,7 +706,7 @@ async def upload_background_music(request: Request, user=Depends(require_admin))
 
 
 def _local_video_path(filename: str) -> Path:
-    if not VIDEO_FILENAME_PATTERN.fullmatch(filename):
+    if not MEDIA_FILENAME_PATTERN.fullmatch(filename):
         raise HTTPException(status_code=400, detail="Invalid video filename.")
     output_root = OUTPUT_DIR.resolve()
     video_path = (output_root / filename).resolve()
@@ -676,7 +748,7 @@ def _write_video_history_unlocked(history):
 
 
 def _safe_history_video_path(filename):
-    if not isinstance(filename, str) or not VIDEO_FILENAME_PATTERN.fullmatch(filename):
+    if not isinstance(filename, str) or not MEDIA_FILENAME_PATTERN.fullmatch(filename):
         return None
     output_root = OUTPUT_DIR.resolve()
     video_path = (output_root / filename).resolve()
@@ -709,6 +781,7 @@ def cleanup_output_on_startup():
     RAQM_AVAILABLE = bool(features.check("raqm"))
     if not RAQM_AVAILABLE:
         LOGGER.error(RAQM_REQUIRED_ERROR)
+    _quran_data()
     _cleanup_orphaned_output_files()
 
 
@@ -750,6 +823,33 @@ def _record_video_history(user_id, videos, content_mode, quality, styles):
         ]
         history["users"][user_id] = new_entries + entries
         _write_video_history_unlocked(history)
+
+
+def _record_image_history(user_id, filename, reference):
+    with HISTORY_LOCK:
+        history = _read_video_history_unlocked()
+        entries = history["users"].get(user_id, [])
+        if not isinstance(entries, list):
+            entries = []
+        entry = {
+            "id": uuid4().hex,
+            "type": "image",
+            "filename": filename,
+            "reference": reference,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "downloaded_at": None,
+            "download_count": 0,
+        }
+        history["users"][user_id] = [entry] + [item for item in entries if isinstance(item, dict)]
+        _write_video_history_unlocked(history)
+
+
+def _signed_media_path(filename: str, download: bool = False) -> str:
+    expires = int(time.time()) + VIDEO_URL_TTL_SECONDS
+    params = {"exp": expires, "sig": _video_signature(filename, expires)}
+    if download:
+        params["dl"] = "1"
+    return f"/api/video/{quote(filename, safe='')}?{urlencode(params)}"
 
 
 def _user_owns_video(user_id, filename):
@@ -812,7 +912,6 @@ def serve_signed_video(
     dl: Optional[str] = None,
     range_header: Optional[str] = Header(default=None, alias="Range"),
 ):
-    video_path = _local_video_path(filename)
     if (
         not isinstance(exp, str)
         or re.fullmatch(r"[0-9]{1,12}", exp) is None
@@ -823,6 +922,7 @@ def serve_signed_video(
     expires = int(exp)
     if expires <= int(time.time()) or not hmac.compare_digest(sig, _video_signature(filename, expires)):
         raise HTTPException(status_code=403, detail="Invalid or expired video link.")
+    video_path = _local_video_path(filename)
 
     file_size = video_path.stat().st_size
     start, end = 0, max(0, file_size - 1)
@@ -870,7 +970,7 @@ def serve_signed_video(
     return StreamingResponse(
         _file_chunks(video_path, start, content_length),
         status_code=status_code,
-        media_type="video/mp4",
+        media_type="image/png" if video_path.suffix == ".png" else "video/mp4",
         headers=headers,
     )
 
@@ -887,8 +987,11 @@ def get_video_history(user=Depends(get_current_user)):
             if not isinstance(entry, dict):
                 continue
             item = dict(entry)
+            item.setdefault("type", "video")
             video_path = _safe_history_video_path(item.get("filename"))
             item["has_file"] = bool(video_path and video_path.is_file())
+            if item["type"] == "image" and item["has_file"]:
+                item["thumb_url"] = _signed_media_path(item["filename"])
             response.append(item)
     return {"videos": response}
 
@@ -929,36 +1032,48 @@ def get_history_video_url(
             entry["download_count"] = download_count + 1
             _write_video_history_unlocked(history)
 
-    expires = int(time.time()) + VIDEO_URL_TTL_SECONDS
-    signature = _video_signature(filename, expires)
-    params = {"exp": expires, "sig": signature}
-    if purpose == "download":
-        params["dl"] = "1"
-    url = f"/api/video/{quote(filename, safe='')}?{urlencode(params)}"
-    return {"url": url, "expires_at": expires}
+    url = _signed_media_path(filename, download=purpose == "download")
+    return {"url": url, "expires_at": int(time.time()) + VIDEO_URL_TTL_SECONDS}
 
 
-@app.delete("/api/history/{entry_id}")
-def delete_history_video(entry_id: str, user=Depends(get_current_user)):
+def _validate_history_ids(ids):
+    unique_ids = list(dict.fromkeys(ids))
+    if not unique_ids or len(unique_ids) > MAX_BULK_HISTORY_ITEMS or any(
+        not isinstance(entry_id, str) or HISTORY_ID_PATTERN.fullmatch(entry_id) is None
+        for entry_id in unique_ids
+    ):
+        raise HTTPException(status_code=400, detail=f"Send 1 to {MAX_BULK_HISTORY_ITEMS} valid item ids.")
+    return unique_ids
+
+
+def _owned_history_entries(user_id, ids):
+    """Return the user's entries for ids, or 404 if any id is not theirs."""
+    with HISTORY_LOCK:
+        entries = _read_video_history_unlocked()["users"].get(user_id, [])
+    by_id = {
+        item.get("id"): item
+        for item in (entries if isinstance(entries, list) else [])
+        if isinstance(item, dict)
+    }
+    if any(entry_id not in by_id for entry_id in ids):
+        raise HTTPException(status_code=404, detail="Video not found.")
+    return [by_id[entry_id] for entry_id in ids]
+
+
+def _delete_history_entries(user_id, ids):
     with HISTORY_LOCK:
         history = _read_video_history_unlocked()
-        entries = history["users"].get(user["id"], [])
+        entries = history["users"].get(user_id, [])
         if not isinstance(entries, list):
             entries = []
-        entry_index = next(
-            (
-                index for index, item in enumerate(entries)
-                if isinstance(item, dict) and item.get("id") == entry_id
-            ),
-            None,
-        )
-        if entry_index is None:
+        wanted = set(ids)
+        removed = [item for item in entries if isinstance(item, dict) and item.get("id") in wanted]
+        if len(removed) != len(wanted):
             raise HTTPException(status_code=404, detail="Video not found.")
-        entry = entries.pop(entry_index)
-        history["users"][user["id"]] = entries
+        history["users"][user_id] = [
+            item for item in entries if not (isinstance(item, dict) and item.get("id") in wanted)
+        ]
         _write_video_history_unlocked(history)
-        video_path = _safe_history_video_path(entry.get("filename"))
-        object_path = entry.get("object_path")
         remaining_object_paths = {
             item.get("object_path")
             for user_entries in history["users"].values()
@@ -966,17 +1081,139 @@ def delete_history_video(entry_id: str, user=Depends(get_current_user)):
             for item in user_entries
             if isinstance(item, dict) and isinstance(item.get("object_path"), str)
         }
-    if video_path is not None:
+    for entry in removed:
+        video_path = _safe_history_video_path(entry.get("filename"))
+        if video_path is not None:
+            try:
+                video_path.unlink(missing_ok=True)
+            except OSError:
+                LOGGER.exception("Could not delete history file %s", entry.get("filename"))
+    orphaned = [
+        entry.get("object_path") for entry in removed
+        if entry.get("object_path") not in remaining_object_paths
+    ]
+    if orphaned:
         try:
-            video_path.unlink(missing_ok=True)
-        except OSError:
-            LOGGER.exception("Could not delete history video %s", entry.get("filename"))
-    if object_path not in remaining_object_paths:
-        try:
-            _delete_media_objects([object_path])
+            _delete_media_objects(orphaned)
         except Exception:
             LOGGER.exception("Could not delete history media object")
+    return len(removed)
+
+
+@app.delete("/api/history/{entry_id}")
+def delete_history_video(entry_id: str, user=Depends(get_current_user)):
+    _delete_history_entries(user["id"], [entry_id])
     return {"deleted": True}
+
+
+@app.post("/api/history/bulk-delete")
+def bulk_delete_history(req: HistoryBulkRequest, user=Depends(get_current_user)):
+    ids = _validate_history_ids(req.ids)
+    return {"deleted": _delete_history_entries(user["id"], ids)}
+
+
+def _history_zip_signature(user_id, ids, expires):
+    return _video_signature(f"history-zip\n{user_id}\n{','.join(ids)}", expires)
+
+
+@app.post("/api/history/bulk-download-url")
+def create_history_zip_url(req: HistoryBulkRequest, user=Depends(get_current_user)):
+    ids = _validate_history_ids(req.ids)
+    _owned_history_entries(user["id"], ids)
+    expires = int(time.time()) + VIDEO_URL_TTL_SECONDS
+    query = urlencode({
+        "u": user["id"],
+        "ids": ",".join(ids),
+        "exp": expires,
+        "sig": _history_zip_signature(user["id"], ids, expires),
+    })
+    return {"url": f"/api/history/zip?{query}", "item_count": len(ids), "expires_at": expires}
+
+
+class _ZipStreamSink:
+    """Write-only, unseekable target, so zipfile streams entries with data descriptors."""
+
+    def __init__(self):
+        self._chunks = []
+
+    def write(self, data):
+        self._chunks.append(bytes(data))
+        return len(data)
+
+    def flush(self):
+        pass
+
+    def drain(self):
+        data = b"".join(self._chunks)
+        self._chunks.clear()
+        return data
+
+
+def _stream_zip(paths_by_name):
+    sink = _ZipStreamSink()
+    with zipfile.ZipFile(sink, "w", compression=zipfile.ZIP_STORED, allowZip64=True) as archive:
+        for arcname, path in paths_by_name.items():
+            info = zipfile.ZipInfo.from_file(path, arcname)
+            info.compress_type = zipfile.ZIP_STORED
+            with path.open("rb") as source, archive.open(info, "w", force_zip64=True) as target:
+                while chunk := source.read(1024 * 1024):
+                    target.write(chunk)
+                    yield sink.drain()
+            yield sink.drain()
+    yield sink.drain()
+
+
+@app.get("/api/history/zip")
+def download_history_zip(
+    u: Optional[str] = None,
+    ids: Optional[str] = None,
+    exp: Optional[str] = None,
+    sig: Optional[str] = None,
+):
+    if (
+        not isinstance(u, str) or not isinstance(ids, str)
+        or not isinstance(exp, str) or re.fullmatch(r"[0-9]{1,12}", exp) is None
+        or not isinstance(sig, str) or re.fullmatch(r"[0-9a-f]{64}", sig) is None
+    ):
+        raise HTTPException(status_code=403, detail="Invalid or expired download link.")
+    id_list = _validate_history_ids(ids.split(","))
+    expires = int(exp)
+    if expires <= int(time.time()) or not hmac.compare_digest(
+        sig, _history_zip_signature(u, id_list, expires)
+    ):
+        raise HTTPException(status_code=403, detail="Invalid or expired download link.")
+    paths_by_name = {}
+    for entry in _owned_history_entries(u, id_list):
+        path = _safe_history_video_path(entry.get("filename"))
+        if path is not None and path.is_file():
+            paths_by_name[path.name] = path
+    if not paths_by_name:
+        raise HTTPException(status_code=410, detail="The selected files have expired.")
+
+    with HISTORY_LOCK:
+        history = _read_video_history_unlocked()
+        entries = history["users"].get(u, [])
+        downloaded_at = datetime.now(timezone.utc).isoformat()
+        for entry in entries if isinstance(entries, list) else []:
+            if isinstance(entry, dict) and entry.get("id") in id_list:
+                entry["downloaded_at"] = downloaded_at
+                try:
+                    entry["download_count"] = int(entry.get("download_count") or 0) + 1
+                except (TypeError, ValueError):
+                    entry["download_count"] = 1
+        try:
+            _write_video_history_unlocked(history)
+        except OSError:
+            LOGGER.exception("Could not record history ZIP download")
+
+    return StreamingResponse(
+        _stream_zip(paths_by_name),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="noor-ul-quran-{len(paths_by_name)}-items.zip"',
+            "Cache-Control": "private, no-store",
+        },
+    )
 
 
 @app.get("/api/access")
@@ -1007,8 +1244,6 @@ def estimate_reel(
         selected_length = int(length_limit)
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail="Surah, ayah range, and length are required.") from exc
-    if start_ayah > end_ayah:
-        raise HTTPException(status_code=400, detail="Start ayah must not exceed end ayah.")
     if mode not in {"full", "urdu_only", "arabic_only"}:
         raise HTTPException(status_code=400, detail="Mode must be full, urdu_only, or arabic_only.")
     reciter_id = _validate_reciter_id(
@@ -1022,8 +1257,7 @@ def estimate_reel(
         )
     if not 30 <= selected_length <= 180:
         raise HTTPException(status_code=400, detail="Length must be between 30 and 180 seconds.")
-    _validate_verse(surah_number, start_ayah)
-    _validate_verse(surah_number, end_ayah)
+    _validate_ayah_range(surah_number, start_ayah, end_ayah)
 
     import make as renderer
 
@@ -1034,10 +1268,12 @@ def estimate_reel(
             end_ayah,
             selected_length,
             mode,
-            None,
+            _quran_data(),
             reciter_id,
             urdu_voice_id,
         )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except (OSError, RuntimeError, requests.RequestException) as exc:
         raise HTTPException(status_code=502, detail="Ayah audio durations could not be measured.") from exc
 
@@ -1194,13 +1430,9 @@ async def upload_background(request: Request, user=Depends(require_admin)):
 def _validate_verse(surah: int, ayah: int):
     if not 1 <= surah <= 114:
         raise HTTPException(status_code=400, detail="Surah must be between 1 and 114.")
-    quran_file = BASE_DIR / "data" / "quran.json"
-    if not quran_file.exists():
-        raise HTTPException(status_code=503, detail="Quran data is unavailable on the server.")
     try:
-        quran = json.loads(quran_file.read_text(encoding="utf-8"))
-        verse_count = int(quran["surahs"][str(surah)]["n"])
-    except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+        verse_count = int(_quran_data()["surahs"][str(surah)]["n"])
+    except (KeyError, TypeError, ValueError) as exc:
         raise HTTPException(status_code=500, detail="Quran data could not be read.") from exc
     if not 1 <= ayah <= verse_count:
         raise HTTPException(status_code=400, detail=f"Ayah must be between 1 and {verse_count} for this surah.")
@@ -1220,16 +1452,17 @@ def update_admin_verse_content(
     user=Depends(require_admin),
 ):
     _validate_verse(surah, ayah)
-    if len(req.arabic_text) > MAX_TEXT_LENGTH or len(req.urdu_text) > MAX_TEXT_LENGTH:
+    if len(req.urdu_text) > MAX_TEXT_LENGTH:
         raise HTTPException(status_code=400, detail=f"Text must be {MAX_TEXT_LENGTH} characters or fewer.")
 
     content = _load_admin_content()
     key = f"{surah}:{ayah}"
     verse = content["verses"].setdefault(key, {})
-    verse["arabic_text"] = req.arabic_text.strip()
+    # Arabic Quran text is never editable; it always comes from the hash-verified QPC file.
+    verse.pop("arabic_text", None)
     verse["urdu_text"] = req.urdu_text.strip()
     verse.setdefault("audio", {})
-    if not verse["arabic_text"] and not verse["urdu_text"] and not any(verse["audio"].values()):
+    if not verse["urdu_text"] and not any(verse["audio"].values()):
         del content["verses"][key]
     _save_admin_content(content)
     return _get_verse_content(surah, ayah)
@@ -1293,7 +1526,7 @@ async def upload_admin_verse_audio(
     _save_admin_content(content)
     import make as renderer
 
-    renderer.invalidate_ayah_duration(surah, ayah, language)
+    renderer.invalidate_ayah_duration(surah, ayah, language, all_reciters=True)
 
     if previous_extension and previous_extension != extension.lstrip("."):
         previous_file = ADMIN_AUDIO_DIR / f"{surah:03d}{ayah:03d}_{language}.{previous_extension}"
@@ -1389,10 +1622,7 @@ def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
             raise HTTPException(status_code=400, detail="Enter a valid Surah:Ayah or Surah:Start-End range.")
         surah_number, start_ayah = int(verse_match[1]), int(verse_match[2])
         end_ayah = int(verse_match[3] or start_ayah)
-        if start_ayah > end_ayah:
-            raise HTTPException(status_code=400, detail="Start ayah must not exceed end ayah.")
-        _validate_verse(surah_number, start_ayah)
-        _validate_verse(surah_number, end_ayah)
+        _validate_ayah_range(surah_number, start_ayah, end_ayah)
     if req.mode != "pick" and not (user["is_admin"] or user["premium_access"]):
         raise HTTPException(status_code=403, detail="Premium access is required for custom and random generation.")
     if req.max_duration > 60 and not (user["is_admin"] or user["premium_access"]):
@@ -1401,8 +1631,8 @@ def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
         raise HTTPException(status_code=400, detail="Random count must be between 1 and 25.")
     if req.max_duration < 30 or req.max_duration > 180:
         raise HTTPException(status_code=400, detail="Maximum duration must be between 30 and 180 seconds.")
-    if req.quality not in {"balanced", "high"}:
-        raise HTTPException(status_code=400, detail="Quality must be balanced or high.")
+    if req.quality not in RENDER_QUALITIES:
+        raise HTTPException(status_code=400, detail="Quality must be fast, balanced, or high.")
     validate_video_styles(req.styles)
     _require_raqm_for_generation(req.content_mode)
 
@@ -1440,6 +1670,13 @@ def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
         "--work-dir", str(work_dir),
         "--result-json", str(manifest_path),
     ])
+
+    reel_count = req.random_count if req.mode == "random" else 1
+    if req.mode == "picks":
+        reel_count = max(1, sum(
+            1 for line in (BASE_DIR / "picks.txt").read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        ))
 
     job_id = uuid4().hex
     with GENERATION_JOBS_LOCK:
@@ -1480,6 +1717,7 @@ def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
         user["id"],
         req.content_mode,
         req.quality,
+        RENDER_TIMEOUT_SECONDS * reel_count,
     )
     return {
         "job_id": job_id,
@@ -1497,6 +1735,43 @@ def _read_generation_manifest(manifest_path: Path):
         return []
 
 
+def _kill_process_tree(process):
+    try:
+        if os.name == "nt":
+            subprocess.run(
+                ["taskkill", "/F", "/T", "/PID", str(process.pid)],
+                capture_output=True,
+                check=False,
+            )
+        else:
+            os.killpg(process.pid, signal.SIGKILL)
+    except OSError:
+        process.kill()
+
+
+def _run_render(cmd, timeout):
+    """Run make.py; on timeout kill it and every FFmpeg child it started."""
+    group_args = (
+        {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+        if os.name == "nt" else {"start_new_session": True}
+    )
+    process = subprocess.Popen(
+        cmd,
+        cwd=str(BASE_DIR),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        **group_args,
+    )
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        _kill_process_tree(process)
+        process.communicate()
+        raise RuntimeError(f"Rendering took longer than {timeout} seconds and was stopped.")
+    return subprocess.CompletedProcess(cmd, process.returncode, stdout, stderr)
+
+
 def _run_generation_job(
     job_id,
     cmd,
@@ -1507,7 +1782,9 @@ def _run_generation_job(
     user_id=None,
     content_mode="full",
     quality="high",
+    timeout=RENDER_TIMEOUT_SECONDS,
 ):
+    global EPHEMERAL_MEDIA_READY
     with GENERATION_JOBS_LOCK:
         job = GENERATION_JOBS.get(job_id)
         if job:
@@ -1520,9 +1797,11 @@ def _run_generation_job(
                     json.dumps(styles, ensure_ascii=False, indent=2),
                     encoding="utf-8",
                 )
-            _prepare_ephemeral_media()
+            if not EPHEMERAL_MEDIA_READY:
+                _prepare_ephemeral_media()
+                EPHEMERAL_MEDIA_READY = True
             _cleanup_orphaned_output_files()
-            completed = subprocess.run(cmd, cwd=str(BASE_DIR), capture_output=True, text=True)
+            completed = _run_render(cmd, timeout)
             videos = _read_generation_manifest(manifest_path)
             if completed.returncode != 0 and not videos:
                 raise RuntimeError(completed.stderr or completed.stdout or "Video rendering failed.")

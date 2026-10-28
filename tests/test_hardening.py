@@ -577,8 +577,8 @@ def test_failed_renderer_marks_job_failed_and_logs_without_secrets(client, monke
     monkeypatch.setattr(main, "_prepare_ephemeral_media", lambda: None)
     monkeypatch.setattr(main, "_cleanup_orphaned_output_files", lambda: 0)
     monkeypatch.setattr(
-        main.subprocess,
-        "run",
+        main,
+        "_run_render",
         lambda *args, **kwargs: SimpleNamespace(returncode=1, stderr="render failed private-service-key", stdout=""),
     )
     manifest = main.CACHE_DIR / "batch-failure.json"
@@ -846,3 +846,120 @@ def test_prepare_ephemeral_media_downloads_supabase_music(client, monkeypatch):
     main._prepare_ephemeral_media()
     assert downloads == ["backgrounds/music/nasheed.mp3"]
     assert (main.BACKGROUND_DIR / "music" / "nasheed.mp3").read_bytes() == b"audio"
+
+
+def test_render_timeout_kills_process_and_frees_queue(client, monkeypatch):
+    monkeypatch.setattr(main, "_prepare_ephemeral_media", lambda: None)
+    monkeypatch.setattr(main, "_cleanup_orphaned_output_files", lambda: 0)
+    manifest = main.CACHE_DIR / "batch-timeout.json"
+    main.GENERATION_JOBS["job-timeout"] = {
+        "owner_id": "free-user", "status": "queued", "manifest_path": str(manifest), "videos": [],
+    }
+    started = time.monotonic()
+    main._run_generation_job(
+        "job-timeout",
+        [main.sys.executable, "-c", "import time; time.sleep(30)"],
+        "pick",
+        manifest,
+        main.CACHE_DIR / "tmp" / "timeout",
+        user_id="free-user",
+        timeout=1,
+    )
+    assert time.monotonic() - started < 15
+    assert main.GENERATION_JOBS["job-timeout"]["status"] == "failed"
+    assert "was stopped" in main.GENERATION_JOBS["job-timeout"]["error"]
+    assert not main.GENERATION_LOCK.locked()
+
+
+def test_ayah_range_is_capped_for_estimate_and_generate(client):
+    too_many = f"2:1-{main.MAX_AYAHS_PER_REQUEST + 1}"
+    response = client.post("/api/generate", json={"mode": "pick", "verse": too_many})
+    assert response.status_code == 400
+    response = client.get("/api/estimate", params={
+        "surah": 2, "start": 1, "end": main.MAX_AYAHS_PER_REQUEST + 1, "mode": "full",
+    })
+    assert response.status_code == 400
+
+
+def test_estimate_requires_exact_reciter_ids(client):
+    params = {"surah": 1, "start": 1, "end": 1, "mode": "full", "length_limit": 60}
+    assert client.get("/api/estimate", params={**params, "reciter_id": "Alafasy"}).status_code == 400
+    assert client.get("/api/estimate", params={**params, "urdu_voice_id": "alafasy"}).status_code == 400
+    assert client.get("/api/estimate", params={**params, "reciter_id": "shamshad_ali_khan"}).status_code == 400
+
+
+def test_quran_text_font_and_admin_arabic_override_are_rejected(client):
+    response = client.post("/api/generate", json={
+        "mode": "pick", "verse": "1:1", "styles": {"arabic": {"font": "amiri_bold"}},
+    })
+    assert response.status_code == 400
+    assert "arabic_text" not in main.VerseContentRequest.model_fields
+
+
+def test_render_arabic_always_comes_from_verified_qpc(monkeypatch):
+    monkeypatch.setattr(make, "admin_content", lambda: {"verses": {"1:2": {"arabic_text": "hand typed"}}})
+    monkeypatch.setattr(make, "ayah_clip", lambda *args, **kwargs: {"dur": 1.0})
+    monkeypatch.setattr(make, "plan_duration", lambda *args, **kwargs: {"fit_items": [{"ayah": 2}]})
+    quran = {"surahs": {"1": {"ayahs": {"2": "urdu"}, "arabic": {"2": "hand typed"}}}}
+    plan = make.plan_reel(quran, 1, 2, 2, 30, "full")
+    assert plan["items"][0]["arabic"] == make.QPC_QURAN["surahs"]["1"]["2"]
+
+
+def test_x264_preset_follows_quality(monkeypatch, tmp_path):
+    monkeypatch.delenv("RENDER_MEMORY_PROFILE", raising=False)
+    captured = {}
+    monkeypatch.setattr(make, "run", lambda command, **kwargs: captured.update(command=command))
+    for quality, preset in (("fast", "veryfast"), ("balanced", "fast"), ("high", "medium")):
+        make.set_video_quality(quality)
+        make.encode_video(["ffmpeg"], tmp_path / "out.mp4")
+        command = captured["command"]
+        assert command[command.index("-preset") + 1] == preset
+        assert command[command.index("-crf") + 1] == "18"
+    make.set_video_quality("high")
+
+
+def _history_files(count):
+    entries = []
+    for index in range(count):
+        name = f"item{index}.mp4" if index % 2 else f"ayah-image-{index}.png"
+        (main.OUTPUT_DIR / name).write_bytes(f"data-{index}".encode() * 1000)
+        entries.append({"id": f"id{index}", "filename": name, "type": "image" if name.endswith(".png") else "video"})
+    _write_history({"free-user": entries, "another-user": [{"id": "theirs", "filename": "theirs.mp4"}]})
+    return entries
+
+
+def test_history_lists_images_with_thumbnails(client):
+    _history_files(2)
+    videos = client.get("/api/history").json()["videos"]
+    image = next(item for item in videos if item["type"] == "image")
+    assert image["thumb_url"].startswith("/api/video/ayah-image-0.png?")
+    assert client.get(image["thumb_url"]).headers["content-type"] == "image/png"
+
+
+def test_bulk_history_zip_streams_owned_items_only(client):
+    _history_files(7)
+    ids = [f"id{index}" for index in range(7)]
+    assert client.post("/api/history/bulk-download-url", json={"ids": ids + ["theirs"]}).status_code == 404
+    assert client.post("/api/history/bulk-download-url", json={"ids": ["../x"]}).status_code == 400
+    assert client.post("/api/history/bulk-download-url", json={"ids": [f"i{n}" for n in range(101)]}).status_code == 422
+    url = client.post("/api/history/bulk-download-url", json={"ids": ids}).json()["url"]
+    response = client.get(url)
+    assert response.status_code == 200
+    archive = zipfile.ZipFile(io.BytesIO(response.content))
+    assert archive.testzip() is None
+    assert len(archive.namelist()) == 7
+    assert all(info.compress_type == zipfile.ZIP_STORED for info in archive.infolist())
+    assert archive.read("item1.mp4") == b"data-1" * 1000
+    assert client.get(url.replace("id0", "theirs")).status_code == 403
+
+
+def test_bulk_history_delete_checks_ownership(client):
+    _history_files(3)
+    assert client.post("/api/history/bulk-delete", json={"ids": ["id0", "theirs"]}).status_code == 404
+    assert (main.OUTPUT_DIR / "ayah-image-0.png").exists()
+    response = client.post("/api/history/bulk-delete", json={"ids": ["id0", "id1"]})
+    assert response.json() == {"deleted": 2}
+    assert not (main.OUTPUT_DIR / "ayah-image-0.png").exists()
+    remaining = json.loads(main.HISTORY_FILE.read_text(encoding="utf-8"))
+    assert [entry["id"] for entry in remaining["users"]["free-user"]] == ["id2"]
+    assert remaining["users"]["another-user"]

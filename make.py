@@ -5,6 +5,7 @@
 """
 import argparse, csv, json, os, random, re, shutil, subprocess, sys, time, unicodedata
 import ctypes
+import functools
 import hashlib
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -56,7 +57,18 @@ CURRENT_URDU_VOICE_ID = DEFAULT_URDU_VOICE_ID
 # --------------------------------------------------
 ROOT = Path(__file__).parent
 QPC_QURAN_PATH = ROOT / "data" / "quran_qpc_hafs.json"
-QPC_QURAN = json.loads(QPC_QURAN_PATH.read_text(encoding="utf-8"))
+QPC_SHA256_PATH = ROOT / "data" / "quran_qpc_hafs.sha256"
+
+
+def _load_verified_qpc_quran():
+    data = QPC_QURAN_PATH.read_bytes()
+    expected = QPC_SHA256_PATH.read_text(encoding="ascii").split()[0]
+    if hashlib.sha256(data).hexdigest() != expected:
+        raise RuntimeError("Quran text file failed SHA-256 verification; run fetch_assets.py.")
+    return json.loads(data.decode("utf-8"))
+
+
+QPC_QURAN = _load_verified_qpc_quran()
 QPC_BISMILLAH_TEXT = QPC_QURAN["surahs"]["1"]["1"]
 FONTS = {
     QURAN_ARABIC_FONT: ROOT / "fonts" / "KFGQPC-Uthmanic-Hafs-V22.ttf",
@@ -73,7 +85,9 @@ BACKGROUND_DIR = Path(os.getenv("BACKGROUNDS_DIR", ROOT / "backgrounds"))
 CACHE_DIR = Path(os.getenv("CACHE_DIR", ROOT / "cache"))
 ADMIN_CONTENT_FILE = ROOT / "data" / "admin_content.json"
 ADMIN_AUDIO_DIR = ROOT / "audio" / "admin"
-DURATION_CACHE_FILE = ROOT / "data" / "ayah_durations.json"
+# Measured durations are runtime state: written under cache/, seeded from the shipped data file.
+DURATION_CACHE_FILE = CACHE_DIR / "ayah_durations.json"
+DURATION_SEED_FILE = ROOT / "data" / "ayah_durations.json"
 _admin_content = None
 _hardware_encoder = None
 _duration_cache = None
@@ -90,13 +104,15 @@ def dur(path):
 def _duration_key(kind, reciter_id, surah, ayah):
     return f"{kind}:{reciter_id}:{surah}:{ayah}"
 
-def _read_duration_cache():
+def _read_duration_file(path):
     try:
-        raw = json.loads(DURATION_CACHE_FILE.read_text(encoding="utf-8"))
+        raw = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return {}
-    if not isinstance(raw, dict):
-        return {}
+    return raw if isinstance(raw, dict) else {}
+
+def _read_duration_cache():
+    raw = {**_read_duration_file(DURATION_SEED_FILE), **_read_duration_file(DURATION_CACHE_FILE)}
     cache = {}
     for key, value in raw.items():
         if not isinstance(key, str):
@@ -140,14 +156,19 @@ def save_ayah_duration(surah, ayah, kind, seconds, reciter_id=None):
         temp_path.replace(DURATION_CACHE_FILE)
         _duration_cache = cache
 
-def invalidate_ayah_duration(surah, ayah, kind, reciter_id=None):
+def invalidate_ayah_duration(surah, ayah, kind, reciter_id=None, all_reciters=False):
     global _duration_cache
-    reciter_id = resolve_reciter_id(kind, reciter_id)
+    if all_reciters:
+        language = "ar" if kind == "arabic" else "ur"
+        reciter_ids = [rid for rid, item in RECITERS_BY_ID.items() if item["language"] == language]
+    else:
+        reciter_ids = [resolve_reciter_id(kind, reciter_id)]
     with _duration_cache_lock:
         cache = _read_duration_cache()
         if _duration_cache:
             cache.update(_duration_cache)
-        cache.pop(_duration_key(kind, reciter_id, surah, ayah), None)
+        for rid in reciter_ids:
+            cache.pop(_duration_key(kind, rid, surah, ayah), None)
         DURATION_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
         temp_path = DURATION_CACHE_FILE.with_name(
             f"{DURATION_CACHE_FILE.stem}.{os.getpid()}.{get_ident()}.tmp"
@@ -158,6 +179,10 @@ def invalidate_ayah_duration(surah, ayah, kind, reciter_id=None):
         for key in list(_clip_cache):
             if key[:2] == (surah, ayah):
                 _clip_cache.pop(key, None)
+
+def verified_arabic_text(surah, ayah):
+    """Arabic ayah text, only ever from the hash-verified KFGQPC Hafs file."""
+    return QPC_QURAN["surahs"][str(surah)][str(ayah)]
 
 def resolve_reciter_id(kind, reciter_id=None):
     if kind not in {"arabic", "urdu"}:
@@ -214,6 +239,9 @@ def detect_hardware_encoder():
     _hardware_encoder = ""
     return _hardware_encoder
 
+X264_PRESETS = {"fast": "veryfast", "balanced": "fast", "high": "medium"}
+QUALITY = "high"
+
 def encode_video(cmd, outfile):
     low_memory = os.getenv("RENDER_MEMORY_PROFILE", "").lower() == "low"
     if not low_memory:
@@ -221,7 +249,7 @@ def encode_video(cmd, outfile):
             cmd
             + [
                 "-c:v", "libx264",
-                "-preset", "medium",
+                "-preset", X264_PRESETS[QUALITY],
                 "-crf", "18",
                 "-tune", "film",
                 *list(FFMPEG_CODEC_THREADS),
@@ -265,7 +293,8 @@ def encode_video(cmd, outfile):
     )
 
 def set_video_quality(quality):
-    global W, H, FPS
+    global W, H, FPS, QUALITY
+    QUALITY = quality
     if os.getenv("RENDER_MEMORY_PROFILE", "").lower() == "low":
         if quality == "high":
             W, H, FPS = 540, 960, 20
@@ -880,6 +909,10 @@ def render_ayah_image(arabic_text, english_text, reference, background_path, out
     )
     image.convert("RGB").save(output_path, format="PNG", optimize=True)
 
+@functools.cache
+def load_quran():
+    return json.loads((ROOT / "data" / "quran.json").read_text(encoding="utf-8"))
+
 def plan_duration(
     s,
     start,
@@ -893,8 +926,7 @@ def plan_duration(
     if content_mode not in {"full", "urdu_only", "arabic_only"}:
         raise ValueError("Content mode must be full, urdu_only, or arabic_only.")
     if Q is None:
-        quran_path = ROOT / "data" / "quran.json"
-        Q = json.loads(quran_path.read_text(encoding="utf-8"))
+        Q = load_quran()
     if str(s) not in Q["surahs"]:
         raise ValueError("Surah must be between 1 and 114.")
     verse_count = int(Q["surahs"][str(s)]["n"])
@@ -984,7 +1016,7 @@ def plan_reel(
             raise RuntimeError(f"Audio could not be prepared for ayah {s}:{a}.")
         item.update(clip)
         override = admin_content()["verses"].get(f"{s}:{a}", {})
-        ar_text = override.get("arabic_text") or surah_data.get("arabic", {}).get(str(a), "")
+        ar_text = verified_arabic_text(s, a)
         if a == 1:
             ar_text = ayah_text_without_bismillah(ar_text, s)
         if content_mode == "arabic_only":
@@ -1382,7 +1414,7 @@ def main():
     ap.add_argument("--seed", type=int)
     ap.add_argument("--min-dur", type=int, default=MIN_DUR)
     ap.add_argument("--max-dur", type=int, default=MAX_DUR)
-    ap.add_argument("--quality", choices=("balanced", "high"), default="high")
+    ap.add_argument("--quality", choices=tuple(X264_PRESETS), default="high")
     content_group = ap.add_mutually_exclusive_group()
     content_group.add_argument(
         "--urdu-only", action="store_true",

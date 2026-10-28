@@ -276,7 +276,6 @@ async function loadVerseContent(event) {
         button.disabled = true;
         const content = await adminRequest(`/admin/verses/${verse.surah}/${verse.ayah}`);
         loadedVerseKey = verse.key;
-        document.getElementById("verse-arabic-text").value = content.arabic_text || "";
         document.getElementById("verse-urdu-text").value = content.urdu_text || "";
         updateAudioStatuses(content);
         showAdminMessage(`Loaded Surah ${verse.surah}, Ayah ${verse.ayah}.`);
@@ -299,7 +298,6 @@ async function saveVerseContent(event) {
         const content = await adminRequest(`/admin/verses/${verse.surah}/${verse.ayah}`, {
             method: "PUT",
             body: JSON.stringify({
-                arabic_text: document.getElementById("verse-arabic-text").value,
                 urdu_text: document.getElementById("verse-urdu-text").value
             })
         });
