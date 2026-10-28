@@ -1273,10 +1273,13 @@ def build(
     
     idx, labels = overlay_input + 1, []
     norm = ",loudnorm=I=-18:TP=-2:LRA=7" if NORMALIZE_AUDIO else ""
+    # Each loudnorm instance holds ~50MB; low profile normalizes once after concat instead of per segment.
+    low_mem = os.getenv("RENDER_MEMORY_PROFILE", "").lower() == "low"
+    seg_norm = "" if low_mem else norm
     for it in items:
         for f, d_seg, pad in it["segs"]:
             cmd += [*FFMPEG_CODEC_THREADS, "-i", f]
-            fc.append(f"[{idx}:a]aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo{norm},"
+            fc.append(f"[{idx}:a]aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo{seg_norm},"
                       f"asetpts=PTS-STARTPTS" + (f",apad=pad_dur={pad}" if pad else "") + f"[s{idx}]")
             labels.append(f"[s{idx}]"); idx += 1
             
@@ -1294,7 +1297,7 @@ def build(
         idx += 1
 
     # Concatenate main Quran recitation audio segments
-    fc.append("".join(labels) + f"concat=n={len(labels)}:v=0:a=1[rec_audio]")
+    fc.append("".join(labels) + f"concat=n={len(labels)}:v=0:a=1" + (f"{norm}[rec_audio]" if low_mem else "[rec_audio]"))
 
     # Mix background music softly if present, otherwise just output recitation audio with fades
     if music_input_index is not None:
