@@ -35,6 +35,10 @@ from PIL import features
 from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 
+# Render sets RENDER=true; its 512 MB plan OOMs on the full profile (measured 576 MiB for 30 s fast), so default to low.
+if os.getenv("RENDER") and not os.getenv("RENDER_MEMORY_PROFILE"):
+    os.environ["RENDER_MEMORY_PROFILE"] = "low"
+logging.basicConfig(level=logging.INFO)  # render start/end/peak lines must reach Render Logs
 LOGGER = logging.getLogger(__name__)
 RAQM_AVAILABLE = bool(features.check("raqm"))
 RAQM_REQUIRED_ERROR = (
@@ -89,6 +93,35 @@ VIDEO_STYLE_ELEMENTS = {"bismillah", "surah", "label", "arabic", "urdu", "englis
 # Quran text always renders in the verified KFGQPC font; only its color can change.
 QURAN_STYLE_ELEMENTS = {"bismillah", "arabic"}
 RENDER_QUALITIES = {"fast", "balanced", "high"}
+# Memory guard. Peak MiB of one render ~= RENDER_BASE_MB + per-second * seconds (measured in a 512 MB Docker
+# container, make.py only: low 30 s fast 278, 58 s high 299; full 30 s fast 576, 58 s high 1390).
+# 0 disables the guard (default off-Render); Render defaults to its 512 MB plan.
+RENDER_MEMORY_LIMIT_MB = int(os.getenv("RENDER_MEMORY_LIMIT_MB", "512" if os.getenv("RENDER") else "0"))
+SERVER_BASE_MB = 100  # idle API ~70 MiB measured + request overhead
+RENDER_BASE_MB = 265
+RENDER_MB_PER_SECOND = {
+    "low": {"fast": 0.4, "balanced": 0.4, "high": 0.6},
+    "full": {"fast": 10.4, "balanced": 10.4, "high": 19.4},
+}
+
+
+def _estimate_render_mb(seconds, quality):
+    profile = "low" if os.getenv("RENDER_MEMORY_PROFILE", "").lower() == "low" else "full"
+    return SERVER_BASE_MB + RENDER_BASE_MB + RENDER_MB_PER_SECOND[profile][quality] * seconds
+
+
+def _check_render_memory(seconds, quality):
+    if not RENDER_MEMORY_LIMIT_MB:
+        return
+    needed = _estimate_render_mb(seconds, quality)
+    if needed > RENDER_MEMORY_LIMIT_MB:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"A {seconds} s {quality}-quality video needs about {round(needed)} MB, more than this "
+                f"server's {RENDER_MEMORY_LIMIT_MB} MB. Choose a shorter length or lower quality."
+            ),
+        )
 VIDEO_STYLE_FONTS = {
     "amiri_regular",
     "amiri_bold",
@@ -1781,6 +1814,7 @@ def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
         raise HTTPException(status_code=400, detail="Quality must be fast, balanced, or high.")
     if not user["is_admin"] and req.max_duration > MAX_VIDEO_SECONDS:
         raise HTTPException(status_code=400, detail=f"Videos are limited to {MAX_VIDEO_SECONDS} seconds on the free server.")
+    _check_render_memory(req.max_duration, req.quality)
     validate_video_styles(req.styles)
     _require_raqm_for_generation(req.content_mode)
 
@@ -1902,11 +1936,37 @@ def _kill_process_tree(process):
         process.kill()
 
 
+def _cgroup_memory_bytes():
+    """Container memory in use (anon + page cache, what the OOM killer sees); None if not in a cgroup."""
+    for path in ("/sys/fs/cgroup/memory.current", "/sys/fs/cgroup/memory/memory.usage_in_bytes"):
+        try:
+            return int(Path(path).read_text())
+        except (OSError, ValueError):
+            continue
+    return None
+
+
+def _watch_peak_memory(done, peak):
+    while not done.wait(0.25):
+        used = _cgroup_memory_bytes()
+        if used:
+            peak[0] = max(peak[0], used)
+
+
 def _run_render(cmd, timeout):
     """Run make.py; on timeout kill it and every FFmpeg child it started."""
     group_args = (
         {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
         if os.name == "nt" else {"start_new_session": True}
+    )
+    opts = {cmd[i]: cmd[i + 1] for i in range(len(cmd) - 1) if cmd[i] in ("--quality", "--max-dur")}
+    started = time.monotonic()
+    done, peak = threading.Event(), [_cgroup_memory_bytes() or 0]
+    threading.Thread(target=_watch_peak_memory, args=(done, peak), daemon=True).start()
+    LOGGER.info(
+        "render start quality=%s max_dur=%s profile=%s mem_now=%sMiB",
+        opts.get("--quality"), opts.get("--max-dur"), os.getenv("RENDER_MEMORY_PROFILE", "default"),
+        peak[0] >> 20,
     )
     process = subprocess.Popen(
         cmd,
@@ -1922,6 +1982,14 @@ def _run_render(cmd, timeout):
         _kill_process_tree(process)
         process.communicate()
         raise RuntimeError(f"Rendering took longer than {timeout} seconds and was stopped.")
+    finally:
+        done.set()
+        # rc -9 / SIGKILL with no error text is how an OOM kill looks from here.
+        LOGGER.info(
+            "render end quality=%s max_dur=%s rc=%s secs=%.0f peak_mem=%sMiB",
+            opts.get("--quality"), opts.get("--max-dur"), process.returncode,
+            time.monotonic() - started, peak[0] >> 20,
+        )
     return subprocess.CompletedProcess(cmd, process.returncode, stdout, stderr)
 
 

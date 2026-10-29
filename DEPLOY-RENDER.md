@@ -29,3 +29,7 @@ docker run --memory=512m --cpus=0.5 -e RENDER_MEMORY_PROFILE=low -p 10000:10000 
 curl localhost:10000/api/health
 ```
 Measured (empty backgrounds/): Al-Ikhlas balanced video peak ~252 MiB, ~48 s; one Ayah image peak ~93 MiB, ~8 s.
+
+## Memory guard (512 MB plan)
+
+Measured peak of one render (make.py, 512 MB Docker): `low` profile 30 s fast 278 MiB, 58 s high 299 MiB; **full profile 30 s fast 576 MiB, 58 s high 1390 MiB (OOM)**. On Render `RENDER_MEMORY_PROFILE` now defaults to `low` even if the env var is missing. `/api/generate` returns 400 before starting if the estimate (`_estimate_render_mb`) exceeds `RENDER_MEMORY_LIMIT_MB` (default 512 on Render, 0 = off elsewhere). Logs show `render start` / `render end ... peak_mem=` lines (container memory, sampled every 0.25 s); an end line with `rc=-9` and no error is an OOM kill.
