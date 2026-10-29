@@ -89,6 +89,8 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(main, "HISTORY_FILE", output_dir / "history.json")
     monkeypatch.setattr(main, "BACKGROUND_DIR", background_dir)
     monkeypatch.setattr(main, "CACHE_DIR", tmp_path / "cache")
+    monkeypatch.setattr(main, "CLIP_CACHE_DIR", tmp_path / "cache" / "backgrounds")
+    monkeypatch.setattr(main, "MUSIC_CACHE_DIR", tmp_path / "cache" / "music")
     monkeypatch.setattr(main, "SUPABASE_SERVICE_KEY", "")
     monkeypatch.setattr(main, "SUPABASE_URL", "")
     monkeypatch.setattr(main, "SUPABASE_KEY", "")
@@ -803,44 +805,139 @@ def test_render_quality_defaults_are_unchanged_without_memory_profile(monkeypatc
     assert (make.W, make.H, make.FPS) == (1080, 1920, 30)
 
 
-def test_music_upload_persists_to_supabase_and_local_cache(client, monkeypatch):
+class _Upload:
+    def __init__(self, name, body, length=None):
+        self.query_params = {"filename": name}
+        self.headers = {"content-length": str(len(body) if length is None else length)}
+        self._body = body
+
+    async def stream(self):
+        yield self._body
+
+
+MP4 = b"\x00\x00\x00ftypmp42" + b"\x00" * 8
+
+
+def test_music_upload_goes_to_supabase_music_folder_and_cache(client, monkeypatch):
     monkeypatch.setattr(main, "SUPABASE_SERVICE_KEY", "configured")
     uploads = []
-
-    def capture_upload(path, object_path, content_type):
-        uploads.append((path.read_bytes(), object_path, content_type))
-
-    class Request:
-        query_params = {"filename": "nasheed.mp3"}
-        headers = {"content-length": "5"}
-
-        async def stream(self):
-            yield b"audio"
-
-    monkeypatch.setattr(main, "_upload_media_file", capture_upload)
-    response = asyncio.run(main.upload_background_music(Request(), user=ADMIN_USER))
+    monkeypatch.setattr(
+        main, "_upload_media_file",
+        lambda path, object_path, content_type, bucket=main.MEDIA_BUCKET: uploads.append((path.read_bytes(), object_path, content_type, bucket)),
+    )
+    response = asyncio.run(main.upload_background_music(_Upload("nasheed.mp3", b"audio"), user=ADMIN_USER))
     assert response == {"filename": "nasheed.mp3", "size": 5}
-    assert uploads == [(b"audio", "backgrounds/music/nasheed.mp3", "audio/mpeg")]
-    assert (main.BACKGROUND_DIR / "music" / "nasheed.mp3").read_bytes() == b"audio"
+    assert uploads == [(b"audio", "music/nasheed.mp3", "audio/mpeg", main.MEDIA_BUCKET)]
+    assert (main.MUSIC_CACHE_DIR / "nasheed.mp3").read_bytes() == b"audio"
 
 
-def test_prepare_ephemeral_media_downloads_supabase_music(client, monkeypatch):
+def test_background_upload_goes_to_backgrounds_bucket_and_cache(client, monkeypatch):
     monkeypatch.setattr(main, "SUPABASE_SERVICE_KEY", "configured")
-    monkeypatch.setattr(main, "_list_media_objects", lambda prefix: [])
-    monkeypatch.setattr(main, "_media_object_exists", lambda path: False)
-    monkeypatch.setattr(main, "_available_music_filenames", lambda: ["nasheed.mp3"])
+    uploads = []
+    monkeypatch.setattr(
+        main, "_upload_media_file",
+        lambda path, object_path, content_type, bucket=main.MEDIA_BUCKET: uploads.append((object_path, bucket)),
+    )
+    asyncio.run(main.upload_background(_Upload("clip.mp4", MP4), user=ADMIN_USER))
+    assert uploads == [("clip.mp4", main.BACKGROUNDS_BUCKET)]
+    assert (main.CLIP_CACHE_DIR / "clip.mp4").read_bytes() == MP4
+
+
+@pytest.mark.parametrize("name,body,status", [
+    ("clip.mov", MP4, 400),
+    ("clip.mp3", MP4, 400),
+    ("../clip.mp4", MP4, 400),
+    ("clip.mp4", b"not a video at all", 400),
+    ("clip.mp4", b"", 400),
+])
+def test_background_upload_rejects_bad_type_and_content(client, name, body, status):
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(main.upload_background(_Upload(name, body), user=ADMIN_USER))
+    assert exc.value.status_code == status
+    assert not list(main.BACKGROUND_DIR.glob("*.upload")) and not list(main.BACKGROUND_DIR.glob("*.mp4"))
+
+
+def test_uploads_reject_over_50mb_by_header_and_by_stream(client):
+    for upload in (main.upload_background, main.upload_background_music):
+        name = "a.mp4" if upload is main.upload_background else "a.mp3"
+        with pytest.raises(HTTPException) as exc:
+            asyncio.run(upload(_Upload(name, MP4, length=main.MAX_BACKGROUND_BYTES + 1), user=ADMIN_USER))
+        assert exc.value.status_code == 413
+
+    class Big(_Upload):
+        async def stream(self):
+            yield b"\x00" * (main.MAX_BACKGROUND_BYTES + 1)
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(main.upload_background(Big("a.mp4", b"", length=1), user=ADMIN_USER))
+    assert exc.value.status_code == 413
+
+
+def test_media_admin_routes_are_admin_only(client):
+    for method, path in (
+        ("get", "/api/admin/backgrounds"),
+        ("post", "/api/admin/backgrounds?filename=a.mp4"),
+        ("delete", "/api/admin/backgrounds/a.mp4"),
+        ("get", "/api/admin/music"),
+        ("post", "/api/admin/music?filename=a.mp3"),
+        ("delete", "/api/admin/music/a.mp3"),
+    ):
+        assert getattr(client, method)(path).status_code == 403, path
+
+
+def test_admin_delete_removes_bucket_object_and_cached_copy(client, monkeypatch):
+    main.app.dependency_overrides[main.get_current_user] = lambda: ADMIN_USER
+    monkeypatch.setattr(main, "SUPABASE_SERVICE_KEY", "configured")
+    removed = []
+    monkeypatch.setattr(main, "_remove_bucket_object", lambda bucket, path: removed.append((bucket, path)))
+    for directory, name in ((main.CLIP_CACHE_DIR, "clip.mp4"), (main.MUSIC_CACHE_DIR, "song.mp3")):
+        directory.mkdir(parents=True)
+        (directory / name).write_bytes(b"x")
+    assert client.delete("/api/admin/backgrounds/clip.mp4").status_code == 200
+    assert client.delete("/api/admin/music/song.mp3").status_code == 200
+    assert removed == [(main.BACKGROUNDS_BUCKET, "clip.mp4"), (main.MEDIA_BUCKET, "music/song.mp3")]
+    assert not (main.CLIP_CACHE_DIR / "clip.mp4").exists() and not (main.MUSIC_CACHE_DIR / "song.mp3").exists()
+    with pytest.raises(HTTPException):
+        main.delete_background_music("../x.mp3", user=ADMIN_USER)
+    assert len(removed) == 2
+
+
+def test_empty_local_dirs_fall_back_cleanly(client, monkeypatch):
+    main.app.dependency_overrides[main.get_current_user] = lambda: ADMIN_USER
+    assert client.get("/api/admin/backgrounds").json() == []
+    assert client.get("/api/music-list").json() == {"music_files": []}
+    main._sync_render_media("x.mp3")  # no service key: no-op
+
+    monkeypatch.setattr(main, "SUPABASE_SERVICE_KEY", "configured")
+    monkeypatch.setattr(main, "_list_media_objects", lambda prefix, bucket=main.MEDIA_BUCKET: [])
+    assert client.get("/api/music-list").json() == {"music_files": []}
+
+
+def test_sync_render_media_streams_into_cache_and_skips_unchanged(client, monkeypatch):
+    monkeypatch.setattr(main, "SUPABASE_SERVICE_KEY", "configured")
+
+    def listing(prefix, bucket=main.MEDIA_BUCKET):
+        if bucket == main.BACKGROUNDS_BUCKET:
+            return [{"name": "clip.mp4", "metadata": {"size": 5}}, {"name": "notes.txt"}]
+        return [{"name": "song.mp3", "metadata": {"size": 5}}]
+
     downloads = []
 
-    def capture_download(object_path, local_path):
-        downloads.append(object_path)
+    def download(object_path, local_path, bucket=main.MEDIA_BUCKET):
+        downloads.append((bucket, object_path))
         local_path.parent.mkdir(parents=True, exist_ok=True)
-        local_path.write_bytes(b"audio")
+        local_path.write_bytes(b"12345")
         return True
 
-    monkeypatch.setattr(main, "_download_media_file", capture_download)
-    main._prepare_ephemeral_media()
-    assert downloads == ["backgrounds/music/nasheed.mp3"]
-    assert (main.BACKGROUND_DIR / "music" / "nasheed.mp3").read_bytes() == b"audio"
+    monkeypatch.setattr(main, "_list_media_objects", listing)
+    monkeypatch.setattr(main, "_download_media_file", download)
+    main._sync_render_media("song.mp3")
+    assert downloads == [(main.BACKGROUNDS_BUCKET, "clip.mp4"), (main.MEDIA_BUCKET, "music/song.mp3")]
+    main._sync_render_media("song.mp3")
+    assert len(downloads) == 2  # cached, same size
+    (main.CLIP_CACHE_DIR / "clip.mp4").write_bytes(b"1")  # changed size -> re-download
+    main._sync_render_media(None)
+    assert len(downloads) == 3
 
 
 def test_render_timeout_kills_process_and_frees_queue(client, monkeypatch):

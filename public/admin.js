@@ -153,6 +153,26 @@ async function updatePremium(user, checkbox) {
     }
 }
 
+function deleteButton(path, filename, reload) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "shrink-0 text-xs font-semibold text-rose-400 hover:text-rose-300";
+    button.textContent = "Delete";
+    button.addEventListener("click", async () => {
+        if (!window.confirm(`Delete ${filename}?`)) return;
+        button.disabled = true;
+        try {
+            await adminRequest(`${path}/${encodeURIComponent(filename)}`, { method: "DELETE" });
+            showAdminMessage(`${filename} deleted.`);
+            await reload();
+        } catch (error) {
+            showAdminMessage(error.message, true);
+            button.disabled = false;
+        }
+    });
+    return button;
+}
+
 async function loadBackgrounds() {
     const list = document.getElementById("background-list");
     const countEl = document.getElementById("stat-backgrounds");
@@ -179,7 +199,7 @@ async function loadBackgrounds() {
             const size = document.createElement("span");
             size.className = "shrink-0 text-slate-500";
             size.textContent = `${(clip.size / (1024 * 1024)).toFixed(1)} MB`;
-            item.append(name, size);
+            item.append(name, size, deleteButton("/admin/backgrounds", clip.filename, loadBackgrounds));
             list.append(item);
         }
     } catch (error) {
@@ -194,8 +214,10 @@ async function loadMusic() {
         list.replaceChildren();
         for (const filename of result.music_files) {
             const item = document.createElement("li");
-            item.className = "py-2";
-            item.textContent = filename;
+            item.className = "flex items-center justify-between gap-4 py-2";
+            const name = document.createElement("span");
+            name.textContent = filename;
+            item.append(name, deleteButton("/admin/music", filename, loadMusic));
             list.append(item);
         }
         if (!result.music_files.length) {

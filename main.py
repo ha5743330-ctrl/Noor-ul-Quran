@@ -50,12 +50,14 @@ SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
 SUPABASE_KEY = os.getenv("SUPABASE_ANON_KEY", "")
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 MEDIA_BUCKET = os.getenv("SUPABASE_MEDIA_BUCKET", "noor-media")
-BACKGROUNDS_BUCKET = os.getenv("SUPABASE_BACKGROUNDS_BUCKET", "backgrounds")
+BACKGROUNDS_BUCKET = os.getenv("SUPABASE_BACKGROUNDS_BUCKET", "noor-backgrounds")
 OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", BASE_DIR / "output"))
 HISTORY_FILE = OUTPUT_DIR / "history.json"
 BACKGROUND_DIR = Path(os.getenv("BACKGROUNDS_DIR", BASE_DIR / "backgrounds"))
 CACHE_DIR = Path(os.getenv("CACHE_DIR", BASE_DIR / "cache"))
 CLIP_CACHE_DIR = CACHE_DIR / "backgrounds"
+MUSIC_CACHE_DIR = CACHE_DIR / "music"
+MEDIA_NAME_PATTERN = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,99}\Z")
 VIDEO_URL_SECRET = os.getenv("VIDEO_URL_SECRET") or secrets.token_urlsafe(32)
 VIDEO_URL_TTL_SECONDS = 10 * 60
 VIDEO_FILENAME_PATTERN = re.compile(r"[A-Za-z0-9_.-]+\.mp4\Z")
@@ -246,13 +248,13 @@ def _media_object_exists(object_path: str) -> bool:
     )
 
 
-def _upload_media_file(local_path: Path, object_path: str, content_type: str):
+def _upload_media_file(local_path: Path, object_path: str, content_type: str, bucket: str = MEDIA_BUCKET):
     if local_path.stat().st_size > MAX_BACKGROUND_BYTES:
         raise HTTPException(status_code=413, detail="Supabase Free Storage accepts files up to 50 MB.")
     with local_path.open("rb") as media_file:
         _storage_request(
             "POST",
-            f"/object/{quote(MEDIA_BUCKET, safe='')}/{quote(object_path, safe='/')}",
+            f"/object/{quote(bucket, safe='')}/{quote(object_path, safe='/')}",
             data=media_file,
             headers={"Content-Type": content_type, "x-upsert": "true"},
         )
@@ -285,11 +287,55 @@ def _download_media_file(object_path: str, local_path: Path, bucket: str = MEDIA
     if response.status_code == 404:
         return False
     local_path.parent.mkdir(parents=True, exist_ok=True)
-    with local_path.open("wb") as local_file:
-        for chunk in response.iter_content(chunk_size=1024 * 1024):
-            if chunk:
-                local_file.write(chunk)
+    partial = local_path.with_name(f".{uuid4().hex}.part")
+    try:
+        with partial.open("wb") as local_file:
+            for chunk in response.iter_content(chunk_size=1024 * 1024):
+                if chunk:
+                    local_file.write(chunk)
+        partial.replace(local_path)
+    finally:
+        partial.unlink(missing_ok=True)
     return True
+
+
+def _remove_bucket_object(bucket: str, object_path: str):
+    _storage_request("DELETE", f"/object/{quote(bucket, safe='')}", json={"prefixes": [object_path]})
+
+
+def _sync_cached_object(bucket: str, object_path: str, local_path: Path, size=None):
+    """Stream an object into the cache unless a same-size copy is already there."""
+    if local_path.is_file() and (size is None or local_path.stat().st_size == size):
+        return
+    _download_media_file(object_path, local_path, bucket)
+
+
+def _list_bucket_files(prefix: str, bucket: str, extensions):
+    return [
+        (Path(item["name"]).name, (item.get("metadata") or {}).get("size"))
+        for item in _list_media_objects(prefix, bucket)
+        if isinstance(item, dict)
+        and isinstance(item.get("name"), str)
+        and Path(item["name"]).suffix.lower() in extensions
+    ]
+
+
+def _sync_render_media(music: Optional[str]):
+    """Fetch backgrounds and the chosen music into cache/ on demand; failures degrade to local/still fallbacks."""
+    if not SUPABASE_SERVICE_KEY:
+        return
+    try:
+        for name, size in _list_bucket_files("", BACKGROUNDS_BUCKET, {".mp4"}):
+            _sync_cached_object(BACKGROUNDS_BUCKET, name, CLIP_CACHE_DIR / name, size)
+    except Exception as exc:
+        LOGGER.warning("Background clips unavailable, using still image: %s", _redact_secrets(str(exc)))
+    if music:
+        try:
+            sizes = dict(_list_bucket_files("music", MEDIA_BUCKET, MUSIC_FILE_EXTENSIONS))
+            if music in sizes:
+                _sync_cached_object(MEDIA_BUCKET, f"music/{music}", MUSIC_CACHE_DIR / music, sizes[music])
+        except Exception as exc:
+            LOGGER.warning("Music unavailable, rendering without it: %s", _redact_secrets(str(exc)))
 
 
 def _signed_media_url(object_path: str) -> str:
@@ -310,25 +356,6 @@ def _prepare_ephemeral_media():
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     if not SUPABASE_SERVICE_KEY:
         return
-
-    # Clips live in their own bucket and are cached under cache/; none is fine (still-image fallback).
-    try:
-        for item in _list_media_objects("", BACKGROUNDS_BUCKET):
-            filename = Path(item.get("name", "")).name
-            if Path(filename).suffix.lower() not in {".mp4", ".mov"}:
-                continue
-            local_path = CLIP_CACHE_DIR / filename
-            if not local_path.exists():
-                _download_media_file(filename, local_path, BACKGROUNDS_BUCKET)
-    except Exception as exc:
-        LOGGER.warning("Background clips unavailable, using still image: %s", _redact_secrets(str(exc)))
-
-    music_dir = BACKGROUND_DIR / "music"
-    music_dir.mkdir(parents=True, exist_ok=True)
-    for filename in _available_music_filenames():
-        local_path = music_dir / filename
-        if not local_path.exists():
-            _download_media_file(f"backgrounds/music/{filename}", local_path)
 
     for object_path, local_path in (
         ("metadata/captions.csv", OUTPUT_DIR / "captions.csv"),
@@ -552,14 +579,7 @@ def _available_music_filenames():
     music_dir.mkdir(parents=True, exist_ok=True)
 
     if SUPABASE_SERVICE_KEY:
-        objects = _list_media_objects("backgrounds/music")
-        files = [
-            item["name"].split("/")[-1]
-            for item in objects
-            if isinstance(item, dict)
-            and isinstance(item.get("name"), str)
-            and Path(item["name"]).suffix.lower() in MUSIC_FILE_EXTENSIONS
-        ]
+        files = [name for name, _ in _list_bucket_files("music", MEDIA_BUCKET, MUSIC_FILE_EXTENSIONS)]
         if files:
             return sorted(set(files), key=str.lower)
 
@@ -601,57 +621,70 @@ def list_admin_background_music(user=Depends(require_admin)):
     return {"music_files": _available_music_filenames()}
 
 
-@app.post("/api/admin/music")
-async def upload_background_music(request: Request, user=Depends(require_admin)):
-    filename = request.query_params.get("filename", "")
-    extension = Path(filename).suffix.lower()
-    if (
-        not filename
-        or filename.strip() != filename
-        or "\x00" in filename
-        or "/" in filename
-        or "\\" in filename
-        or ".." in filename
-        or Path(filename).name != filename
-        or ntpath.basename(filename) != filename
-        or extension not in MUSIC_FILE_EXTENSIONS
-    ):
-        raise HTTPException(status_code=400, detail="Upload a valid MP3, MPEG, WAV, AAC, or M4A music file.")
-
+async def _receive_upload(request: Request, directory: Path, label: str) -> tuple[Path, int]:
+    """Stream the request body to a temp file in `directory`, enforcing the 50 MB cap."""
     content_length = request.headers.get("content-length")
     if content_length is not None:
         if re.fullmatch(r"[0-9]+", content_length) is None:
             raise HTTPException(status_code=400, detail="Invalid content length.")
         if int(content_length) > MAX_BACKGROUND_BYTES:
-            raise HTTPException(status_code=413, detail="Music file must be 50 MB or smaller.")
-
-    music_dir = BACKGROUND_DIR / "music"
-    music_dir.mkdir(parents=True, exist_ok=True)
-    destination = music_dir / filename
-    temporary_path = music_dir / f".{uuid4().hex}.upload"
+            raise HTTPException(status_code=413, detail=f"{label} must be 50 MB or smaller.")
+    directory.mkdir(parents=True, exist_ok=True)
+    temporary_path = directory / f".{uuid4().hex}.upload"
     total = 0
     try:
         with temporary_path.open("wb") as output_file:
             async for chunk in request.stream():
                 total += len(chunk)
                 if total > MAX_BACKGROUND_BYTES:
-                    raise HTTPException(status_code=413, detail="Music file must be 50 MB or smaller.")
+                    raise HTTPException(status_code=413, detail=f"{label} must be 50 MB or smaller.")
                 output_file.write(chunk)
         if total == 0:
-            raise HTTPException(status_code=400, detail="The uploaded music file is empty.")
+            raise HTTPException(status_code=400, detail=f"The uploaded {label.lower()} is empty.")
+    except Exception:
+        temporary_path.unlink(missing_ok=True)
+        raise
+    return temporary_path, total
+
+
+def _media_filename(filename: str, extensions) -> str:
+    if (
+        not MEDIA_NAME_PATTERN.fullmatch(filename)
+        or ".." in filename
+        or Path(filename).suffix.lower() not in extensions
+    ):
+        raise HTTPException(status_code=400, detail="Invalid filename or file type.")
+    return filename
+
+
+@app.post("/api/admin/music")
+async def upload_background_music(request: Request, user=Depends(require_admin)):
+    filename = _media_filename(request.query_params.get("filename", ""), MUSIC_FILE_EXTENSIONS)
+    extension = Path(filename).suffix.lower()
+    music_dir = MUSIC_CACHE_DIR if SUPABASE_SERVICE_KEY else BACKGROUND_DIR / "music"
+    temporary_path, total = await _receive_upload(request, music_dir, "Music file")
+    try:
         if SUPABASE_SERVICE_KEY:
             content_type = (
                 "audio/mpeg"
                 if extension in {".mp3", ".mpeg"}
                 else ALLOWED_AUDIO_TYPES.get(extension, "application/octet-stream")
             )
-            _upload_media_file(temporary_path, f"backgrounds/music/{filename}", content_type)
-        temporary_path.replace(destination)
+            _upload_media_file(temporary_path, f"music/{filename}", content_type)
+        temporary_path.replace(music_dir / filename)
     except Exception:
         temporary_path.unlink(missing_ok=True)
         raise
-
     return {"filename": filename, "size": total}
+
+
+@app.delete("/api/admin/music/{filename}")
+def delete_background_music(filename: str, user=Depends(require_admin)):
+    _media_filename(filename, MUSIC_FILE_EXTENSIONS)
+    if SUPABASE_SERVICE_KEY:
+        _remove_bucket_object(MEDIA_BUCKET, f"music/{filename}")
+    (MUSIC_CACHE_DIR / filename).unlink(missing_ok=True)
+    return {"deleted": filename}
 
 
 def _local_video_path(filename: str) -> Path:
@@ -1283,7 +1316,7 @@ def admin_diagnostics(user=Depends(require_admin)):
         "background_file_count": sum(
             1
             for path in BACKGROUND_DIR.iterdir()
-            if path.is_file() and path.suffix.lower() in {".mp4", ".mov"}
+            if path.is_file() and path.suffix.lower() == ".mp4"
         ),
         "music_file_count": len(_available_music_filenames()),
         "output_free_bytes": disk.free,
@@ -1323,57 +1356,45 @@ def set_premium_access(user_id: UUID, req: PremiumAccessRequest, user=Depends(re
 @app.get("/api/admin/backgrounds")
 def list_backgrounds(user=Depends(require_admin)):
     if SUPABASE_SERVICE_KEY:
-        objects = _list_media_objects("backgrounds")
         return [
-            {
-                "filename": item["name"],
-                "size": (item.get("metadata") or {}).get("size", 0),
-            }
-            for item in objects
-            if Path(item.get("name", "")).suffix.lower() in {".mp4", ".mov"}
+            {"filename": name, "size": size or 0}
+            for name, size in _list_bucket_files("", BACKGROUNDS_BUCKET, {".mp4"})
         ]
-
-    clips = sorted(
-        (path for path in BACKGROUND_DIR.iterdir() if path.suffix.lower() in {".mp4", ".mov"}),
-        key=lambda path: path.name.lower(),
-    )
-    return [{"filename": clip.name, "size": clip.stat().st_size} for clip in clips]
+    clips = {
+        path.name: path
+        for directory in (BACKGROUND_DIR, CLIP_CACHE_DIR)
+        if directory.is_dir()
+        for path in directory.iterdir()
+        if path.is_file() and path.suffix.lower() == ".mp4"
+    }
+    return [{"filename": name, "size": clips[name].stat().st_size} for name in sorted(clips, key=str.lower)]
 
 
 @app.post("/api/admin/backgrounds")
 async def upload_background(request: Request, user=Depends(require_admin)):
-    original_name = Path(request.query_params.get("filename", "")).name
-    extension = Path(original_name).suffix.lower()
-    if extension not in {".mp4", ".mov"}:
-        raise HTTPException(status_code=400, detail="Upload an MP4 or MOV video clip.")
-
-    content_length = request.headers.get("content-length")
-    if content_length is not None:
-        if re.fullmatch(r"[0-9]+", content_length) is None:
-            raise HTTPException(status_code=400, detail="Invalid content length.")
-        if int(content_length) > MAX_BACKGROUND_BYTES:
-            raise HTTPException(status_code=413, detail="Background clip must be 50 MB or smaller.")
-
-    stored_name = f"{uuid4().hex}{extension}"
-    destination = BACKGROUND_DIR / stored_name
-    total = 0
+    filename = _media_filename(request.query_params.get("filename", ""), {".mp4"})
+    directory = CLIP_CACHE_DIR if SUPABASE_SERVICE_KEY else BACKGROUND_DIR
+    temporary_path, total = await _receive_upload(request, directory, "Background clip")
     try:
-        with destination.open("wb") as output_file:
-            async for chunk in request.stream():
-                total += len(chunk)
-                if total > MAX_BACKGROUND_BYTES:
-                    raise HTTPException(status_code=413, detail="Background clip must be 50 MB or smaller.")
-                output_file.write(chunk)
+        with temporary_path.open("rb") as clip:
+            if clip.read(12)[4:8] != b"ftyp":
+                raise HTTPException(status_code=400, detail="The file is not a valid MP4 video.")
+        if SUPABASE_SERVICE_KEY:
+            _upload_media_file(temporary_path, filename, "video/mp4", BACKGROUNDS_BUCKET)
+        temporary_path.replace(directory / filename)
     except Exception:
-        destination.unlink(missing_ok=True)
+        temporary_path.unlink(missing_ok=True)
         raise
+    return {"filename": filename, "size": total}
 
-    if total == 0:
-        destination.unlink(missing_ok=True)
-        raise HTTPException(status_code=400, detail="The uploaded clip is empty.")
+
+@app.delete("/api/admin/backgrounds/{filename}")
+def delete_background(filename: str, user=Depends(require_admin)):
+    _media_filename(filename, {".mp4"})
     if SUPABASE_SERVICE_KEY:
-        _upload_media_file(destination, f"backgrounds/{stored_name}", "video/mp4" if extension == ".mp4" else "video/quicktime")
-    return {"filename": stored_name, "size": total}
+        _remove_bucket_object(BACKGROUNDS_BUCKET, filename)
+    (CLIP_CACHE_DIR / filename).unlink(missing_ok=True)
+    return {"deleted": filename}
 
 
 def _validate_verse(surah: int, ayah: int):
@@ -1652,6 +1673,7 @@ def _run_generation_job(
             if not EPHEMERAL_MEDIA_READY:
                 _prepare_ephemeral_media()
                 EPHEMERAL_MEDIA_READY = True
+            _sync_render_media(cmd[cmd.index("--music") + 1] if "--music" in cmd else None)
             _cleanup_orphaned_output_files()
             completed = _run_render(cmd, timeout)
             videos = _read_generation_manifest(manifest_path)

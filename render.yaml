@@ -15,7 +15,7 @@ services:
       - key: CACHE_DIR
         value: /tmp/noor/cache
       - key: SUPABASE_BACKGROUNDS_BUCKET
-        value: backgrounds
+        value: noor-backgrounds
       - key: SUPABASE_MEDIA_BUCKET
         value: noor-media
       - key: SUPABASE_URL

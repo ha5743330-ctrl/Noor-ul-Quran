@@ -1286,7 +1286,7 @@ def build(
     # Check if background music file is provided and exists
     music_path = None
     if music_filename and music_filename != "None" and music_filename != "none":
-        candidate_path = BACKGROUND_DIR / "music" / music_filename
+        candidate_path = next((d / music_filename for d in (CACHE_DIR / "music", BACKGROUND_DIR / "music") if (d / music_filename).is_file()), BACKGROUND_DIR / "music" / music_filename)
         if candidate_path.exists():
             music_path = candidate_path
 
