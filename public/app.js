@@ -155,9 +155,19 @@ function applyFreeTierLimits() {
     if (select && select.selectedOptions[0]?.disabled) select.value = String(cap);
     const remaining = document.getElementById("daily-remaining");
     if (remaining && access.daily_limit != null) {
-        remaining.textContent = `${Math.max(0, access.daily_remaining ?? 0)} of ${access.daily_limit} videos left today`;
+        const left = Math.max(0, access.daily_remaining ?? 0);
+        remaining.textContent = left > 0
+            ? `${left} of ${access.daily_limit} videos left today`
+            : "Daily limit reached, try tomorrow";
         remaining.classList.remove("hidden");
     }
+    const generateButton = document.getElementById("generate-button");
+    if (generateButton && limitReached()) generateButton.disabled = true;
+}
+
+function limitReached() {
+    const access = window.userAccess || {};
+    return access.daily_limit != null && (access.daily_remaining ?? 0) <= 0;
 }
 
 function formatWait(seconds) {
@@ -516,6 +526,7 @@ async function initializeStudio() {
         option.disabled = !hasPremium && Number(option.value) > 60;
     });
     setMode("pick");
+    applyFreeTierLimits();
     
     // Yahan loadMusicList ko call kar diya gaya hai taake dropdown mein music load ho jaye
     await loadMusicList();
@@ -649,7 +660,7 @@ async function generateVideo(event) {
             generateButton.removeAttribute("aria-busy");
             const hasPremium = Boolean(window.userAccess?.is_admin || window.userAccess?.premium_access);
             const currentMode = document.getElementById("mode-select")?.value || "pick";
-            generateButton.disabled = currentMode !== "pick" && !hasPremium;
+            generateButton.disabled = (currentMode !== "pick" && !hasPremium) || limitReached();
         }
     }
 }
@@ -1229,7 +1240,7 @@ function setMode(mode) {
     });
     document.getElementById("locked-pro-notice")?.classList.toggle("hidden", !locked);
     const submitButton = document.getElementById("generate-button");
-    if (submitButton) submitButton.disabled = locked;
+    if (submitButton) submitButton.disabled = locked || limitReached();
 }
 
 async function handleFormSubmit(event) {
