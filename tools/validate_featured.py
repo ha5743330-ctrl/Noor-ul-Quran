@@ -32,9 +32,9 @@ def validate(render=False):
         if e.get("reviewed") is not False:
             errors.append(f"{ref}: reviewed must be false")
         surah, ayah = ref.split(":")
-        if len(english[surah]["english_ayahs"][ayah].split()) > 40:
+        if e.get("length") != "long" and len(english[surah]["english_ayahs"][ayah].split()) > 40:
             errors.append(f"{ref}: translation too long for image")
-        if render and e.get("length") != "short":  # short ayahs always fit
+        if render and e.get("length") == "long":  # short ayahs always fit
             sys.path.insert(0, str(ROOT))
             import make, tempfile
             bg = next((ROOT / "backgrounds" / "images").glob("*.png"))

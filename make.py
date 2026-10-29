@@ -804,28 +804,35 @@ def render_ayah_image(arabic_text, english_text, reference, background_path, out
     arabic_text = arabic_text.lstrip("\ufeff").strip()
     english_text = english_text.strip()
     max_width = width - 210
-    text_area_height = 820
     fitted = None
-    for arabic_size in range(82, 35, -2):
-        arabic_font = load_font(QURAN_ARABIC_FONT, arabic_size)
-        arabic_lines = wrap(arabic_text, arabic_font, max_width, language="ar")
-        arabic_text_height = quran_arabic_text_height(
-            arabic_lines, arabic_font, stroke=2
-        )
-        for english_size in range(34, 19, -1):
-            english_font = load_font("amiri_regular", english_size)
-            english_lines = wrap_english(english_text, english_font, max_width)
-            english_line_height = int(english_size * 1.4)
-            text_height = (
-                arabic_text_height
-                + 42
-                + english_line_height * len(english_lines)
+    # Normal layout first; very long ayahs (e.g. 2:255, 2:282, 2:286) fall back to the documented
+    # "long" layout: smaller Arabic/English sizes and a taller text area. Text itself is never altered.
+    for arabic_sizes, english_sizes, text_area_height in (
+        (range(82, 35, -2), range(34, 19, -1), 820),
+        (range(36, 21, -2), range(22, 13, -1), 872),
+    ):
+        for arabic_size in arabic_sizes:
+            arabic_font = load_font(QURAN_ARABIC_FONT, arabic_size)
+            arabic_lines = wrap(arabic_text, arabic_font, max_width, language="ar")
+            arabic_text_height = quran_arabic_text_height(
+                arabic_lines, arabic_font, stroke=2
             )
-            if text_height <= text_area_height:
-                fitted = (
-                    arabic_lines, english_lines, arabic_font, english_font,
-                    arabic_text_height, english_line_height, text_height,
+            for english_size in english_sizes:
+                english_font = load_font("amiri_regular", english_size)
+                english_lines = wrap_english(english_text, english_font, max_width)
+                english_line_height = int(english_size * 1.4)
+                text_height = (
+                    arabic_text_height
+                    + 42
+                    + english_line_height * len(english_lines)
                 )
+                if text_height <= text_area_height:
+                    fitted = (
+                        arabic_lines, english_lines, arabic_font, english_font,
+                        arabic_text_height, english_line_height, text_height,
+                    )
+                    break
+            if fitted:
                 break
         if fitted:
             break

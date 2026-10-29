@@ -140,10 +140,13 @@ def test_featured_ayah_list_is_valid_and_under_word_limit():
     assert len(set(refs)) == len(refs)
     assert not {"18:24", "12:64", "16:126", "62:10"}.intersection(refs)
     assert not any(entry["reviewed"] for entry in featured["ayahs"])
+    long_refs = {entry["ref"] for entry in featured["ayahs"] if entry["length"] == "long"}
+    assert {"2:255", "2:282", "2:286"} <= set(refs)
     for reference in refs:
         surah, ayah = reference.split(":")
         english = quran["surahs"][surah]["english_ayahs"][ayah]
-        assert len(english.split()) <= 40
+        if reference not in long_refs:
+            assert len(english.split()) <= 40
 
 
 @pytest.mark.parametrize("ayah", ["not-an-ayah", "1:8", "114:7"])
