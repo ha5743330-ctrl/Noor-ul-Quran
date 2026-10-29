@@ -2,6 +2,7 @@ import asyncio
 import io
 import json
 import os
+import sys
 import time
 import zipfile
 from pathlib import Path
@@ -1128,3 +1129,41 @@ def test_suggest_ranges_admin_not_capped_and_long_ayah(client, monkeypatch):
 def test_suggest_ranges_rejects_bad_input(client):
     assert client.get("/api/suggest-ranges", params={"surah": "999", "mode": "full"}).status_code == 400
     assert client.get("/api/suggest-ranges", params={"surah": "1", "mode": "x"}).status_code == 400
+
+
+def _generate(client, **extra):
+    return client.post("/api/generate", json={"mode": "pick", "verse": "112:1-4", "max_duration": 60, **extra})
+
+
+@pytest.mark.parametrize("profile,quality,seconds,limit,ok", [
+    ("low", "fast", 30, 512, True),    # measured safe
+    ("low", "high", 58, 512, True),    # measured 299 MiB
+    ("full", "fast", 30, 512, False),  # measured 576 MiB: would OOM
+    ("full", "high", 58, 512, False),  # measured 1390 MiB
+    ("full", "high", 58, 0, True),     # guard off
+])
+def test_render_memory_guard(client, monkeypatch, profile, quality, seconds, limit, ok):
+    monkeypatch.setenv("RENDER_MEMORY_PROFILE", profile)
+    monkeypatch.setattr(main, "RENDER_MEMORY_LIMIT_MB", limit)
+    if ok:
+        main._check_render_memory(seconds, quality)
+    else:
+        with pytest.raises(HTTPException) as caught:
+            main._check_render_memory(seconds, quality)
+        assert caught.value.status_code == 400 and "512 MB" in caught.value.detail
+
+
+def test_generate_refused_before_starting_when_over_memory(client, monkeypatch):
+    monkeypatch.setenv("RENDER_MEMORY_PROFILE", "full")
+    monkeypatch.setattr(main, "RENDER_MEMORY_LIMIT_MB", 512)
+    response = _generate(client, quality="high")
+    assert response.status_code == 400 and "MB" in response.json()["detail"]
+    assert not main.GENERATION_JOBS
+
+
+def test_render_logs_start_end_and_peak(caplog):
+    with caplog.at_level("INFO", logger=main.LOGGER.name):
+        main._run_render([sys.executable, "-c", "pass", "--quality", "fast", "--max-dur", "30"], 30)
+    text = caplog.text
+    assert "render start quality=fast max_dur=30" in text
+    assert "render end quality=fast max_dur=30 rc=0" in text and "peak_mem=" in text
