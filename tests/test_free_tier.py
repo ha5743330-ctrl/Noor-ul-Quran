@@ -146,3 +146,25 @@ def test_health_answers_while_render_lock_is_held(client):
     finally:
         release.set()
         t.join()
+
+
+def test_recent_survives_restart_via_supabase_backup(client, monkeypatch):
+    store = {}
+    monkeypatch.setattr(main, "SUPABASE_SERVICE_KEY", "key")
+    monkeypatch.setattr(main, "_upload_media_file", lambda path, obj, ct, **k: store.__setitem__(obj, path.read_bytes()))
+
+    def fake_download(obj, path, **k):
+        path.write_bytes(store[obj])
+        return True
+
+    monkeypatch.setattr(main, "_download_media_file", fake_download)
+    monkeypatch.setattr(main, "_signed_media_url", lambda obj: "https://sb/" + obj)
+    main._record_video_history("free", [{"filename": "s112.mp4", "object_path": "videos/abc_s112.mp4"}], "full", "fast", {})
+    assert "state/history.json" in store
+
+    main.HISTORY_FILE.unlink()  # Render restart: disk wiped
+    main._pull_history()
+    video = client.get("/api/history").json()["videos"][0]
+    assert video["filename"] == "s112.mp4" and video["has_file"]
+    url = client.get(f"/api/history/{video['id']}/url").json()["url"]
+    assert url == "https://sb/videos/abc_s112.mp4"

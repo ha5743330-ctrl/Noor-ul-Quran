@@ -736,11 +736,34 @@ def _write_video_history_unlocked(history):
             encoding="utf-8",
         )
         temporary_path.replace(HISTORY_FILE)
+        _push_history()
     finally:
         try:
             temporary_path.unlink(missing_ok=True)
         except OSError:
             pass
+
+
+HISTORY_OBJECT = "state/history.json"
+
+
+def _push_history():
+    """Mirror history.json to Supabase so Recent survives Render's ephemeral disk."""
+    if not SUPABASE_SERVICE_KEY:
+        return
+    try:
+        _upload_media_file(HISTORY_FILE, HISTORY_OBJECT, "application/json")
+    except Exception as exc:
+        LOGGER.error("Could not back up history to Supabase: %s", _redact_secrets(str(exc)))
+
+
+def _pull_history():
+    if not SUPABASE_SERVICE_KEY or HISTORY_FILE.exists():
+        return
+    try:
+        _download_media_file(HISTORY_OBJECT, HISTORY_FILE)
+    except Exception as exc:
+        LOGGER.error("Could not restore history from Supabase: %s", _redact_secrets(str(exc)))
 
 
 def _safe_history_video_path(filename):
@@ -907,6 +930,7 @@ def cleanup_output_on_startup():
         LOGGER.error(RAQM_REQUIRED_ERROR)
     _quran_data()
     _cleanup_orphaned_output_files()
+    _pull_history()
     if os.getenv("DISABLE_CLEANUP_THREAD") != "1":
         threading.Thread(target=_cleanup_loop, name="media-cleanup", daemon=True).start()
 
@@ -1115,7 +1139,9 @@ def get_video_history(user=Depends(get_current_user)):
             item = dict(entry)
             item.setdefault("type", "video")
             video_path = _safe_history_video_path(item.get("filename"))
-            item["has_file"] = bool(video_path and video_path.is_file())
+            item["has_file"] = bool(video_path and video_path.is_file()) or bool(
+                SUPABASE_SERVICE_KEY and item["type"] == "video" and item.get("object_path")
+            )
             if item["type"] == "image" and item["has_file"]:
                 item["thumb_url"] = _signed_media_path(item["filename"])
             response.append(item)
@@ -1147,7 +1173,8 @@ def get_history_video_url(
             raise HTTPException(status_code=404, detail="Video not found.")
         filename = entry.get("filename")
         video_path = _safe_history_video_path(filename)
-        if video_path is None or not video_path.is_file():
+        stored_path = entry.get("object_path") if SUPABASE_SERVICE_KEY else None
+        if (video_path is None or not video_path.is_file()) and not stored_path:
             raise HTTPException(status_code=410, detail="Video expire ho gayi.")
         if purpose == "download":
             entry["downloaded_at"] = datetime.now(timezone.utc).isoformat()
@@ -1158,7 +1185,8 @@ def get_history_video_url(
             entry["download_count"] = download_count + 1
             _write_video_history_unlocked(history)
 
-    url = _signed_media_path(filename, download=purpose == "download")
+    local = video_path is not None and video_path.is_file()
+    url = _signed_media_path(filename, download=purpose == "download") if local else _signed_media_url(stored_path)
     return {"url": url, "expires_at": int(time.time()) + VIDEO_URL_TTL_SECONDS}
 
 

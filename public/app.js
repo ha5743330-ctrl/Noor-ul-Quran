@@ -154,12 +154,19 @@ function applyFreeTierLimits() {
     const select = document.getElementById("input-max-dur");
     if (select && select.selectedOptions[0]?.disabled) select.value = String(cap);
     const remaining = document.getElementById("daily-remaining");
-    if (remaining && access.daily_limit != null) {
-        const left = Math.max(0, access.daily_remaining ?? 0);
-        remaining.textContent = left > 0
-            ? `${left} of ${access.daily_limit} videos left today`
-            : "Daily limit reached, try tomorrow";
+    if (remaining) {
         remaining.classList.remove("hidden");
+        if (access.is_admin) {
+            remaining.textContent = "Admin: no daily limit";
+        } else if (access.daily_limit == null || access.daily_remaining == null) {
+            console.error("Daily limit fields missing from /access response:", access);
+            remaining.textContent = "Daily limit: checking...";
+        } else {
+            const left = Math.max(0, access.daily_remaining);
+            remaining.textContent = left > 0
+                ? `${left} of ${access.daily_limit} videos left today`
+                : "Daily limit reached, try tomorrow";
+        }
     }
     const generateButton = document.getElementById("generate-button");
     if (generateButton && limitReached()) generateButton.disabled = true;
@@ -499,6 +506,9 @@ async function initializeStudio() {
         }
         window.userAccess = await response.json();
     } catch (error) {
+        console.error("Could not load account access:", error);
+        const remaining = document.getElementById("daily-remaining");
+        if (remaining) remaining.textContent = "Daily limit: unavailable";
         const accessMessage = document.getElementById("access-message");
         if (accessMessage) {
             accessMessage.textContent = error.message || "Could not load account access.";
