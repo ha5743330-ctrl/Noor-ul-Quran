@@ -1,0 +1,4 @@
+data/*.json -text
+data/*.sha256 -text
+fonts/* -text
+*.png -text
