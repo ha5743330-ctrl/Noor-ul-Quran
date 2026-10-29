@@ -92,6 +92,8 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(main, "CLIP_CACHE_DIR", tmp_path / "cache" / "backgrounds")
     monkeypatch.setattr(main, "MUSIC_CACHE_DIR", tmp_path / "cache" / "music")
     monkeypatch.setattr(main, "SUPABASE_SERVICE_KEY", "")
+    monkeypatch.setattr(main, "MAX_VIDEO_SECONDS", 180)
+    monkeypatch.setattr(main, "DAILY_LIMIT", 1000)
     monkeypatch.setattr(main, "SUPABASE_URL", "")
     monkeypatch.setattr(main, "SUPABASE_KEY", "")
     main.app.dependency_overrides[main.get_current_user] = lambda: FREE_USER

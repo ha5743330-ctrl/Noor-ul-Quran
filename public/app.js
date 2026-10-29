@@ -145,6 +145,26 @@ async function initializeLandingAuth() {
     }
 }
 
+function applyFreeTierLimits() {
+    const access = window.userAccess || {};
+    const cap = access.max_video_seconds;
+    document.querySelectorAll("#input-max-dur option").forEach((option) => {
+        if (cap && Number(option.value) > cap) option.disabled = true;
+    });
+    const select = document.getElementById("input-max-dur");
+    if (select && select.selectedOptions[0]?.disabled) select.value = String(cap);
+    const remaining = document.getElementById("daily-remaining");
+    if (remaining && access.daily_limit != null) {
+        remaining.textContent = `${Math.max(0, access.daily_remaining ?? 0)} of ${access.daily_limit} videos left today`;
+        remaining.classList.remove("hidden");
+    }
+}
+
+function formatWait(seconds) {
+    const minutes = Math.round((Number(seconds) || 0) / 60);
+    return minutes < 1 ? "under a minute" : `about ${minutes} min`;
+}
+
 function formatDuration(seconds) {
     const rounded = Math.max(0, Math.round(Number(seconds) || 0));
     return `${Math.floor(rounded / 60)}:${String(rounded % 60).padStart(2, "0")}`;
@@ -560,7 +580,7 @@ async function generateVideo(event) {
                 verse: verse,
                 max_duration: parseInt(duration, 10),
                 random_count: parseInt(document.getElementById("input-random-count")?.value || "1", 10),
-                quality: document.getElementById("input-quality")?.value || "balanced",
+                quality: document.getElementById("input-quality")?.value || "fast",
                 content_mode: contentMode,
                 reciter_id: document.getElementById("input-reciter")?.value || null,
                 urdu_voice_id: contentMode === "arabic_only"
@@ -634,7 +654,13 @@ async function generateVideo(event) {
     }
 }
 
-async function waitForGeneration(jobId, accessToken, statusBox, logMsg, statusPercent) {
+async function waitForGeneration(jobId, accessToken, statusBox, logMsg, statusPercent, initial = {}) {
+    const showQueue = (job) => {
+        if (job.status !== "queued" || job.queue_ahead == null || !statusBox) return;
+        statusBox.innerText = `⏳ ${job.queue_ahead} before you · wait ${formatWait(job.estimated_wait_seconds)}`;
+        statusBox.style.color = "#d97706";
+    };
+    showQueue(initial);
     let lastVideoCount = 0;
     let pollDelayMs = 2000;
     let retryStartedAt = null;

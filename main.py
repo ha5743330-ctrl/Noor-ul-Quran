@@ -14,10 +14,11 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from threading import Lock
 from pathlib import Path
 from typing import Any, Optional
@@ -67,6 +68,14 @@ MAX_BULK_HISTORY_ITEMS = 100
 MAX_AYAHS_PER_REQUEST = 50
 RENDER_TIMEOUT_SECONDS = int(os.getenv("RENDER_TIMEOUT_SECONDS", "900"))
 IMAGE_COOLDOWN_SECONDS = 10
+# Free-tier knobs (Render free 512MB / Supabase free 1GB).
+CLEANUP_DAYS = float(os.getenv("CLEANUP_DAYS", "3"))
+CLEANUP_INTERVAL_SECONDS = 6 * 60 * 60
+DAILY_LIMIT = int(os.getenv("DAILY_LIMIT", "5"))
+MAX_VIDEO_SECONDS = int(os.getenv("MAX_VIDEO_SECONDS", "30"))
+DEFAULT_QUALITY = os.getenv("DEFAULT_QUALITY", "fast")
+MAX_ACTIVE_JOBS_PER_USER = int(os.getenv("MAX_ACTIVE_JOBS_PER_USER", "1"))
+DEFAULT_RENDER_SECONDS = 90.0
 AUTH_CACHE_SECONDS = 60
 RECITERS_PATH = BASE_DIR / "data" / "reciters.json"
 RECITER_CONFIG = json.loads(RECITERS_PATH.read_text(encoding="utf-8"))
@@ -112,6 +121,10 @@ HISTORY_LOCK = Lock()
 FEATURED_IMAGE_LOCK = Lock()
 LAST_FEATURED_AYAH = None
 GENERATION_JOBS = {}
+# ponytail: in-memory; resets on restart/spin-down. Persist in Supabase if abused.
+DAILY_USAGE = {}
+DAILY_USAGE_LOCK = Lock()
+RENDER_DURATIONS = []  # seconds per reel, last 10 completed jobs
 AUTH_CACHE = {}
 AUTH_CACHE_LOCK = Lock()
 LAST_IMAGE_RENDER = {}
@@ -144,7 +157,7 @@ class GenerateRequest(BaseModel):
     verse: Optional[str] = None  # e.g. "55:1-8"
     random_count: int = 1
     max_duration: int = 60
-    quality: str = "high"
+    quality: str = DEFAULT_QUALITY
     content_mode: str = "full"
     reciter_id: Optional[str] = None
     urdu_voice_id: Optional[str] = None
@@ -267,7 +280,7 @@ def _delete_media_objects(object_paths):
         path
         for path in object_paths
         if isinstance(path, str)
-        and path.startswith("videos/")
+        and path.startswith(("videos/", "ayah-images/"))
         and ".." not in path.split("/")
     })
     if paths:
@@ -541,7 +554,8 @@ def generate_ayah_image(req: GenerateImageRequest, user=Depends(get_current_user
 
 # 6. API Endpoints
 @app.api_route("/api/health", methods=["GET", "HEAD"])
-def health_check():
+async def health_check():
+    # async: runs on the event loop, so it answers even while a render saturates the threadpool.
     return {"status": "online", "system": "Noor ul Quran Engine"}
 
 @app.get("/api/reciters")
@@ -757,6 +771,134 @@ def _cleanup_orphaned_output_files(now=None):
     return removed
 
 
+def _today():
+    return date.today().isoformat()
+
+
+def _daily_remaining(user):
+    if user["is_admin"]:
+        return None
+    with DAILY_USAGE_LOCK:
+        day, count = DAILY_USAGE.get(user["id"], (None, 0))
+    return DAILY_LIMIT - (count if day == _today() else 0)
+
+
+def _reserve_daily_slot(user):
+    if user["is_admin"]:
+        return
+    with DAILY_USAGE_LOCK:
+        day, count = DAILY_USAGE.get(user["id"], (None, 0))
+        count = count if day == _today() else 0
+        if count >= DAILY_LIMIT:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Daily limit of {DAILY_LIMIT} videos reached. It resets tomorrow.",
+            )
+        DAILY_USAGE[user["id"]] = (_today(), count + 1)
+
+
+def _refund_daily_slot(user_id):
+    with DAILY_USAGE_LOCK:
+        day, count = DAILY_USAGE.get(user_id, (None, 0))
+        if day == _today() and count > 0:
+            DAILY_USAGE[user_id] = (day, count - 1)
+
+
+def _average_render_seconds():
+    return sum(RENDER_DURATIONS) / len(RENDER_DURATIONS) if RENDER_DURATIONS else DEFAULT_RENDER_SECONDS
+
+
+def _queue_info(job_id):
+    """Jobs ahead of job_id (running + earlier queued) and a rough wait; call with GENERATION_JOBS_LOCK held."""
+    ahead = 0
+    for other_id, other in GENERATION_JOBS.items():
+        if other_id == job_id:
+            break
+        if other["status"] in {"queued", "processing"}:
+            ahead += 1
+    return ahead, round((ahead + 1) * _average_render_seconds())
+
+
+def _list_all_media_objects(prefix):
+    items, offset = [], 0
+    while True:
+        response = _storage_request(
+            "POST",
+            f"/object/list/{quote(MEDIA_BUCKET, safe='')}",
+            json={"prefix": prefix, "limit": 100, "offset": offset},
+        )
+        page = response.json() if response.ok else []
+        items.extend(item for item in page if item.get("id"))  # folders have no id
+        if len(page) < 100:
+            return items
+        offset += 100
+
+
+def _parse_timestamp(value):
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except (AttributeError, ValueError):
+        return None
+
+
+def cleanup_old_media(now=None):
+    """Delete videos/images older than CLEANUP_DAYS: storage objects (videos/ and ayah-images/ in the
+    media bucket only), local files and history metadata. Returns counts."""
+    cutoff = (now or datetime.now(timezone.utc)) - timedelta(days=CLEANUP_DAYS)
+    counts = {"storage": 0, "local": 0, "history": 0}
+
+    if SUPABASE_SERVICE_KEY:
+        stale = []
+        for prefix in ("videos", "ayah-images"):
+            for item in _list_all_media_objects(prefix):
+                created = _parse_timestamp(item.get("created_at"))
+                if created and created < cutoff:
+                    stale.append(f"{prefix}/{item['name']}")
+        for start in range(0, len(stale), 100):
+            _delete_media_objects(stale[start:start + 100])
+        counts["storage"] = len(stale)
+
+    with HISTORY_LOCK:
+        history = _read_video_history_unlocked()
+        changed = False
+        for user_id, entries in list(history["users"].items()):
+            if not isinstance(entries, list):
+                continue
+            kept = []
+            for entry in entries:
+                created = _parse_timestamp(entry.get("created_at")) if isinstance(entry, dict) else None
+                if created is None or created >= cutoff:
+                    kept.append(entry)
+                    continue
+                counts["history"] += 1
+                video_path = _safe_history_video_path(entry.get("filename"))
+                if video_path is not None and video_path.is_file():
+                    try:
+                        video_path.unlink()
+                        counts["local"] += 1
+                    except OSError:
+                        LOGGER.exception("Could not delete old media %s", entry.get("filename"))
+            if len(kept) != len(entries):
+                history["users"][user_id] = kept
+                changed = True
+        if changed:
+            _write_video_history_unlocked(history)
+    LOGGER.info(
+        "Cleanup (> %s days): %d storage objects, %d local files, %d history entries removed.",
+        CLEANUP_DAYS, counts["storage"], counts["local"], counts["history"],
+    )
+    return counts
+
+
+def _cleanup_loop():
+    while True:
+        try:
+            cleanup_old_media()
+        except Exception as exc:
+            LOGGER.error("Media cleanup failed: %s", _redact_secrets(str(exc)))
+        time.sleep(CLEANUP_INTERVAL_SECONDS)
+
+
 @app.on_event("startup")
 def cleanup_output_on_startup():
     global RAQM_AVAILABLE
@@ -765,6 +907,8 @@ def cleanup_output_on_startup():
         LOGGER.error(RAQM_REQUIRED_ERROR)
     _quran_data()
     _cleanup_orphaned_output_files()
+    if os.getenv("DISABLE_CLEANUP_THREAD") != "1":
+        threading.Thread(target=_cleanup_loop, name="media-cleanup", daemon=True).start()
 
 
 def _require_raqm_for_generation(content_mode: str):
@@ -1205,6 +1349,9 @@ def get_access(user=Depends(get_current_user)):
         "email": user["email"],
         "is_admin": user["is_admin"],
         "premium_access": user["premium_access"],
+        "daily_limit": None if user["is_admin"] else DAILY_LIMIT,
+        "daily_remaining": _daily_remaining(user),
+        "max_video_seconds": None if user["is_admin"] else MAX_VIDEO_SECONDS,
     }
 
 
@@ -1506,6 +1653,8 @@ def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
         raise HTTPException(status_code=400, detail="Maximum duration must be between 30 and 180 seconds.")
     if req.quality not in RENDER_QUALITIES:
         raise HTTPException(status_code=400, detail="Quality must be fast, balanced, or high.")
+    if not user["is_admin"] and req.max_duration > MAX_VIDEO_SECONDS:
+        raise HTTPException(status_code=400, detail=f"Videos are limited to {MAX_VIDEO_SECONDS} seconds on the free server.")
     validate_video_styles(req.styles)
     _require_raqm_for_generation(req.content_mode)
 
@@ -1553,10 +1702,10 @@ def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
 
     job_id = uuid4().hex
     with GENERATION_JOBS_LOCK:
-        if any(
+        if sum(
             job["owner_id"] == user["id"] and job["status"] in {"queued", "processing"}
             for job in GENERATION_JOBS.values()
-        ):
+        ) >= MAX_ACTIVE_JOBS_PER_USER:
             raise HTTPException(
                 status_code=429,
                 detail="You already have a generation job queued or processing. Wait for it to finish before starting another.",
@@ -1569,6 +1718,7 @@ def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
                     break
         if len(GENERATION_JOBS) >= 64:
             raise HTTPException(status_code=503, detail="Generation queue is full. Try again after a running reel finishes.")
+        _reserve_daily_slot(user)
         GENERATION_JOBS[job_id] = {
             "owner_id": user["id"],
             "status": "queued",
@@ -1579,6 +1729,7 @@ def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
             "warnings": [],
             "manifest_path": str(manifest_path),
         }
+        queue_ahead, wait_seconds = _queue_info(job_id)
     GENERATION_EXECUTOR.submit(
         _run_generation_job,
         job_id,
@@ -1597,6 +1748,9 @@ def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
         "status": "queued",
         "message": "Generation queued. Each reel will appear here as soon as it is ready.",
         "videos": [],
+        "queue_ahead": queue_ahead,
+        "estimated_wait_seconds": wait_seconds,
+        "daily_remaining": _daily_remaining(user),
     }
 
 
@@ -1662,6 +1816,7 @@ def _run_generation_job(
         job = GENERATION_JOBS.get(job_id)
         if job:
             job["status"] = "processing"
+    started = time.monotonic()
     try:
         with GENERATION_LOCK:
             if styles:
@@ -1721,6 +1876,8 @@ def _run_generation_job(
                 ))
                 job["status"] = status
                 job["message"] = "All reels are ready." if completed.returncode == 0 else "Some reels could not be rendered; completed reels are ready."
+        RENDER_DURATIONS.append((time.monotonic() - started) / max(1, len(videos)))
+        del RENDER_DURATIONS[:-10]
     except Exception as exc:
         safe_error = _redact_secrets(str(exc))
         LOGGER.error(
@@ -1729,6 +1886,8 @@ def _run_generation_job(
             user_id,
             safe_error,
         )
+        if user_id is not None:
+            _refund_daily_slot(user_id)
         with GENERATION_JOBS_LOCK:
             job = GENERATION_JOBS.get(job_id)
             if job:
@@ -1749,6 +1908,8 @@ def generation_status(job_id: str, user=Depends(get_current_user)):
             raise HTTPException(status_code=404, detail="Generation job not found.")
         response = {key: value for key, value in job.items() if key not in {"owner_id", "manifest_path"}}
         manifest_path = Path(job["manifest_path"])
+        if job["status"] in {"queued", "processing"}:
+            response["queue_ahead"], response["estimated_wait_seconds"] = _queue_info(job_id)
 
     if response["status"] in {"queued", "processing"}:
         response["videos"] = _read_generation_manifest(manifest_path)
