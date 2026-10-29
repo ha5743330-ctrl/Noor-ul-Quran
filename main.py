@@ -1594,6 +1594,7 @@ def frontend_config():
         f"window.NOOR_SUPABASE_CONFIG = {json.dumps({k: config[k] for k in ('url', 'anonKey')})};"
         f"window.NOOR_SUPABASE_CONFIG.apiBaseUrl = {json.dumps(config['apiBaseUrl'])};"
         f"window.NOOR_API_BASE_URL = {json.dumps(config['apiBaseUrl'])};"
+        f"window.NOOR_CONTACT_EMAIL = {json.dumps(os.getenv('CONTACT_EMAIL', 'contact@example.com'))};"
     )
     return Response(
         content=script,

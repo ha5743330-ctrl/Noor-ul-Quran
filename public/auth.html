@@ -15,7 +15,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js" integrity="sha384-0w2KAL2YHP6wKOkUDzkCDGgVvfmHnj02DHeQ6XcHOgTfFsGyonKOpShMH1x6nk9o" crossorigin="anonymous"></script>
     <script src="/config.js" defer></script>
     <!-- Updated JS with Cache-Buster Version -->
-    <script src="auth.js?v=8" defer></script>
+    <script src="auth.js?v=9" defer></script>
     <link rel="stylesheet" href="/ui.css">
 </head>
 <body class="ui-page ui-auth min-h-screen flex flex-col justify-between selection:bg-emerald-100">
@@ -75,7 +75,7 @@
                 <div>
                     <div class="flex justify-between items-center mb-1.5">
                         <label class="block text-xs font-medium text-slate-300">Password</label>
-                        <a href="#" onclick="handlePasswordReset()" class="text-[11px] text-amber-400 hover:underline">Forgot password?</a>
+                        <a href="#" id="link-forgot" onclick="showForgot(event)" class="text-[11px] text-amber-400 hover:underline">Forgot password?</a>
                     </div>
                     <div class="relative">
                         <i class="fa-solid fa-lock absolute left-3.5 top-3.5 text-slate-500 text-sm"></i>
@@ -91,6 +91,17 @@
                 <button type="submit" id="btn-login" class="w-full bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 font-bold py-3 rounded-xl text-sm hover:shadow-lg hover:shadow-amber-500/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2">
                     <i class="fa-solid fa-right-to-bracket"></i> Sign In
                 </button>
+            </form>
+
+            <!-- Forgot Password Form (Hidden by Default) -->
+            <form id="form-forgot" onsubmit="handleForgot(event)" class="space-y-4 hidden">
+                <p class="text-xs text-slate-400">Apna email likhein, hum reset link bhejenge. Enter your email and we will send a reset link.</p>
+                <div>
+                    <label for="forgot-email" class="block text-xs font-medium text-slate-300 mb-1.5">Email Address</label>
+                    <input type="email" id="forgot-email" required placeholder="name@example.com" class="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-amber-500 transition-colors">
+                </div>
+                <button type="submit" id="btn-forgot" class="w-full bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 font-bold py-3 rounded-xl text-sm disabled:opacity-60">Send reset link</button>
+                <a href="#" onclick="switchAuthTab('login'); return false;" class="block text-center text-xs text-slate-400 hover:text-white">Back to sign in</a>
             </form>
 
             <!-- Sign Up Form (Hidden by Default) -->
@@ -121,7 +132,7 @@
 
                 <div class="flex items-center gap-2 pt-1">
                     <input type="checkbox" required id="terms" class="accent-amber-500 rounded border-slate-800">
-                    <label for="terms" class="text-xs text-slate-400">I agree to the <a href="#" class="text-amber-400 hover:underline">Terms & Privacy Policy</a></label>
+                    <label for="terms" class="text-xs text-slate-400">I agree to the <a href="/terms.html" target="_blank" rel="noopener" class="text-amber-400 hover:underline">Terms</a> and <a href="/privacy.html" target="_blank" rel="noopener" class="text-amber-400 hover:underline">Privacy</a></label>
                 </div>
 
                 <button type="submit" id="btn-signup" class="w-full bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 font-bold py-3 rounded-xl text-sm hover:shadow-lg hover:shadow-amber-500/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2">
@@ -151,7 +162,10 @@
 
     <!-- Footer -->
     <footer class="border-t border-slate-800/80 py-6 text-center text-xs text-slate-500">
-        <p>© 2026 Noor ul Quran Auto Reel Maker. All rights reserved.</p>
+        <a href="/privacy.html" class="hover:text-amber-400">Privacy</a>
+        <span class="mx-2" aria-hidden="true">·</span>
+        <a href="/terms.html" class="hover:text-amber-400">Terms</a>
+        <p class="mt-2">© 2026 Noor ul Quran Auto Reel Maker. All rights reserved.</p>
     </footer>
 
     <!-- Tab Switcher Script -->
@@ -166,6 +180,7 @@
             const alertBox = document.getElementById('auth-alert');
 
             if (alertBox) alertBox.classList.add('hidden');
+            document.getElementById('form-forgot').classList.add('hidden');
 
             if (type === 'login') {
                 loginForm.classList.remove('hidden');
@@ -183,6 +198,7 @@
                 subtitle.innerText = "Get started with automated Quran Reel generation";
             }
         }
+        if (new URLSearchParams(location.search).get('forgot')) document.addEventListener('DOMContentLoaded', () => showForgot());
     </script>
 </body>
 </html>

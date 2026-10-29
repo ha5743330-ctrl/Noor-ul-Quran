@@ -168,3 +168,7 @@ def test_recent_survives_restart_via_supabase_backup(client, monkeypatch):
     assert video["filename"] == "s112.mp4" and video["has_file"]
     url = client.get(f"/api/history/{video['id']}/url").json()["url"]
     assert url == "https://sb/videos/abc_s112.mp4"
+
+
+def test_config_js_exposes_contact_email_placeholder(client):
+    assert 'window.NOOR_CONTACT_EMAIL = "contact@example.com"' in client.get("/config.js").text

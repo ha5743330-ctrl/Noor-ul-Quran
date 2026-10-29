@@ -103,6 +103,10 @@ async function handleSignUp(event) {
         showAlert("Please fill in all fields.");
         return;
     }
+    if (!document.getElementById("terms")?.checked) {
+        showAlert("Please agree to the Terms and Privacy Policy to continue.");
+        return;
+    }
 
     if (submitBtn) {
         submitBtn.disabled = true;
@@ -184,25 +188,46 @@ async function handleSocialAuth(provider) {
     }
 }
 
-// 4. Password Reset Handler
-async function handlePasswordReset() {
-    const email = prompt("Enter your registered email address for password reset:");
-    if (!email) return;
+// 4. Password Reset
+function showForgot(event) {
+    if (event) event.preventDefault();
+    document.getElementById("form-login")?.classList.add("hidden");
+    document.getElementById("form-signup")?.classList.add("hidden");
+    document.getElementById("form-forgot")?.classList.remove("hidden");
+    document.getElementById("auth-title").innerText = "Reset Password";
+    document.getElementById("auth-subtitle").innerText = "We will email you a reset link";
+    document.getElementById("auth-alert")?.classList.add("hidden");
+}
 
+let resetCooldownTimer = null;
+async function handleForgot(event) {
+    event.preventDefault();
+    const button = document.getElementById("btn-forgot");
+    const email = document.getElementById("forgot-email").value.trim();
+    if (!email || button.disabled) return;
     try {
         if (!supabaseClient) throw new Error("Supabase client unavailable.");
         const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
-            redirectTo: `${window.location.origin}/auth.html`
+            redirectTo: `${window.location.origin}/reset-password.html`
         });
-
-        if (error) {
-            alert("Error: " + error.message);
-        } else {
-            alert("Password reset link sent to your email!");
-        }
+        if (error) console.warn("Password reset request failed:", error.message);
     } catch (err) {
-        alert("Failed to send reset email: " + err.message);
+        console.warn("Password reset request failed:", err.message);
     }
+    // Same message whether or not the account exists (no account enumeration).
+    showAlert("If this email exists, a reset link was sent. Check your inbox and spam folder.", false);
+    let left = 60;
+    button.disabled = true;
+    button.textContent = `Wait ${left}s`;
+    clearInterval(resetCooldownTimer);
+    resetCooldownTimer = setInterval(() => {
+        left -= 1;
+        button.textContent = left > 0 ? `Wait ${left}s` : "Send reset link";
+        if (left <= 0) {
+            clearInterval(resetCooldownTimer);
+            button.disabled = false;
+        }
+    }, 1000);
 }
 
 // 5. Sign Out Function
