@@ -40,6 +40,7 @@ document.addEventListener("DOMContentLoaded", () => {
         initializeReciterChoices();
         initializeRecentSelection();
         document.getElementById("generate-image-button")?.addEventListener("click", generateAyahImage);
+        initializeImageSuggestions();
     } else {
         initializeLandingAuth();
     }
@@ -72,7 +73,7 @@ async function generateAyahImage(event) {
                 "Content-Type": "application/json",
                 Authorization: "Bearer " + session.access_token
             },
-            body: JSON.stringify(reference ? { ayah: reference } : {})
+            body: JSON.stringify(ayahToSend(reference))
         });
         const result = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(result.detail || `Image generation failed (HTTP ${response.status}).`);
@@ -1160,7 +1161,13 @@ async function renderCurrentVideo() {
         if (!currentVideo || currentVideo.filename !== video.filename) return;
         if (player) {
             player.src = videoUrl;
+            player.preload = "metadata";
             player.load();
+            const lengthLabel = document.getElementById("download-length");
+            if (lengthLabel) lengthLabel.textContent = "";
+            player.onloadedmetadata = () => {
+                if (lengthLabel && Number.isFinite(player.duration)) lengthLabel.textContent = `Length: ${Math.round(player.duration)} s`;
+            };
         }
         if (downloadButton) downloadButton.href = videoUrl;
     } catch (error) {
@@ -1268,3 +1275,125 @@ async function copyCaption() {
         alert("Could not copy the caption. Check browser clipboard permissions.");
     }
 }
+
+// ---- Ayah image: theme + suggestions (refs only; text always comes from the server) ----
+let featuredList = [];
+const RECENT_FEATURED_KEY = "noorRecentFeatured";
+
+function recentFeatured() {
+    try { return JSON.parse(localStorage.getItem(RECENT_FEATURED_KEY)) || []; } catch (e) { return []; }
+}
+
+function rememberFeatured(ref) {
+    try {
+        const list = [ref, ...recentFeatured().filter((r) => r !== ref)].slice(0, 10);
+        localStorage.setItem(RECENT_FEATURED_KEY, JSON.stringify(list));
+    } catch (e) { /* storage unavailable */ }
+}
+
+function pickRefs(count) {
+    const theme = document.getElementById("image-theme")?.value;
+    const refs = featuredList.filter((item) => !theme || item.theme === theme).map((item) => item.ref);
+    const recent = recentFeatured();
+    const fresh = refs.filter((r) => !recent.includes(r));
+    const pool = (fresh.length >= count ? fresh : refs).slice();
+    const picked = [];
+    while (picked.length < count && pool.length) {
+        picked.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+    }
+    return picked;
+}
+
+// Empty input: pick here so "random" respects the chosen theme and the last-10 memory.
+function ayahToSend(reference) {
+    const ref = reference || pickRefs(1)[0];
+    if (!ref) return {};
+    rememberFeatured(ref);
+    return { ayah: ref };
+}
+
+async function initializeImageSuggestions() {
+    const select = document.getElementById("image-theme");
+    const chips = document.getElementById("image-suggestions");
+    if (!select || !chips) return;
+    try {
+        const response = await fetch(`${API_BASE_URL}/featured`);
+        featuredList = (await response.json()).ayahs || [];
+    } catch (e) { return; }
+    [...new Set(featuredList.map((item) => item.theme))].sort().forEach((theme) => {
+        const option = document.createElement("option");
+        option.value = theme;
+        option.textContent = theme;
+        select.appendChild(option);
+    });
+    document.getElementById("image-suggest-button")?.addEventListener("click", () => {
+        chips.replaceChildren(...pickRefs(5).map((ref) => {
+            const chip = document.createElement("button");
+            chip.type = "button";
+            chip.textContent = ref;
+            chip.className = "rounded-full border border-slate-500 px-3 py-1.5 font-mono text-xs font-semibold text-slate-100 hover:bg-slate-800";
+            chip.addEventListener("click", () => {
+                document.getElementById("image-ayah").value = ref;
+            });
+            return chip;
+        }));
+    });
+}
+
+// ---- Video: suggested ranges ----
+let suggestTimer = null;
+
+function scheduleRangeSuggestions() {
+    window.clearTimeout(suggestTimer);
+    suggestTimer = window.setTimeout(loadRangeSuggestions, 500);
+}
+
+async function loadRangeSuggestions() {
+    const box = document.getElementById("range-suggestions");
+    if (!box) return;
+    const { surah, start } = currentEstimateRange();
+    if (!surah) return;
+    try {
+        const { data: { session } } = await window.supabaseClient.auth.getSession();
+        if (!session) return;
+        const mode = document.getElementById("input-content-mode")?.value || "full";
+        const params = new URLSearchParams({ surah: String(surah), mode, from_ayah: String(start || 1) });
+        const reciter = document.getElementById("input-reciter")?.value;
+        const urdu = document.getElementById("input-urdu-voice")?.value;
+        if (reciter) params.set("reciter_id", reciter);
+        if (urdu && mode !== "arabic_only") params.set("urdu_voice_id", urdu);
+        const response = await fetch(`${API_BASE_URL}/suggest-ranges?${params}`, {
+            headers: { Authorization: `Bearer ${session.access_token}` }
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.detail || "Suggestions unavailable.");
+        box.replaceChildren(...result.suggestions.map((item) => {
+            const chip = document.createElement("button");
+            chip.type = "button";
+            chip.dataset.target = item.target;
+            chip.dataset.origin = item.origin;
+            chip.textContent = item.origin === "selected" && item.start ? `${item.label} [from ${item.start}]` : item.label;
+            if (!item.allowed && item.start) chip.textContent += ` - ${item.reason}`;
+            chip.disabled = !item.allowed;
+            if (item.reason) chip.title = item.reason;
+            chip.className = "rounded-full border border-slate-500 px-3 py-1.5 text-xs font-semibold text-slate-100 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50";
+            chip.addEventListener("click", () => {
+                document.getElementById("estimate-start").value = item.start;
+                document.getElementById("estimate-end").value = item.end;
+                syncRangeText();
+                scheduleDurationEstimate();
+            });
+            return chip;
+        }));
+    } catch (error) {
+        box.textContent = error.message || "Suggestions unavailable.";
+    }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+    if (!document.getElementById("range-suggestions")) return;
+    ["estimate-surah", "estimate-start", "input-content-mode", "input-reciter", "input-urdu-voice"].forEach((id) => {
+        document.getElementById(id)?.addEventListener("change", scheduleRangeSuggestions);
+    });
+    scheduleRangeSuggestions();
+});

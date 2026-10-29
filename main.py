@@ -464,21 +464,34 @@ def _latest_generated_video() -> Optional[str]:
     return videos[0].name if videos else None
 
 
-def _featured_ayah_references():
+def _featured_entries():
     featured_path = BASE_DIR / "data" / "featured_ayahs.json"
     try:
         featured = json.loads(featured_path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         LOGGER.exception("Could not load curated ayah data.")
         raise HTTPException(status_code=500, detail="Curated ayah data is unavailable.") from exc
-    references = featured.get("ayahs") if isinstance(featured, dict) else None
-    if not isinstance(references, list) or not references or any(
-        not isinstance(reference, str)
-        or re.fullmatch(r"\d{1,3}:\d{1,3}", reference) is None
-        for reference in references
+    entries = featured.get("ayahs") if isinstance(featured, dict) else None
+    if not isinstance(entries, list) or not entries or any(
+        not isinstance(entry, dict)
+        or not isinstance(entry.get("ref"), str)
+        or re.fullmatch(r"\d{1,3}:\d{1,3}", entry["ref"]) is None
+        for entry in entries
     ):
         raise HTTPException(status_code=500, detail="Curated ayah data is invalid.")
-    return references
+    return entries
+
+
+def _featured_ayah_references():
+    return [entry["ref"] for entry in _featured_entries()]
+
+
+@app.get("/api/featured")
+def featured_ayahs():
+    return {"ayahs": [
+        {"ref": e["ref"], "theme": e.get("theme"), "length": e.get("length")}
+        for e in _featured_entries()
+    ]}
 
 
 def _select_featured_ayah(reference=None):
@@ -1442,6 +1455,90 @@ def estimate_reel(
         "total_count": plan["total_count"],
         "range_seconds": round(plan["range_seconds"], 6),
     }
+
+
+SUGGEST_TARGETS = (15, 30, 60)
+
+
+def _suggest_from(surah, first, last, target, seconds_of):
+    """Whole ayahs from `first`, longest run with total <= target. Returns (end, total) or None."""
+    total, end = 0.0, None
+    for ayah in range(first, last + 1):
+        length = seconds_of(ayah)
+        if total + length > target:
+            break
+        total, end = total + length, ayah
+    return None if end is None else (end, total)
+
+
+def _build_suggestions(surah, verse_count, from_ayah, is_admin, seconds_of):
+    starts = [(1, "start")] + ([(from_ayah, "selected")] if 1 < from_ayah <= verse_count else [])
+    out = []
+    for target in SUGGEST_TARGETS:
+        for first, origin in starts:
+            last = min(verse_count, first + MAX_AYAHS_PER_REQUEST - 1)
+            hit = _suggest_from(surah, first, last, target, seconds_of)
+            item = {"target": target, "origin": origin, "allowed": True, "reason": None}
+            if hit is None:
+                item.update(start=None, end=None, seconds=None, allowed=False,
+                            reason=f"one ayah is longer than {target} s",
+                            label=f"{target} sec: one ayah is longer than {target} s")
+            else:
+                end, total = hit
+                item.update(start=first, end=end, seconds=round(total, 1),
+                            label=f"{target} sec: {surah}:{first}-{end} ({round(total)} s)")
+                if not is_admin and target > MAX_VIDEO_SECONDS:
+                    item.update(allowed=False, reason=f"Free server limit {MAX_VIDEO_SECONDS} s")
+            out.append(item)
+    return out
+
+
+@app.get("/api/suggest-ranges")
+def suggest_ranges(
+    surah: Optional[str] = None,
+    mode: Optional[str] = None,
+    from_ayah: Optional[str] = None,
+    reciter_id: Optional[str] = None,
+    urdu_voice_id: Optional[str] = None,
+    user=Depends(get_current_user),
+):
+    try:
+        surah_number = int(surah)
+        selected_start = int(from_ayah) if from_ayah else 1
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="Surah is required.") from exc
+    if mode not in {"full", "urdu_only", "arabic_only"}:
+        raise HTTPException(status_code=400, detail="Mode must be full, urdu_only, or arabic_only.")
+    reciter_id = _validate_reciter_id(reciter_id, "ar", DEFAULT_ARABIC_RECITER_ID)
+    urdu_voice_id = DEFAULT_URDU_VOICE_ID if mode == "arabic_only" else _validate_reciter_id(
+        urdu_voice_id, "ur", DEFAULT_URDU_VOICE_ID
+    )
+    quran = _quran_data()
+    if str(surah_number) not in quran["surahs"]:
+        raise HTTPException(status_code=400, detail="Surah must be between 1 and 114.")
+    verse_count = int(quran["surahs"][str(surah_number)]["n"])
+
+    import make as renderer
+
+    seconds = {}
+
+    def seconds_of(ayah):
+        if ayah not in seconds:
+            plan = renderer.plan_duration(
+                surah_number, ayah, ayah, 30, mode, quran, reciter_id, urdu_voice_id
+            )
+            seconds[ayah] = plan["items"][0]["len"]
+        return seconds[ayah]
+
+    try:
+        suggestions = _build_suggestions(
+            surah_number, verse_count, selected_start, user["is_admin"], seconds_of
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except (OSError, RuntimeError, requests.RequestException) as exc:
+        raise HTTPException(status_code=502, detail="Ayah audio durations could not be measured.") from exc
+    return {"suggestions": suggestions}
 
 
 @app.get("/api/admin/diagnostics")

@@ -52,3 +52,8 @@ Scope: `public/generate.html`, `public/index.html`, `public/auth.html`, `public/
 34. **main.py:1201, 1025–1026, make.py:896** — `quran.json` is parsed from disk on every `_validate_verse` call (twice per request) and again in `plan_duration`. **Fix:** load it once at module level (`functools.cache`). **Med** **Done — `quran.json` loaded once (`_quran_data`, `make.load_quran`).**
 35. **main.py:1523** — `_prepare_ephemeral_media()` lists Supabase Storage (backgrounds, music, content/audio, 3 existence checks) before every render. **Fix:** run it at startup and after admin uploads only. **Med** **Done — runs once per process before the first render.**
 36. **main.py:1698** — The batch ZIP is fully written to disk before streaming (up to 25 reels), which doubles disk use. **Fix:** acceptable at this size. Stream with `zipstream` if batches grow. **Low**
+
+
+## Featured ayahs (feat/suggestions) - Needs human review
+
+`data/featured_ayahs.json` entries are `{ref, theme, length, reviewed:false}`. Refs and the one-word theme tags are unreviewed; the owner will have a scholar review them before any `reviewed:true`. Texts always come from the verified `quran_qpc_hafs.json`. Validate with `python tools/validate_featured.py [--render]`; regenerate with `tools/build_featured.py`.

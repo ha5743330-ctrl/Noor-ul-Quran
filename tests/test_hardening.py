@@ -135,10 +135,12 @@ def test_featured_ayah_list_is_valid_and_under_word_limit():
     quran = json.loads((main.BASE_DIR / "data" / "quran.json").read_text(encoding="utf-8"))
 
     assert "Needs human review" in featured["status"]
-    assert len(featured["ayahs"]) == 96
-    assert len(set(featured["ayahs"])) == 96
-    assert not {"18:24", "12:64", "16:126", "62:10"}.intersection(featured["ayahs"])
-    for reference in featured["ayahs"]:
+    refs = [entry["ref"] for entry in featured["ayahs"]]
+    assert len(refs) >= 300
+    assert len(set(refs)) == len(refs)
+    assert not {"18:24", "12:64", "16:126", "62:10"}.intersection(refs)
+    assert not any(entry["reviewed"] for entry in featured["ayahs"])
+    for reference in refs:
         surah, ayah = reference.split(":")
         english = quran["surahs"][surah]["english_ayahs"][ayah]
         assert len(english.split()) <= 40
@@ -1066,3 +1068,60 @@ def test_bulk_history_delete_checks_ownership(client):
     remaining = json.loads(main.HISTORY_FILE.read_text(encoding="utf-8"))
     assert [entry["id"] for entry in remaining["users"]["free-user"]] == ["id2"]
     assert remaining["users"]["another-user"]
+
+
+def test_featured_validator_passes():
+    import sys
+    sys.path.insert(0, str(main.BASE_DIR / "tools"))
+    import validate_featured
+
+    count, errors = validate_featured.validate()
+    assert errors == [] and count >= 300
+
+
+def _fake_plan(lengths):
+    def plan_duration(surah, start, end, limit, mode, quran, reciter, urdu):
+        return {"items": [{"len": lengths[start - 1]}]}
+    return plan_duration
+
+
+def test_suggest_ranges_whole_ayahs_within_target(client, monkeypatch):
+    lengths = [6, 7, 9, 5, 20, 3, 4, 4, 4, 4, 4, 4]  # 112 has 4 ayahs; use surah 105 (5 ayahs) below
+    monkeypatch.setattr(main, "MAX_VIDEO_SECONDS", 30)
+    monkeypatch.setattr(make, "plan_duration", _fake_plan(lengths))
+    response = client.get("/api/suggest-ranges", params={"surah": "105", "mode": "full", "from_ayah": "3"})
+    assert response.status_code == 200
+    items = response.json()["suggestions"]
+    for item in items:
+        if item["start"] is None:
+            continue
+        assert item["seconds"] <= item["target"]
+        assert sum(lengths[item["start"] - 1:item["end"]]) == item["seconds"]
+        # greedy stop: the next ayah (if any) would have overflowed
+        if item["end"] < 5:
+            assert item["seconds"] + lengths[item["end"]] > item["target"]
+    from_start = {i["target"]: i for i in items if i["origin"] == "start"}
+    assert (from_start[15]["start"], from_start[15]["end"]) == (1, 2)
+    assert from_start[15]["label"] == "15 sec: 105:1-2 (13 s)"
+    assert from_start[15]["allowed"] and from_start[30]["allowed"]
+    assert from_start[60]["allowed"] is False and from_start[60]["reason"] == "Free server limit 30 s"
+    assert any(i["origin"] == "selected" and i["start"] == 3 for i in items)
+
+
+def test_suggest_ranges_admin_not_capped_and_long_ayah(client, monkeypatch):
+    monkeypatch.setattr(main, "MAX_VIDEO_SECONDS", 30)
+    main.app.dependency_overrides[main.get_current_user] = lambda: ADMIN_USER
+    monkeypatch.setattr(make, "plan_duration", _fake_plan([80] * 300))  # 2:282-like: one ayah > 60 s
+    items = client.get("/api/suggest-ranges", params={"surah": "2", "mode": "full"}).json()["suggestions"]
+    assert len(items) == 3
+    for item in items:
+        assert item["start"] is None and item["allowed"] is False
+        assert item["reason"] == f"one ayah is longer than {item['target']} s"
+    monkeypatch.setattr(make, "plan_duration", _fake_plan([10] * 300))
+    items = client.get("/api/suggest-ranges", params={"surah": "2", "mode": "full"}).json()["suggestions"]
+    assert all(i["allowed"] for i in items) and items[2]["end"] == 6
+
+
+def test_suggest_ranges_rejects_bad_input(client):
+    assert client.get("/api/suggest-ranges", params={"surah": "999", "mode": "full"}).status_code == 400
+    assert client.get("/api/suggest-ranges", params={"surah": "1", "mode": "x"}).status_code == 400
