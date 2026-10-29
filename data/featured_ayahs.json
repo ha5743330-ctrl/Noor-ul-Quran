@@ -694,6 +694,12 @@
    "reviewed": false
   },
   {
+   "ref": "2:286",
+   "theme": "dua/supplication",
+   "length": "long",
+   "reviewed": false
+  },
+  {
    "ref": "113:1",
    "theme": "dua/supplication",
    "length": "short",
@@ -1627,6 +1633,12 @@
    "ref": "51:50",
    "theme": "guidance",
    "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "2:282",
+   "theme": "taqwa",
+   "length": "long",
    "reviewed": false
   },
   {
@@ -2917,6 +2929,12 @@
    "ref": "2:163",
    "theme": "tawhid",
    "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "2:255",
+   "theme": "tawhid",
+   "length": "long",
    "reviewed": false
   },
   {
