@@ -1,102 +1,3715 @@
 {
-  "status": "Needs human review",
-  "translation": "Mohammed Marmaduke William Pickthall, AlQuran Cloud en.pickthall",
-  "ayahs": [
-    "2:152",
-    "2:153",
-    "2:155",
-    "2:201",
-    "2:263",
-    "3:8",
-    "3:139",
-    "3:200",
-    "4:58",
-    "6:17",
-    "6:160",
-    "6:162",
-    "7:23",
-    "7:56",
-    "7:199",
-    "8:46",
-    "9:51",
-    "9:119",
-    "10:44",
-    "10:57",
-    "10:62",
-    "11:6",
-    "12:87",
-    "13:28",
-    "14:7",
-    "14:12",
-    "14:40",
-    "15:56",
-    "16:90",
-    "16:97",
-    "17:24",
-    "17:36",
-    "17:53",
-    "18:46",
-    "20:46",
-    "21:107",
-    "23:1",
-    "23:97",
-    "23:118",
-    "25:63",
-    "25:74",
-    "26:80",
-    "29:69",
-    "30:21",
-    "31:17",
-    "31:18",
-    "31:19",
-    "31:26",
-    "32:16",
-    "32:17",
-    "33:3",
-    "33:70",
-    "34:39",
-    "36:58",
-    "39:10",
-    "39:53",
-    "39:54",
-    "39:55",
-    "39:62",
-    "40:60",
-    "40:65",
-    "41:34",
-    "42:19",
-    "42:40",
-    "42:43",
-    "44:38",
-    "45:15",
-    "46:13",
-    "47:7",
-    "48:4",
-    "49:10",
-    "50:16",
-    "51:50",
-    "51:56",
-    "52:48",
-    "53:39",
-    "57:11",
-    "60:8",
-    "64:16",
-    "64:17",
-    "67:2",
-    "73:8",
-    "74:38",
-    "76:3",
-    "84:6",
-    "87:14",
-    "93:3",
-    "93:5",
-    "94:6",
-    "95:4",
-    "97:3",
-    "98:5",
-    "99:7",
-    "99:8",
-    "108:1",
-    "112:1"
-  ]
+ "status": "Needs human review",
+ "translation": "Mohammed Marmaduke William Pickthall, AlQuran Cloud en.pickthall",
+ "note": "Needs human review: refs and one-word theme tags are unreviewed; a scholar must review before any is marked reviewed:true.",
+ "ayahs": [
+  {
+   "ref": "94:1",
+   "theme": "sabr/patience",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "94:2",
+   "theme": "sabr/patience",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "94:3",
+   "theme": "sabr/patience",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "94:4",
+   "theme": "sabr/patience",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "94:5",
+   "theme": "sabr/patience",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "94:6",
+   "theme": "sabr/patience",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "94:7",
+   "theme": "sabr/patience",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "94:8",
+   "theme": "sabr/patience",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "103:1",
+   "theme": "sabr/patience",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "103:2",
+   "theme": "sabr/patience",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "103:3",
+   "theme": "sabr/patience",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "2:153",
+   "theme": "sabr/patience",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "2:155",
+   "theme": "sabr/patience",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "2:156",
+   "theme": "sabr/patience",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "2:157",
+   "theme": "sabr/patience",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "2:250",
+   "theme": "sabr/patience",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "3:120",
+   "theme": "sabr/patience",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "3:125",
+   "theme": "sabr/patience",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "3:139",
+   "theme": "sabr/patience",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "3:200",
+   "theme": "sabr/patience",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "7:128",
+   "theme": "sabr/patience",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "8:46",
+   "theme": "sabr/patience",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "10:109",
+   "theme": "sabr/patience",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "11:115",
+   "theme": "sabr/patience",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "12:87",
+   "theme": "sabr/patience",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "13:22",
+   "theme": "sabr/patience",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "13:24",
+   "theme": "sabr/patience",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "14:12",
+   "theme": "sabr/patience",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "16:42",
+   "theme": "sabr/patience",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "16:96",
+   "theme": "sabr/patience",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "16:127",
+   "theme": "sabr/patience",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "18:68",
+   "theme": "sabr/patience",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "21:83",
+   "theme": "sabr/patience",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "22:35",
+   "theme": "sabr/patience",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "23:111",
+   "theme": "sabr/patience",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "25:75",
+   "theme": "sabr/patience",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "28:54",
+   "theme": "sabr/patience",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "29:58",
+   "theme": "sabr/patience",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "30:60",
+   "theme": "sabr/patience",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "31:17",
+   "theme": "sabr/patience",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "32:24",
+   "theme": "sabr/patience",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "38:17",
+   "theme": "sabr/patience",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "38:44",
+   "theme": "sabr/patience",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "39:10",
+   "theme": "sabr/patience",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "40:55",
+   "theme": "sabr/patience",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "41:35",
+   "theme": "sabr/patience",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "42:43",
+   "theme": "sabr/patience",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "47:31",
+   "theme": "sabr/patience",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "52:48",
+   "theme": "sabr/patience",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "70:5",
+   "theme": "sabr/patience",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "73:10",
+   "theme": "sabr/patience",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "74:7",
+   "theme": "sabr/patience",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "76:12",
+   "theme": "sabr/patience",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "76:24",
+   "theme": "sabr/patience",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "90:17",
+   "theme": "sabr/patience",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "108:1",
+   "theme": "shukr/gratitude",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "108:2",
+   "theme": "shukr/gratitude",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "108:3",
+   "theme": "shukr/gratitude",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "2:152",
+   "theme": "shukr/gratitude",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "2:172",
+   "theme": "shukr/gratitude",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "3:123",
+   "theme": "shukr/gratitude",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "4:147",
+   "theme": "shukr/gratitude",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "7:10",
+   "theme": "shukr/gratitude",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "7:144",
+   "theme": "shukr/gratitude",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "14:5",
+   "theme": "shukr/gratitude",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "14:7",
+   "theme": "shukr/gratitude",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "16:78",
+   "theme": "shukr/gratitude",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "16:114",
+   "theme": "shukr/gratitude",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "16:121",
+   "theme": "shukr/gratitude",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "17:3",
+   "theme": "shukr/gratitude",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "31:12",
+   "theme": "shukr/gratitude",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "31:14",
+   "theme": "shukr/gratitude",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "34:13",
+   "theme": "shukr/gratitude",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "35:30",
+   "theme": "shukr/gratitude",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "35:34",
+   "theme": "shukr/gratitude",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "36:33",
+   "theme": "shukr/gratitude",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "39:66",
+   "theme": "shukr/gratitude",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "40:61",
+   "theme": "shukr/gratitude",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "54:35",
+   "theme": "shukr/gratitude",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "55:13",
+   "theme": "shukr/gratitude",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "56:70",
+   "theme": "shukr/gratitude",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "56:73",
+   "theme": "shukr/gratitude",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "76:3",
+   "theme": "shukr/gratitude",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "76:9",
+   "theme": "shukr/gratitude",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "93:11",
+   "theme": "shukr/gratitude",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "64:17",
+   "theme": "shukr/gratitude",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "87:14",
+   "theme": "shukr/gratitude",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "3:122",
+   "theme": "tawakkul/trust in Allah",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "3:160",
+   "theme": "tawakkul/trust in Allah",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "8:2",
+   "theme": "tawakkul/trust in Allah",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "8:49",
+   "theme": "tawakkul/trust in Allah",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "9:51",
+   "theme": "tawakkul/trust in Allah",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "9:129",
+   "theme": "tawakkul/trust in Allah",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "10:84",
+   "theme": "tawakkul/trust in Allah",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "11:56",
+   "theme": "tawakkul/trust in Allah",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "11:123",
+   "theme": "tawakkul/trust in Allah",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "25:58",
+   "theme": "tawakkul/trust in Allah",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "26:217",
+   "theme": "tawakkul/trust in Allah",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "27:79",
+   "theme": "tawakkul/trust in Allah",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "29:59",
+   "theme": "tawakkul/trust in Allah",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "33:3",
+   "theme": "tawakkul/trust in Allah",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "33:48",
+   "theme": "tawakkul/trust in Allah",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "42:36",
+   "theme": "tawakkul/trust in Allah",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "58:10",
+   "theme": "tawakkul/trust in Allah",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "64:13",
+   "theme": "tawakkul/trust in Allah",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "65:3",
+   "theme": "tawakkul/trust in Allah",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "67:29",
+   "theme": "tawakkul/trust in Allah",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "73:9",
+   "theme": "tawakkul/trust in Allah",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "8:61",
+   "theme": "tawakkul/trust in Allah",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "6:17",
+   "theme": "tawakkul/trust in Allah",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "11:6",
+   "theme": "tawakkul/trust in Allah",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "13:28",
+   "theme": "tawakkul/trust in Allah",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "20:46",
+   "theme": "tawakkul/trust in Allah",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "34:39",
+   "theme": "tawakkul/trust in Allah",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "47:7",
+   "theme": "tawakkul/trust in Allah",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "113:1",
+   "theme": "dua/supplication",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "113:2",
+   "theme": "dua/supplication",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "113:3",
+   "theme": "dua/supplication",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "113:4",
+   "theme": "dua/supplication",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "113:5",
+   "theme": "dua/supplication",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "114:1",
+   "theme": "dua/supplication",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "114:2",
+   "theme": "dua/supplication",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "114:3",
+   "theme": "dua/supplication",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "114:4",
+   "theme": "dua/supplication",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "114:5",
+   "theme": "dua/supplication",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "114:6",
+   "theme": "dua/supplication",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "1:5",
+   "theme": "dua/supplication",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "1:6",
+   "theme": "dua/supplication",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "2:127",
+   "theme": "dua/supplication",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "2:128",
+   "theme": "dua/supplication",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "2:201",
+   "theme": "dua/supplication",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "3:8",
+   "theme": "dua/supplication",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "3:16",
+   "theme": "dua/supplication",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "3:38",
+   "theme": "dua/supplication",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "3:53",
+   "theme": "dua/supplication",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "3:147",
+   "theme": "dua/supplication",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "3:191",
+   "theme": "dua/supplication",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "3:192",
+   "theme": "dua/supplication",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "3:194",
+   "theme": "dua/supplication",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "7:23",
+   "theme": "dua/supplication",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "7:126",
+   "theme": "dua/supplication",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "7:151",
+   "theme": "dua/supplication",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "10:85",
+   "theme": "dua/supplication",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "10:86",
+   "theme": "dua/supplication",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "14:35",
+   "theme": "dua/supplication",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "14:40",
+   "theme": "dua/supplication",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "14:41",
+   "theme": "dua/supplication",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "17:24",
+   "theme": "dua/supplication",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "17:80",
+   "theme": "dua/supplication",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "17:81",
+   "theme": "dua/supplication",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "18:10",
+   "theme": "dua/supplication",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "20:25",
+   "theme": "dua/supplication",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "20:26",
+   "theme": "dua/supplication",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "20:27",
+   "theme": "dua/supplication",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "20:28",
+   "theme": "dua/supplication",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "20:114",
+   "theme": "dua/supplication",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "21:89",
+   "theme": "dua/supplication",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "23:29",
+   "theme": "dua/supplication",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "23:97",
+   "theme": "dua/supplication",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "23:98",
+   "theme": "dua/supplication",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "23:109",
+   "theme": "dua/supplication",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "23:118",
+   "theme": "dua/supplication",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "25:65",
+   "theme": "dua/supplication",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "25:74",
+   "theme": "dua/supplication",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "26:83",
+   "theme": "dua/supplication",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "26:84",
+   "theme": "dua/supplication",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "28:16",
+   "theme": "dua/supplication",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "28:21",
+   "theme": "dua/supplication",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "28:24",
+   "theme": "dua/supplication",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "40:60",
+   "theme": "dua/supplication",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "54:10",
+   "theme": "dua/supplication",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "71:28",
+   "theme": "dua/supplication",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "7:56",
+   "theme": "dua/supplication",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "26:80",
+   "theme": "dua/supplication",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "32:16",
+   "theme": "dua/supplication",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "93:3",
+   "theme": "mercy/forgiveness",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "93:4",
+   "theme": "mercy/forgiveness",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "93:5",
+   "theme": "mercy/forgiveness",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "93:6",
+   "theme": "mercy/forgiveness",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "93:7",
+   "theme": "mercy/forgiveness",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "93:8",
+   "theme": "mercy/forgiveness",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "2:37",
+   "theme": "mercy/forgiveness",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "2:160",
+   "theme": "mercy/forgiveness",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "2:218",
+   "theme": "mercy/forgiveness",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "2:263",
+   "theme": "mercy/forgiveness",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "3:31",
+   "theme": "mercy/forgiveness",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "3:133",
+   "theme": "mercy/forgiveness",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "3:134",
+   "theme": "mercy/forgiveness",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "3:135",
+   "theme": "mercy/forgiveness",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "4:110",
+   "theme": "mercy/forgiveness",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "4:48",
+   "theme": "mercy/forgiveness",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "4:116",
+   "theme": "mercy/forgiveness",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "5:39",
+   "theme": "mercy/forgiveness",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "6:160",
+   "theme": "mercy/forgiveness",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "7:199",
+   "theme": "mercy/forgiveness",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "9:104",
+   "theme": "mercy/forgiveness",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "11:90",
+   "theme": "mercy/forgiveness",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "12:92",
+   "theme": "mercy/forgiveness",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "15:49",
+   "theme": "mercy/forgiveness",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "15:56",
+   "theme": "mercy/forgiveness",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "15:85",
+   "theme": "mercy/forgiveness",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "16:119",
+   "theme": "mercy/forgiveness",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "17:25",
+   "theme": "mercy/forgiveness",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "17:53",
+   "theme": "mercy/forgiveness",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "21:107",
+   "theme": "mercy/forgiveness",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "25:70",
+   "theme": "mercy/forgiveness",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "28:67",
+   "theme": "mercy/forgiveness",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "39:53",
+   "theme": "mercy/forgiveness",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "39:54",
+   "theme": "mercy/forgiveness",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "40:3",
+   "theme": "mercy/forgiveness",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "42:25",
+   "theme": "mercy/forgiveness",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "42:37",
+   "theme": "mercy/forgiveness",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "42:40",
+   "theme": "mercy/forgiveness",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "64:14",
+   "theme": "mercy/forgiveness",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "85:14",
+   "theme": "mercy/forgiveness",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "110:3",
+   "theme": "mercy/forgiveness",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "7:153",
+   "theme": "mercy/forgiveness",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "20:82",
+   "theme": "mercy/forgiveness",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "5:74",
+   "theme": "mercy/forgiveness",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "3:89",
+   "theme": "mercy/forgiveness",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "4:149",
+   "theme": "mercy/forgiveness",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "41:34",
+   "theme": "mercy/forgiveness",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "4:31",
+   "theme": "mercy/forgiveness",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "25:71",
+   "theme": "mercy/forgiveness",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "42:19",
+   "theme": "mercy/forgiveness",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "36:58",
+   "theme": "mercy/forgiveness",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "97:1",
+   "theme": "guidance",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "97:2",
+   "theme": "guidance",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "97:3",
+   "theme": "guidance",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "97:4",
+   "theme": "guidance",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "97:5",
+   "theme": "guidance",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "1:7",
+   "theme": "guidance",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "2:2",
+   "theme": "guidance",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "2:38",
+   "theme": "guidance",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "2:256",
+   "theme": "guidance",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "3:101",
+   "theme": "guidance",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "3:138",
+   "theme": "guidance",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "4:174",
+   "theme": "guidance",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "5:15",
+   "theme": "guidance",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "5:16",
+   "theme": "guidance",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "6:88",
+   "theme": "guidance",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "6:126",
+   "theme": "guidance",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "6:153",
+   "theme": "guidance",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "7:178",
+   "theme": "guidance",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "10:25",
+   "theme": "guidance",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "10:57",
+   "theme": "guidance",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "13:19",
+   "theme": "guidance",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "16:9",
+   "theme": "guidance",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "17:9",
+   "theme": "guidance",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "17:82",
+   "theme": "guidance",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "18:13",
+   "theme": "guidance",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "20:123",
+   "theme": "guidance",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "24:46",
+   "theme": "guidance",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "28:56",
+   "theme": "guidance",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "29:69",
+   "theme": "guidance",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "34:50",
+   "theme": "guidance",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "39:18",
+   "theme": "guidance",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "39:22",
+   "theme": "guidance",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "39:55",
+   "theme": "guidance",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "47:17",
+   "theme": "guidance",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "48:28",
+   "theme": "guidance",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "64:11",
+   "theme": "guidance",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "73:19",
+   "theme": "guidance",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "76:29",
+   "theme": "guidance",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "81:27",
+   "theme": "guidance",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "81:28",
+   "theme": "guidance",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "92:12",
+   "theme": "guidance",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "98:2",
+   "theme": "guidance",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "10:44",
+   "theme": "guidance",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "48:4",
+   "theme": "guidance",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "51:50",
+   "theme": "guidance",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "2:21",
+   "theme": "taqwa",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "2:183",
+   "theme": "taqwa",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "2:281",
+   "theme": "taqwa",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "3:102",
+   "theme": "taqwa",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "5:35",
+   "theme": "taqwa",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "5:100",
+   "theme": "taqwa",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "7:26",
+   "theme": "taqwa",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "7:201",
+   "theme": "taqwa",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "8:29",
+   "theme": "taqwa",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "9:119",
+   "theme": "taqwa",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "16:128",
+   "theme": "taqwa",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "22:32",
+   "theme": "taqwa",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "33:70",
+   "theme": "taqwa",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "33:71",
+   "theme": "taqwa",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "39:20",
+   "theme": "taqwa",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "59:18",
+   "theme": "taqwa",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "64:16",
+   "theme": "taqwa",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "65:5",
+   "theme": "taqwa",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "92:5",
+   "theme": "taqwa",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "92:6",
+   "theme": "taqwa",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "92:7",
+   "theme": "taqwa",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "92:17",
+   "theme": "taqwa",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "92:18",
+   "theme": "taqwa",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "92:19",
+   "theme": "taqwa",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "92:20",
+   "theme": "taqwa",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "92:21",
+   "theme": "taqwa",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "98:7",
+   "theme": "taqwa",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "11:112",
+   "theme": "taqwa",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "3:76",
+   "theme": "taqwa",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "3:17",
+   "theme": "taqwa",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "3:18",
+   "theme": "taqwa",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "10:62",
+   "theme": "taqwa",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "46:13",
+   "theme": "taqwa",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "73:8",
+   "theme": "taqwa",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "17:26",
+   "theme": "family",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "19:12",
+   "theme": "family",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "19:13",
+   "theme": "family",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "19:14",
+   "theme": "family",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "19:32",
+   "theme": "family",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "30:21",
+   "theme": "family",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "31:18",
+   "theme": "family",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "31:19",
+   "theme": "family",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "33:21",
+   "theme": "family",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "42:49",
+   "theme": "family",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "42:50",
+   "theme": "family",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "52:21",
+   "theme": "family",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "60:8",
+   "theme": "family",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "64:15",
+   "theme": "family",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "20:132",
+   "theme": "family",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "30:20",
+   "theme": "family",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "19:4",
+   "theme": "family",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "19:5",
+   "theme": "family",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "19:6",
+   "theme": "family",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "19:41",
+   "theme": "family",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "19:42",
+   "theme": "family",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "19:43",
+   "theme": "family",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "12:4",
+   "theme": "family",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "12:5",
+   "theme": "family",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "37:100",
+   "theme": "family",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "37:101",
+   "theme": "family",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "2:31",
+   "theme": "knowledge",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "2:32",
+   "theme": "knowledge",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "2:269",
+   "theme": "knowledge",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "3:190",
+   "theme": "knowledge",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "5:109",
+   "theme": "knowledge",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "6:75",
+   "theme": "knowledge",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "6:97",
+   "theme": "knowledge",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "12:108",
+   "theme": "knowledge",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "16:43",
+   "theme": "knowledge",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "17:36",
+   "theme": "knowledge",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "17:85",
+   "theme": "knowledge",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "18:65",
+   "theme": "knowledge",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "18:66",
+   "theme": "knowledge",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "18:109",
+   "theme": "knowledge",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "20:2",
+   "theme": "knowledge",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "20:3",
+   "theme": "knowledge",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "27:15",
+   "theme": "knowledge",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "29:43",
+   "theme": "knowledge",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "29:49",
+   "theme": "knowledge",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "31:27",
+   "theme": "knowledge",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "35:28",
+   "theme": "knowledge",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "96:1",
+   "theme": "knowledge",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "96:2",
+   "theme": "knowledge",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "96:3",
+   "theme": "knowledge",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "96:4",
+   "theme": "knowledge",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "96:5",
+   "theme": "knowledge",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "55:1",
+   "theme": "knowledge",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "55:2",
+   "theme": "knowledge",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "55:3",
+   "theme": "knowledge",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "55:4",
+   "theme": "knowledge",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "68:1",
+   "theme": "knowledge",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "13:43",
+   "theme": "knowledge",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "28:14",
+   "theme": "knowledge",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "47:19",
+   "theme": "knowledge",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "51:21",
+   "theme": "knowledge",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "51:20",
+   "theme": "knowledge",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "21:7",
+   "theme": "knowledge",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "59:21",
+   "theme": "knowledge",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "67:10",
+   "theme": "knowledge",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "41:53",
+   "theme": "knowledge",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "2:151",
+   "theme": "knowledge",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "2:48",
+   "theme": "hereafter",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "2:81",
+   "theme": "hereafter",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "2:82",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "2:110",
+   "theme": "hereafter",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "2:123",
+   "theme": "hereafter",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "2:210",
+   "theme": "hereafter",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "4:87",
+   "theme": "hereafter",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "6:32",
+   "theme": "hereafter",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "6:162",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "7:8",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "7:9",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "7:46",
+   "theme": "hereafter",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "7:49",
+   "theme": "hereafter",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "9:21",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "9:22",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "10:7",
+   "theme": "hereafter",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "10:26",
+   "theme": "hereafter",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "11:103",
+   "theme": "hereafter",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "14:48",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "14:51",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "16:111",
+   "theme": "hereafter",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "17:13",
+   "theme": "hereafter",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "17:14",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "18:46",
+   "theme": "hereafter",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "18:107",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "18:108",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "19:95",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "20:15",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "20:76",
+   "theme": "hereafter",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "21:47",
+   "theme": "hereafter",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "21:103",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "22:1",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "23:99",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "23:101",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "23:102",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "23:103",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "24:24",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "29:57",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "36:12",
+   "theme": "hereafter",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "36:54",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "36:65",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "40:17",
+   "theme": "hereafter",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "40:39",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "41:30",
+   "theme": "hereafter",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "41:31",
+   "theme": "hereafter",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "43:67",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "44:40",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "45:28",
+   "theme": "hereafter",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "45:29",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "50:19",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "50:22",
+   "theme": "hereafter",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "55:26",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "55:27",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "56:7",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "56:8",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "56:9",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "56:10",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "56:11",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "58:6",
+   "theme": "hereafter",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "69:19",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "69:20",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "69:21",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "74:38",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "75:36",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "76:5",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "76:6",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "76:7",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "76:8",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "78:38",
+   "theme": "hereafter",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "81:1",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "81:2",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "81:3",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "82:1",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "82:2",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "82:3",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "82:4",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "82:5",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "82:19",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "83:6",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "84:6",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "84:7",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "84:8",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "84:9",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "88:1",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "89:27",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "89:28",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "89:29",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "89:30",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "99:1",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "99:2",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "99:3",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "99:4",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "99:5",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "99:6",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "99:7",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "99:8",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "101:1",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "101:2",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "101:3",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "102:1",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "102:2",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "102:3",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "102:4",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "102:8",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "3:25",
+   "theme": "hereafter",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "3:161",
+   "theme": "hereafter",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "4:40",
+   "theme": "hereafter",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "4:41",
+   "theme": "hereafter",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "4:42",
+   "theme": "hereafter",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "4:124",
+   "theme": "hereafter",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "16:97",
+   "theme": "hereafter",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "32:17",
+   "theme": "hereafter",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "67:2",
+   "theme": "hereafter",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "2:163",
+   "theme": "tawhid",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "3:2",
+   "theme": "tawhid",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "3:6",
+   "theme": "tawhid",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "3:189",
+   "theme": "tawhid",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "4:126",
+   "theme": "tawhid",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "5:76",
+   "theme": "tawhid",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "5:120",
+   "theme": "tawhid",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "6:1",
+   "theme": "tawhid",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "6:101",
+   "theme": "tawhid",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "6:102",
+   "theme": "tawhid",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "6:103",
+   "theme": "tawhid",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "6:163",
+   "theme": "tawhid",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "10:32",
+   "theme": "tawhid",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "16:22",
+   "theme": "tawhid",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "17:42",
+   "theme": "tawhid",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "17:43",
+   "theme": "tawhid",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "17:44",
+   "theme": "tawhid",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "17:111",
+   "theme": "tawhid",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "20:8",
+   "theme": "tawhid",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "20:14",
+   "theme": "tawhid",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "20:98",
+   "theme": "tawhid",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "21:22",
+   "theme": "tawhid",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "21:25",
+   "theme": "tawhid",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "21:30",
+   "theme": "tawhid",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "22:62",
+   "theme": "tawhid",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "23:116",
+   "theme": "tawhid",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "25:2",
+   "theme": "tawhid",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "27:62",
+   "theme": "tawhid",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "28:70",
+   "theme": "tawhid",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "28:88",
+   "theme": "tawhid",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "29:61",
+   "theme": "tawhid",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "30:25",
+   "theme": "tawhid",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "31:11",
+   "theme": "tawhid",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "31:25",
+   "theme": "tawhid",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "32:4",
+   "theme": "tawhid",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "35:3",
+   "theme": "tawhid",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "35:41",
+   "theme": "tawhid",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "36:82",
+   "theme": "tawhid",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "36:83",
+   "theme": "tawhid",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "37:4",
+   "theme": "tawhid",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "39:4",
+   "theme": "tawhid",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "39:62",
+   "theme": "tawhid",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "39:63",
+   "theme": "tawhid",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "40:62",
+   "theme": "tawhid",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "40:65",
+   "theme": "tawhid",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "42:11",
+   "theme": "tawhid",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "42:53",
+   "theme": "tawhid",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "43:84",
+   "theme": "tawhid",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "44:8",
+   "theme": "tawhid",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "45:36",
+   "theme": "tawhid",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "45:37",
+   "theme": "tawhid",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "51:56",
+   "theme": "tawhid",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "57:1",
+   "theme": "tawhid",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "57:2",
+   "theme": "tawhid",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "57:3",
+   "theme": "tawhid",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "59:22",
+   "theme": "tawhid",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "59:24",
+   "theme": "tawhid",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "59:1",
+   "theme": "tawhid",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "62:1",
+   "theme": "tawhid",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "64:1",
+   "theme": "tawhid",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "67:1",
+   "theme": "tawhid",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "67:3",
+   "theme": "tawhid",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "67:4",
+   "theme": "tawhid",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "67:15",
+   "theme": "tawhid",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "112:1",
+   "theme": "tawhid",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "112:2",
+   "theme": "tawhid",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "112:3",
+   "theme": "tawhid",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "112:4",
+   "theme": "tawhid",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "109:1",
+   "theme": "tawhid",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "109:2",
+   "theme": "tawhid",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "109:3",
+   "theme": "tawhid",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "109:4",
+   "theme": "tawhid",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "109:5",
+   "theme": "tawhid",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "109:6",
+   "theme": "tawhid",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "1:1",
+   "theme": "tawhid",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "1:2",
+   "theme": "tawhid",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "1:3",
+   "theme": "tawhid",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "1:4",
+   "theme": "tawhid",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "31:26",
+   "theme": "tawhid",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "44:38",
+   "theme": "tawhid",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "50:16",
+   "theme": "tawhid",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "95:4",
+   "theme": "tawhid",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "93:9",
+   "theme": "character/akhlaq",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "93:10",
+   "theme": "character/akhlaq",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "2:195",
+   "theme": "character/akhlaq",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "4:58",
+   "theme": "character/akhlaq",
+   "length": "long",
+   "reviewed": false
+  },
+  {
+   "ref": "4:86",
+   "theme": "character/akhlaq",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "7:31",
+   "theme": "character/akhlaq",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "15:88",
+   "theme": "character/akhlaq",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "16:90",
+   "theme": "character/akhlaq",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "17:27",
+   "theme": "character/akhlaq",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "17:28",
+   "theme": "character/akhlaq",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "17:29",
+   "theme": "character/akhlaq",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "17:34",
+   "theme": "character/akhlaq",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "17:35",
+   "theme": "character/akhlaq",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "17:37",
+   "theme": "character/akhlaq",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "22:77",
+   "theme": "character/akhlaq",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "23:1",
+   "theme": "character/akhlaq",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "23:2",
+   "theme": "character/akhlaq",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "23:3",
+   "theme": "character/akhlaq",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "23:4",
+   "theme": "character/akhlaq",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "23:5",
+   "theme": "character/akhlaq",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "23:8",
+   "theme": "character/akhlaq",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "24:30",
+   "theme": "character/akhlaq",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "24:27",
+   "theme": "character/akhlaq",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "25:63",
+   "theme": "character/akhlaq",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "25:67",
+   "theme": "character/akhlaq",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "25:72",
+   "theme": "character/akhlaq",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "25:73",
+   "theme": "character/akhlaq",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "33:58",
+   "theme": "character/akhlaq",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "49:6",
+   "theme": "character/akhlaq",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "49:10",
+   "theme": "character/akhlaq",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "51:19",
+   "theme": "character/akhlaq",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "55:60",
+   "theme": "character/akhlaq",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "57:18",
+   "theme": "character/akhlaq",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "63:9",
+   "theme": "character/akhlaq",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "68:4",
+   "theme": "character/akhlaq",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "90:11",
+   "theme": "character/akhlaq",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "90:12",
+   "theme": "character/akhlaq",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "90:13",
+   "theme": "character/akhlaq",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "90:14",
+   "theme": "character/akhlaq",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "90:15",
+   "theme": "character/akhlaq",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "90:16",
+   "theme": "character/akhlaq",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "104:1",
+   "theme": "character/akhlaq",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "107:1",
+   "theme": "character/akhlaq",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "107:2",
+   "theme": "character/akhlaq",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "107:3",
+   "theme": "character/akhlaq",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "3:104",
+   "theme": "character/akhlaq",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "29:45",
+   "theme": "character/akhlaq",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "45:15",
+   "theme": "character/akhlaq",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "53:39",
+   "theme": "character/akhlaq",
+   "length": "short",
+   "reviewed": false
+  },
+  {
+   "ref": "57:11",
+   "theme": "character/akhlaq",
+   "length": "medium",
+   "reviewed": false
+  },
+  {
+   "ref": "98:5",
+   "theme": "character/akhlaq",
+   "length": "medium",
+   "reviewed": false
+  }
+ ]
 }
