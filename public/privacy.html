@@ -9,31 +9,26 @@
     <script src="https://cdn.tailwindcss.com/3.4.16"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js" integrity="sha384-0w2KAL2YHP6wKOkUDzkCDGgVvfmHnj02DHeQ6XcHOgTfFsGyonKOpShMH1x6nk9o" crossorigin="anonymous"></script>
     <script src="/config.js" defer></script>
+    <script src="/auth.js?v=9" defer></script>
+    <script src="/nav.js?v=1" defer></script>
     <script src="/legal.js?v=1" defer></script>
-    <link rel="stylesheet" href="/ui.css">
+    <link rel="stylesheet" href="/ui.css?v=2">
 </head>
 <body class="ui-page ui-auth min-h-screen flex flex-col justify-between selection:bg-emerald-100">
-    <header class="h-20 border-b border-slate-800/80 px-6 flex items-center justify-between">
-        <a href="/" class="flex items-center space-x-3">
-            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-yellow-300 flex items-center justify-center text-slate-950 font-bold text-lg shadow-lg shadow-amber-500/20"><i class="fa-solid fa-quran"></i></div>
-            <div>
-                <p class="font-bold text-lg bg-gradient-to-r from-amber-300 to-yellow-500 bg-clip-text text-transparent">Noor ul Quran</p>
-                <p class="text-[10px] text-slate-400 font-medium">Auto Quran Reel Generator</p>
-            </div>
-        </a>
-        <a href="/" class="text-xs text-slate-400 hover:text-white transition-colors flex items-center gap-2 bg-slate-900 px-4 py-2 rounded-xl border border-slate-800"><i class="fa-solid fa-arrow-left"></i> Back to Home</a>
-    </header>
+    <header id="site-header"></header>
     <main class="my-10 px-4 max-w-2xl mx-auto w-full">
         <article class="glass-card rounded-3xl p-6 sm:p-8 border border-slate-800 shadow-2xl space-y-5 text-sm leading-6 text-slate-300">
             <h1 class="text-2xl font-bold text-slate-100">Privacy Policy</h1>
-            <p class="text-xs text-slate-400">Last updated: 2026-10-29</p>
+            <p class="text-xs text-slate-400">Last updated: 2026-10-30</p>
             <section dir="rtl" lang="ur" class="rounded-xl border border-amber-400/30 bg-amber-400/10 p-4 text-slate-200">
-                <strong>مختصر:</strong> ہم صرف آپ کا ای میل اور آپ کی بنائی ہوئی ویڈیوز/تصاویر محفوظ کرتے ہیں۔ یہ 3 دن بعد خود بخود حذف ہو جاتی ہیں۔ ہم اشتہارات نہیں دکھاتے اور آپ کا ڈیٹا فروخت نہیں کرتے۔ اکاؤنٹ حذف کرانے کے لیے ای میل کریں۔
+                <strong>مختصر:</strong> ہم صرف آپ کا ای میل اور آپ کی بنائی ہوئی ویڈیوز/تصاویر محفوظ کرتے ہیں۔ یہ 3 دن بعد خود بخود حذف ہو جاتی ہیں۔ ہم اشتہارات نہیں دکھاتے اور آپ کا ڈیٹا فروخت نہیں کرتے۔ اکاؤنٹ حذف یا غیر فعال کرنے کے لیے پروفائل صفحہ استعمال کریں۔
             </section>
             <h2 class="font-bold text-slate-100">What we collect</h2>
             <ul class="list-disc pl-5 space-y-1">
                 <li><strong>Account:</strong> your email address (and the name you enter at signup), handled by Supabase Auth. Passwords are never visible to us.</li>
+                <li><strong>Profile:</strong> an optional display name and an optional profile photo. Photos are resized to 256&times;256 and stored privately in Supabase Storage; only you (and admins managing the service) can see them.</li>
                 <li><strong>Your creations:</strong> the videos and images you generate, and a history list of them, are stored per user in Supabase Storage.</li>
                 <li><strong>Usage counters:</strong> a daily count of videos per account (limit: 5 videos per day) is kept in server memory.</li>
             </ul>
@@ -52,8 +47,14 @@
                 <li>Arabic text: Quran.com data, displayed in the KFGQPC Uthmanic Hafs font.</li>
                 <li>English translation: Pickthall, via AlQuran Cloud.</li>
             </ul>
-            <h2 class="font-bold text-slate-100">Deleting your account</h2>
-            <p>Email <a class="contact-email text-amber-400 underline" href="mailto:contact@example.com">contact@example.com</a> from your registered address and we will delete your account and stored files.</p>
+            <h2 class="font-bold text-slate-100">Deactivating or deleting your account</h2>
+            <p>From your <a class="text-amber-400 underline" href="/profile.html">Profile</a> page you can:</p>
+            <ul class="list-disc pl-5 space-y-1">
+                <li><strong>Deactivate</strong> your account: you are signed out and cannot generate or view content until you sign in again and reactivate. Your files are kept.</li>
+                <li><strong>Delete permanently</strong> (type DELETE and enter your password): we delete all your videos, ayah images, profile photo and history entries from storage, then your login account. This cannot be undone.</li>
+                <li><strong>Download your data</strong> as a JSON file (profile and history list, no secrets).</li>
+            </ul>
+            <p>Admins can block an account that breaks the Terms; the reason is shown to that user. Admin actions are recorded in an audit log (who, whom, action, time). You can also email <a class="contact-email text-amber-400 underline" href="mailto:contact@example.com">contact@example.com</a> from your registered address to ask for deletion.</p>
         </article>
     </main>
     <footer class="border-t border-slate-800/80 py-6 text-center text-xs text-slate-500">

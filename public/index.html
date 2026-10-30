@@ -9,26 +9,10 @@
     <script src="https://cdn.tailwindcss.com/3.4.16"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/ui.css">
+    <link rel="stylesheet" href="/ui.css?v=2">
 </head>
 <body class="ui-page ui-landing min-h-screen selection:bg-emerald-100">
-    <header class="sticky top-0 z-40 border-b border-slate-800 bg-slate-950/95 backdrop-blur">
-        <div class="mx-auto flex min-h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6">
-            <a href="/" class="flex min-w-0 items-center gap-2.5 rounded-md sm:gap-3" aria-label="Noor ul Quran home">
-                <img src="/assets/logo.png" alt="Noor ul Quran logo" class="h-10 w-10 shrink-0 rounded-full bg-white object-contain">
-                <span class="truncate text-sm font-bold text-amber-300 sm:text-base">Noor ul Quran</span>
-            </a>
-            <nav aria-label="Main navigation" class="flex items-center gap-2 text-xs sm:gap-5 sm:text-sm">
-                <a href="#features" class="hidden rounded-md text-slate-300 hover:text-amber-200 sm:inline">Features</a>
-                <a href="#how-it-works" class="hidden rounded-md text-slate-300 hover:text-amber-200 sm:inline">How it works</a>
-                <a href="#plans" class="hidden rounded-md text-slate-300 hover:text-amber-200 sm:inline">Plans</a>
-                <a href="/generate.html" class="rounded-lg bg-amber-400 px-3 py-2 font-bold text-slate-950 hover:bg-amber-300 sm:px-4">Generate</a>
-                <span id="user-status-tag" class="hidden max-sm:hidden rounded-full border border-slate-700 bg-slate-900 px-2.5 py-1 text-xs font-semibold text-slate-200 sm:inline-flex">Free Tier</span>
-                <a id="nav-auth-btn" href="/auth.html" class="rounded-md px-2 py-2 font-semibold text-slate-100 hover:text-amber-200">Sign In</a>
-                <a id="admin-portal-link" href="/admin.html" class="hidden rounded-md px-2 py-2 font-semibold text-amber-200 hover:text-amber-100">Admin</a>
-            </nav>
-        </div>
-    </header>
+    <header id="site-header"></header>
 
     <main>
         <section id="home" class="relative isolate flex min-h-[36rem] items-center overflow-hidden px-4 py-16 sm:px-6 sm:py-24">
@@ -175,6 +159,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js" integrity="sha384-0w2KAL2YHP6wKOkUDzkCDGgVvfmHnj02DHeQ6XcHOgTfFsGyonKOpShMH1x6nk9o" crossorigin="anonymous"></script>
     <script src="/config.js"></script>
     <script src="/auth.js?v=9"></script>
-    <script src="/app.js?v=16"></script>
+    <script src="/nav.js?v=1"></script>
+    <script src="/app.js?v=17"></script>
 </body>
 </html>

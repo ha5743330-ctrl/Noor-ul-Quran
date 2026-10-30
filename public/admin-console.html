@@ -7,7 +7,7 @@
     <script src="https://cdn.tailwindcss.com/3.4.16"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/ui.css">
+    <link rel="stylesheet" href="/ui.css?v=2">
 </head>
 <body class="ui-page ui-admin min-h-screen">
     <div class="absolute inset-0 -z-10 overflow-hidden">
@@ -15,25 +15,7 @@
         <div class="absolute right-[-10%] top-24 h-72 w-72 rounded-full bg-sky-500/10 blur-3xl"></div>
     </div>
 
-    <header class="border-b border-slate-800/80 bg-slate-900/75 backdrop-blur-xl">
-        <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-4">
-            <div class="flex items-center gap-3">
-                <div class="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400 to-yellow-300 text-lg font-bold text-slate-950 shadow-lg shadow-amber-500/20">
-                    <i class="fa-solid fa-quran"></i>
-                </div>
-                <div>
-                    <p class="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-400">Noor ul Quran</p>
-                    <h1 class="mt-1 text-xl font-bold text-white">Admin Access</h1>
-                </div>
-            </div>
-            <div class="flex items-center gap-3">
-                <span id="admin-email" class="hidden rounded-full border border-slate-700 bg-slate-800/80 px-3 py-1.5 text-xs text-slate-300 sm:inline-flex"></span>
-                <button type="button" onclick="handleSignOut(event)" class="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-300 transition hover:border-slate-500 hover:bg-slate-800" title="Sign out">
-                    <i class="fa-solid fa-right-from-bracket"></i><span class="ml-2">Sign out</span>
-                </button>
-            </div>
-        </div>
-    </header>
+    <header id="site-header"></header>
 
     <main class="mx-auto max-w-7xl space-y-6 px-5 py-8">
         <div id="admin-message" class="hidden rounded-xl border px-4 py-3 text-sm" role="status" aria-live="polite"></div>
@@ -92,34 +74,27 @@
 
         <section class="grid gap-6 xl:grid-cols-[1.5fr_0.9fr]">
             <div class="rounded-3xl border border-slate-800 bg-slate-900/60 p-5 shadow-2xl shadow-slate-950/20">
-                <div class="flex flex-wrap items-end justify-between gap-4 border-b border-slate-800 pb-5">
-                    <div>
-                        <p class="text-xs uppercase tracking-[0.18em] text-slate-400">Registry</p>
-                        <h2 class="mt-2 text-xl font-semibold text-white">Registered users</h2>
-                        <p class="mt-1 text-sm text-slate-400">Grant or revoke premium access for account tiers.</p>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <label class="sr-only" for="user-search">Search users</label>
-                        <input id="user-search" type="search" placeholder="Search email or name" class="w-64 max-w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-amber-500 focus:outline-none">
-                        <button id="refresh-users" type="button" class="h-10 w-10 rounded-xl border border-slate-700 bg-slate-950/70 text-slate-300 transition hover:border-slate-500 hover:bg-slate-800" title="Refresh users">
-                            <i class="fa-solid fa-rotate"></i>
-                        </button>
-                    </div>
+                <div class="border-b border-slate-800 pb-4">
+                    <p class="text-xs uppercase tracking-[0.18em] text-slate-400">Registry</p>
+                    <h2 class="mt-2 text-xl font-semibold text-white">Users</h2>
+                    <p class="mt-1 text-sm text-slate-400">Premium, block, sign out everywhere, ya content delete karein.</p>
                 </div>
-                <p id="user-count" class="mt-4 text-xs text-slate-500"></p>
-
-                <div class="mt-5 overflow-x-auto">
-                    <table class="w-full min-w-[700px] text-left text-sm">
-                        <thead class="border-b border-slate-800 text-xs uppercase text-slate-500">
-                            <tr>
-                                <th class="px-3 py-3 font-semibold">Name</th>
-                                <th class="px-3 py-3 font-semibold">Email</th>
-                                <th class="px-3 py-3 font-semibold">Created</th>
-                                <th class="px-3 py-3 font-semibold">Premium access</th>
-                            </tr>
-                        </thead>
-                        <tbody id="users-table" class="divide-y divide-slate-800"></tbody>
-                    </table>
+                <div class="au-toolbar">
+                    <input id="user-search" type="search" placeholder="Search email or name" aria-label="Search users" class="control">
+                    <select id="user-status" aria-label="Filter by status" class="control">
+                        <option value="all">All statuses</option>
+                        <option value="active">Active</option>
+                        <option value="blocked">Blocked</option>
+                        <option value="deactivated">Deactivated</option>
+                    </select>
+                    <button id="refresh-users" type="button" class="btn btn-outline btn-sm" title="Refresh users" aria-label="Refresh users"><i class="fa-solid fa-rotate" aria-hidden="true"></i></button>
+                </div>
+                <p id="user-count" class="text-xs text-slate-500" role="status" aria-live="polite"></p>
+                <ul id="users-list" class="au-list"></ul>
+                <div class="au-pager">
+                    <button id="users-prev" type="button" class="btn btn-outline btn-sm" disabled>Previous</button>
+                    <span id="users-page" class="text-xs text-slate-500"></span>
+                    <button id="users-next" type="button" class="btn btn-outline btn-sm" disabled>Next</button>
                 </div>
             </div>
 
@@ -163,6 +138,15 @@
             </div>
         </section>
 
+        <section class="rounded-3xl border border-slate-800 bg-slate-900/60 p-5 shadow-2xl shadow-slate-950/20" aria-labelledby="audit-heading">
+            <div class="flex items-center justify-between gap-3">
+                <h2 id="audit-heading" class="text-xl font-semibold text-white">Audit log</h2>
+                <button id="refresh-audit" type="button" class="btn btn-outline btn-sm" aria-label="Refresh audit log"><i class="fa-solid fa-rotate" aria-hidden="true"></i></button>
+            </div>
+            <p class="mt-1 text-sm text-slate-400">Last 50 admin actions.</p>
+            <ul id="audit-list" class="au-audit"></ul>
+        </section>
+
         <footer class="border-t border-slate-800 pt-4 text-xs">
             <a href="/privacy.html" class="text-slate-400 hover:text-amber-300">Privacy</a>
         <span class="mx-2" aria-hidden="true">·</span>
@@ -175,6 +159,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js" integrity="sha384-0w2KAL2YHP6wKOkUDzkCDGgVvfmHnj02DHeQ6XcHOgTfFsGyonKOpShMH1x6nk9o" crossorigin="anonymous"></script>
     <script src="/config.js"></script>
     <script src="/auth.js?v=9"></script>
-    <script src="/admin.js?v=5"></script>
+    <script src="/nav.js?v=1"></script>
+    <script src="/admin.js?v=6"></script>
 </body>
 </html>
