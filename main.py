@@ -36,6 +36,8 @@ from PIL import Image, ImageOps, features
 from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 
+import picks as picks_lib
+
 # Render sets RENDER=true; its 512 MB plan OOMs on the full profile (measured 576 MiB for 30 s fast), so default to low.
 if os.getenv("RENDER") and not os.getenv("RENDER_MEMORY_PROFILE"):
     os.environ["RENDER_MEMORY_PROFILE"] = "low"
@@ -77,6 +79,7 @@ IMAGE_COOLDOWN_SECONDS = 10
 CLEANUP_DAYS = float(os.getenv("CLEANUP_DAYS", "3"))
 CLEANUP_INTERVAL_SECONDS = 6 * 60 * 60
 DAILY_LIMIT = int(os.getenv("DAILY_LIMIT", "5"))
+PREMIUM_DAILY_LIMIT = int(os.getenv("PREMIUM_DAILY_LIMIT") or 0) or None  # None = same as DAILY_LIMIT
 MAX_VIDEO_SECONDS = int(os.getenv("MAX_VIDEO_SECONDS", "35"))
 DEFAULT_QUALITY = os.getenv("DEFAULT_QUALITY", "fast")
 MAX_ACTIVE_JOBS_PER_USER = int(os.getenv("MAX_ACTIVE_JOBS_PER_USER", "1"))
@@ -159,6 +162,8 @@ GENERATION_JOBS = {}
 DAILY_USAGE = {}
 DAILY_USAGE_LOCK = Lock()
 RENDER_DURATIONS = []  # seconds per reel, last 10 completed jobs
+RENDER_RATES = []  # render seconds per video second, last 10 completed jobs
+DEFAULT_RENDER_RATE = 3.0
 AUTH_CACHE = {}
 AUTH_CACHE_LOCK = Lock()
 LAST_IMAGE_RENDER = {}
@@ -186,8 +191,13 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 BACKGROUND_DIR.mkdir(parents=True, exist_ok=True)
 
 # 5. Request Body Schema
+def _daily_limit(user):
+    return PREMIUM_DAILY_LIMIT if PREMIUM_DAILY_LIMIT and user.get("premium_access") else DAILY_LIMIT
+
+
 class GenerateRequest(BaseModel):
     mode: str  # 'pick', 'picks', 'random'
+    pick_ids: Optional[list[str]] = Field(default=None, max_length=25)  # mode 'picks': ids from /api/picks
     verse: Optional[str] = None  # e.g. "55:1-8"
     random_count: int = 1
     max_duration: int = 60
@@ -904,43 +914,77 @@ def _daily_remaining(user):
         return None
     with DAILY_USAGE_LOCK:
         day, count = DAILY_USAGE.get(user["id"], (None, 0))
-    return DAILY_LIMIT - (count if day == _today() else 0)
+    return _daily_limit(user) - (count if day == _today() else 0)
 
 
-def _reserve_daily_slot(user):
+def _reserve_daily_slot(user, n=1):
+    """Charge n videos to today's allowance; admins are exempt from the count only."""
     if user["is_admin"]:
         return
+    limit = _daily_limit(user)
     with DAILY_USAGE_LOCK:
         day, count = DAILY_USAGE.get(user["id"], (None, 0))
         count = count if day == _today() else 0
-        if count >= DAILY_LIMIT:
+        if count + n > limit:
+            left = max(0, limit - count)
             raise HTTPException(
                 status_code=429,
-                detail=f"Daily limit of {DAILY_LIMIT} videos reached. It resets tomorrow.",
+                detail=(
+                    f"Daily limit of {limit} videos reached. It resets tomorrow."
+                    if n == 1 else
+                    f"This batch has {n} videos but only {left} of your {limit} daily videos are left. Untick some picks."
+                ),
             )
-        DAILY_USAGE[user["id"]] = (_today(), count + 1)
+        DAILY_USAGE[user["id"]] = (_today(), count + n)
 
 
-def _refund_daily_slot(user_id):
+def _refund_daily_slot(user_id, n=1):
     with DAILY_USAGE_LOCK:
         day, count = DAILY_USAGE.get(user_id, (None, 0))
         if day == _today() and count > 0:
-            DAILY_USAGE[user_id] = (day, count - 1)
+            DAILY_USAGE[user_id] = (day, max(0, count - n))
+
+
+def _refund_job_remaining(job):
+    """Give back every slot this job was charged that has not been refunded yet (call with the jobs lock held)."""
+    left = job.get("charged", 1) - job.get("refunded", 0)
+    if left > 0 and not job.get("admin"):
+        _refund_daily_slot(job["owner_id"], left)
+    job["refunded"] = job.get("charged", 1)
 
 
 def _average_render_seconds():
     return sum(RENDER_DURATIONS) / len(RENDER_DURATIONS) if RENDER_DURATIONS else DEFAULT_RENDER_SECONDS
 
 
+def _render_rate():
+    """Render seconds needed per second of finished video (recent average)."""
+    return sum(RENDER_RATES) / len(RENDER_RATES) if RENDER_RATES else DEFAULT_RENDER_RATE
+
+
+def _unfinished(job):
+    """(videos, video-seconds) a job still has to render."""
+    items = job.get("items")
+    if not items:
+        return 1, float(job.get("planned_seconds") or 30)
+    todo = [i for i in items if i["status"] in {"queued", "rendering"}]
+    return len(todo), sum(i.get("seconds") or 30 for i in todo)
+
+
 def _queue_info(job_id):
-    """Jobs ahead of job_id (running + earlier queued) and a rough wait; call with GENERATION_JOBS_LOCK held."""
-    ahead = 0
+    """(videos ahead of job_id, estimated wait in s) counting videos and their seconds, not jobs.
+
+    Call with GENERATION_JOBS_LOCK held.
+    """
+    ahead_videos, ahead_seconds = 0, 0.0
     for other_id, other in GENERATION_JOBS.items():
         if other_id == job_id:
             break
         if other["status"] in {"queued", "processing"}:
-            ahead += 1
-    return ahead, round((ahead + 1) * _average_render_seconds())
+            n, secs = _unfinished(other)
+            ahead_videos, ahead_seconds = ahead_videos + n, ahead_seconds + secs
+    _, own_seconds = _unfinished(GENERATION_JOBS.get(job_id, {}))
+    return ahead_videos, round((ahead_seconds + own_seconds) * _render_rate())
 
 
 def _list_all_media_objects(prefix):
@@ -1075,6 +1119,7 @@ def _record_video_history(user_id, videos, content_mode, quality, styles):
         ]
         history["users"][user_id] = new_entries + entries
         _write_video_history_unlocked(history)
+        return [entry["id"] for entry in reversed(new_entries)]
 
 
 def _record_image_history(user_id, filename, reference):
@@ -1375,7 +1420,10 @@ def _history_zip_signature(user_id, ids, expires):
 @app.post("/api/history/bulk-download-url")
 def create_history_zip_url(req: HistoryBulkRequest, user=Depends(get_current_user)):
     ids = _validate_history_ids(req.ids)
-    _owned_history_entries(user["id"], ids)
+    entries = _owned_history_entries(user["id"], ids)
+    missing = [e.get("filename") for e in entries if not _video_available(e.get("filename"), e.get("object_path"))]
+    if len(missing) == len(entries):
+        raise HTTPException(status_code=410, detail="The selected videos are no longer available.")
     expires = int(time.time()) + VIDEO_URL_TTL_SECONDS
     query = urlencode({
         "u": user["id"],
@@ -1383,7 +1431,8 @@ def create_history_zip_url(req: HistoryBulkRequest, user=Depends(get_current_use
         "exp": expires,
         "sig": _history_zip_signature(user["id"], ids, expires),
     })
-    return {"url": f"/api/history/zip?{query}", "item_count": len(ids), "expires_at": expires}
+    return {"url": f"/api/history/zip?{query}", "item_count": len(ids) - len(missing),
+            "missing": missing, "expires_at": expires}
 
 
 class _ZipStreamSink:
@@ -1405,18 +1454,27 @@ class _ZipStreamSink:
         return data
 
 
-def _stream_zip(paths_by_name):
+def _stream_zip(paths_by_name, temporary=(), missing=()):
+    """Stream a ZIP; temporary files are deleted once added, missing names are listed in MISSING.txt."""
     sink = _ZipStreamSink()
-    with zipfile.ZipFile(sink, "w", compression=zipfile.ZIP_STORED, allowZip64=True) as archive:
-        for arcname, path in paths_by_name.items():
-            info = zipfile.ZipInfo.from_file(path, arcname)
-            info.compress_type = zipfile.ZIP_STORED
-            with path.open("rb") as source, archive.open(info, "w", force_zip64=True) as target:
-                while chunk := source.read(1024 * 1024):
-                    target.write(chunk)
-                    yield sink.drain()
-            yield sink.drain()
-    yield sink.drain()
+    try:
+        with zipfile.ZipFile(sink, "w", compression=zipfile.ZIP_STORED, allowZip64=True) as archive:
+            for arcname, path in paths_by_name.items():
+                info = zipfile.ZipInfo.from_file(path, arcname)
+                info.compress_type = zipfile.ZIP_STORED
+                with path.open("rb") as source, archive.open(info, "w", force_zip64=True) as target:
+                    while chunk := source.read(1024 * 1024):
+                        target.write(chunk)
+                        yield sink.drain()
+                if path in temporary:
+                    path.unlink(missing_ok=True)
+                yield sink.drain()
+            if missing:
+                archive.writestr("MISSING.txt", _missing_note(missing))
+        yield sink.drain()
+    finally:
+        for path in temporary:
+            path.unlink(missing_ok=True)
 
 
 @app.get("/api/history/zip")
@@ -1438,13 +1496,17 @@ def download_history_zip(
         sig, _history_zip_signature(u, id_list, expires)
     ):
         raise HTTPException(status_code=403, detail="Invalid or expired download link.")
-    paths_by_name = {}
+    paths_by_name, temporary, missing = {}, set(), []
     for entry in _owned_history_entries(u, id_list):
-        path = _safe_history_video_path(entry.get("filename"))
-        if path is not None and path.is_file():
-            paths_by_name[path.name] = path
+        source = _video_source(entry.get("filename"), entry.get("object_path"))
+        if source is None:
+            missing.append(str(entry.get("filename")))
+            continue
+        paths_by_name[Path(entry["filename"]).name] = source[0]
+        if source[1]:
+            temporary.add(source[0])
     if not paths_by_name:
-        raise HTTPException(status_code=410, detail="The selected files have expired.")
+        raise HTTPException(status_code=410, detail="The selected files have expired: " + ", ".join(missing))
 
     with HISTORY_LOCK:
         history = _read_video_history_unlocked()
@@ -1463,11 +1525,12 @@ def download_history_zip(
             LOGGER.exception("Could not record history ZIP download")
 
     return StreamingResponse(
-        _stream_zip(paths_by_name),
+        _stream_zip(paths_by_name, temporary, missing),
         media_type="application/zip",
         headers={
             "Content-Disposition": f'attachment; filename="noor-ul-quran-{len(paths_by_name)}-items.zip"',
             "Cache-Control": "private, no-store",
+            "X-Missing-Items": str(len(missing)),
         },
     )
 
@@ -1479,9 +1542,10 @@ def get_access(user=Depends(get_current_user)):
         "email": user["email"],
         "is_admin": user["is_admin"],
         "premium_access": user["premium_access"],
-        "daily_limit": None if user["is_admin"] else DAILY_LIMIT,
+        "daily_limit": None if user["is_admin"] else _daily_limit(user),
         "daily_remaining": _daily_remaining(user),
-        "max_video_seconds": None if user["is_admin"] else MAX_VIDEO_SECONDS,
+        # The render cap applies to everyone, admins included (they skip only the daily count).
+        "max_video_seconds": MAX_VIDEO_SECONDS,
     }
 
 
@@ -1514,8 +1578,8 @@ def estimate_reel(
         urdu_voice_id = _validate_reciter_id(
             urdu_voice_id, "ur", DEFAULT_URDU_VOICE_ID
         )
-    if not 30 <= selected_length <= 180:
-        raise HTTPException(status_code=400, detail="Length must be between 30 and 180 seconds.")
+    if not 30 <= selected_length <= max(30, MAX_VIDEO_SECONDS):
+        raise HTTPException(status_code=400, detail=f"Length must be between 30 and {max(30, MAX_VIDEO_SECONDS)} seconds.")
     _validate_ayah_range(surah_number, start_ayah, end_ayah)
 
     import make as renderer
@@ -1576,7 +1640,7 @@ def _build_suggestions(surah, verse_count, from_ayah, is_admin, seconds_of):
                 end, total = hit
                 item.update(start=first, end=end, seconds=round(total, 1),
                             label=f"{target} sec: {surah}:{first}-{end} ({round(total)} s)")
-                if not is_admin and target > MAX_VIDEO_SECONDS:
+                if target > MAX_VIDEO_SECONDS:
                     item.update(allowed=False, reason=f"Free server limit {MAX_VIDEO_SECONDS} s")
             out.append(item)
     return out
@@ -1812,16 +1876,65 @@ def signin_html_page():
     return RedirectResponse(url="/auth.html")
 
 
+def _over_cap_message(surah, first, plan, cap, name=None):
+    """400 text for a range whose real length exceeds the cap, with the nearest range that fits."""
+    prefix = f"{name}: " if name else ""
+    text = f"{prefix}This range is {plan['range_seconds']:.1f} s; the server limit is {cap} s."
+    total, last = 0.0, None
+    for item in plan["items"]:
+        if total + item["len"] > cap:
+            break
+        total, last = total + item["len"], item["ayah"]
+    if last is None:
+        return f"{text} Try {surah}:{first} on the local app."
+    ref = f"{surah}:{first}" if last == first else f"{surah}:{first}-{last}"
+    return f"{text} Try {ref} ({total:.1f} s)."
+
+
+def _plan_or_http(surah, first, last, length_limit, content_mode, reciter_id, urdu_voice_id):
+    import make as renderer
+
+    try:
+        return renderer.plan_duration(
+            surah, first, last, length_limit, content_mode, _quran_data(), reciter_id, urdu_voice_id
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except (OSError, RuntimeError, requests.RequestException) as exc:
+        raise HTTPException(status_code=502, detail="Ayah audio durations could not be measured.") from exc
+
+
+def _new_items(refs):
+    return [
+        {"index": i, "pick_id": pid, "ref": ref, "seconds": seconds, "status": "queued",
+         "reason": None, "history_id": None, "filename": None}
+        for i, (pid, ref, seconds) in enumerate(refs, 1)
+    ]
+
+
 @app.post("/api/generate", status_code=202)
 def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
     if req.mode not in {"pick", "picks", "random"}:
         raise HTTPException(status_code=400, detail="Invalid generation mode.")
-    if req.content_mode not in {"full", "urdu_only", "arabic_only"}:
+    if req.mode != "pick" and not (user["is_admin"] or user["premium_access"]):
+        raise HTTPException(status_code=403, detail="Premium access is required for custom and random generation.")
+    cap = MAX_VIDEO_SECONDS
+    content_mode = req.content_mode
+    pick_rows = []
+    if req.mode == "picks":
+        # Refs come only from the server's pick list, never from the client.
+        pick_rows = _resolve_pick_batch(req.pick_ids)
+        content_mode = picks_lib.MODE_TO_CONTENT[pick_rows[0]["mode"]]
+        if (req.reciter_id or DEFAULT_ARABIC_RECITER_ID) != DEFAULT_ARABIC_RECITER_ID or (
+            req.urdu_voice_id or DEFAULT_URDU_VOICE_ID
+        ) != DEFAULT_URDU_VOICE_ID:
+            raise HTTPException(status_code=400, detail="Picks use the default reciter and Urdu voice.")
+    if content_mode not in {"full", "urdu_only", "arabic_only"}:
         raise HTTPException(
             status_code=400,
             detail="Content mode must be full, urdu_only, or arabic_only.",
         )
-    if req.content_mode == "arabic_only" and req.music:
+    if content_mode == "arabic_only" and req.music:
         raise HTTPException(
             status_code=400,
             detail="Background music is not available in Arabic-only mode.",
@@ -1829,7 +1942,7 @@ def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
     reciter_id = _validate_reciter_id(
         req.reciter_id, "ar", DEFAULT_ARABIC_RECITER_ID
     )
-    if req.content_mode == "arabic_only":
+    if content_mode == "arabic_only":
         urdu_voice_id = DEFAULT_URDU_VOICE_ID
     else:
         urdu_voice_id = _validate_reciter_id(
@@ -1846,64 +1959,76 @@ def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
         surah_number, start_ayah = int(verse_match[1]), int(verse_match[2])
         end_ayah = int(verse_match[3] or start_ayah)
         _validate_ayah_range(surah_number, start_ayah, end_ayah)
-    if req.mode != "pick" and not (user["is_admin"] or user["premium_access"]):
-        raise HTTPException(status_code=403, detail="Premium access is required for custom and random generation.")
     if req.max_duration > 60 and not (user["is_admin"] or user["premium_access"]):
         raise HTTPException(status_code=403, detail="Premium access is required for videos longer than 60 seconds.")
     if req.random_count < 1 or req.random_count > 25:
         raise HTTPException(status_code=400, detail="Random count must be between 1 and 25.")
-    if req.max_duration < 30 or req.max_duration > 180:
-        raise HTTPException(status_code=400, detail="Maximum duration must be between 30 and 180 seconds.")
+    # Picks ignore max_duration: each pick renders whole and is checked against the cap below.
+    if req.mode != "picks" and (req.max_duration < 30 or req.max_duration > max(30, cap)):
+        raise HTTPException(status_code=400, detail=f"Maximum duration must be between 30 and {max(30, cap)} seconds.")
     if req.quality not in RENDER_QUALITIES:
         raise HTTPException(status_code=400, detail="Quality must be fast, balanced, or high.")
-    if not user["is_admin"] and req.max_duration > MAX_VIDEO_SECONDS:
-        raise HTTPException(status_code=400, detail=f"Videos are limited to {MAX_VIDEO_SECONDS} seconds on the free server.")
-    _check_render_memory(req.max_duration, req.quality)
+    max_dur = cap if req.mode == "picks" else req.max_duration
+    _check_render_memory(max_dur, req.quality)
     validate_video_styles(req.styles)
-    _require_raqm_for_generation(req.content_mode)
+    _require_raqm_for_generation(content_mode)
+
+    # Real-seconds guard: what would actually be rendered must fit the cap (admins included).
+    refs = []
+    if req.mode == "pick":
+        plan = _plan_or_http(surah_number, start_ayah, end_ayah, req.max_duration, content_mode, reciter_id, urdu_voice_id)
+        if plan["fit_seconds"] > cap:
+            raise HTTPException(status_code=400, detail=_over_cap_message(
+                surah_number, start_ayah, {**plan, "range_seconds": plan["fit_seconds"]}, cap))
+        refs = [(None, req.verse.strip(), plan["fit_seconds"])]
+        planned_seconds = plan["fit_seconds"]
+    elif req.mode == "picks":
+        for row in pick_rows:
+            s, a0, a1 = picks_lib.split_ref(row["ref"])
+            plan = _plan_or_http(s, a0, a1, cap, content_mode, reciter_id, urdu_voice_id)
+            if plan["range_seconds"] > cap:
+                raise HTTPException(status_code=400, detail=_over_cap_message(s, a0, plan, cap, name=row["ref"]))
+            refs.append((row["id"], row["ref"], plan["range_seconds"]))
+        planned_seconds = sum(r[2] for r in refs)
+    else:
+        refs = [(None, None, req.max_duration)] * req.random_count
+        planned_seconds = req.max_duration * req.random_count
 
     cmd = [sys.executable, str(BASE_DIR / "make.py")]
-    if req.mode == "pick" and req.verse:
+    batch_id = uuid4().hex[:10]
+    work_dir = CACHE_DIR / "tmp" / batch_id
+    manifest_path = CACHE_DIR / f"batch-{batch_id}.json"
+    if req.mode == "pick":
         cmd.extend(["--pick", req.verse])
     elif req.mode == "picks":
-        cmd.extend(["--picks", str(BASE_DIR / "picks.txt")])
-    elif req.mode == "random":
-        cmd.extend(["--random", str(req.random_count)])
+        cmd.extend(["--picks", str(work_dir / "picks.txt")])  # snapshot written below
     else:
-        raise HTTPException(status_code=400, detail="Verse is required for single-pick generation.")
-    if req.content_mode == "urdu_only":
+        cmd.extend(["--random", str(req.random_count)])
+    if content_mode == "urdu_only":
         cmd.append("--urdu-only")
-    elif req.content_mode == "arabic_only":
+    elif content_mode == "arabic_only":
         cmd.append("--arabic-only")
     cmd.extend(["--reciter", reciter_id])
-    if req.content_mode != "arabic_only":
+    if content_mode != "arabic_only":
         cmd.extend(["--urdu-voice", urdu_voice_id])
 
     # Background music argument agar select kiya gaya ho (yeh ab bilkul theek jagah par hai):
     if music_filename is not None:
         cmd.extend(["--music", music_filename])
 
-    batch_id = uuid4().hex[:10]
-    work_dir = CACHE_DIR / "tmp" / batch_id
-    manifest_path = CACHE_DIR / f"batch-{batch_id}.json"
     if req.styles:
         style_path = work_dir / "style.json"
         cmd.extend(["--style-json", str(style_path)])
     cmd.extend([
-        "--max-dur", str(req.max_duration),
+        "--max-dur", str(max_dur),
         "--quality", req.quality,
         "--batch-id", batch_id,
         "--work-dir", str(work_dir),
         "--result-json", str(manifest_path),
     ])
 
-    reel_count = req.random_count if req.mode == "random" else 1
-    if req.mode == "picks":
-        reel_count = max(1, sum(
-            1 for line in (BASE_DIR / "picks.txt").read_text(encoding="utf-8").splitlines()
-            if line.strip() and not line.lstrip().startswith("#")
-        ))
-
+    # Picks are charged per video; single and random jobs stay one slot each.
+    charge = len(refs) if req.mode == "picks" else 1
     job_id = uuid4().hex
     with GENERATION_JOBS_LOCK:
         if sum(
@@ -1922,18 +2047,28 @@ def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
                     break
         if len(GENERATION_JOBS) >= 64:
             raise HTTPException(status_code=503, detail="Generation queue is full. Try again after a running reel finishes.")
-        _reserve_daily_slot(user)
+        _reserve_daily_slot(user, charge)
         GENERATION_JOBS[job_id] = {
             "owner_id": user["id"],
+            "admin": bool(user["is_admin"]),
             "status": "queued",
             "mode": req.mode,
             "quality": req.quality,
+            "batch_id": batch_id,
             "error": None,
             "videos": [],
             "warnings": [],
+            "items": _new_items(refs),
+            "planned_seconds": planned_seconds,
+            "charged": charge,
+            "refunded": 0,
+            "per_video_charge": req.mode == "picks",
             "manifest_path": str(manifest_path),
         }
         queue_ahead, wait_seconds = _queue_info(job_id)
+    if req.mode == "picks":
+        work_dir.mkdir(parents=True, exist_ok=True)
+        (work_dir / "picks.txt").write_text("\n".join(r[1] for r in refs) + "\n", encoding="utf-8")
     GENERATION_EXECUTOR.submit(
         _run_generation_job,
         job_id,
@@ -1943,27 +2078,34 @@ def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
         work_dir,
         req.styles,
         user["id"],
-        req.content_mode,
+        content_mode,
         req.quality,
-        RENDER_TIMEOUT_SECONDS * reel_count,
+        RENDER_TIMEOUT_SECONDS * len(refs),
     )
     return {
         "job_id": job_id,
+        "batch_id": batch_id,
         "status": "queued",
         "message": "Generation queued. Each reel will appear here as soon as it is ready.",
         "videos": [],
+        "items": GENERATION_JOBS[job_id]["items"],
         "queue_ahead": queue_ahead,
         "estimated_wait_seconds": wait_seconds,
         "daily_remaining": _daily_remaining(user),
     }
 
 
-def _read_generation_manifest(manifest_path: Path):
+def _read_manifest(manifest_path: Path):
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        return manifest if isinstance(manifest, list) else []
+        return [e for e in manifest if isinstance(e, dict)] if isinstance(manifest, list) else []
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return []
+
+
+def _read_generation_manifest(manifest_path: Path):
+    """Finished reels only; failed reels are {index, error} entries without a filename."""
+    return [e for e in _read_manifest(manifest_path) if isinstance(e.get("filename"), str)]
 
 
 def _kill_process_tree(process):
@@ -1997,8 +2139,11 @@ def _watch_peak_memory(done, peak):
             peak[0] = max(peak[0], used)
 
 
-def _run_render(cmd, timeout):
-    """Run make.py; on timeout kill it and every FFmpeg child it started."""
+def _run_render(cmd, timeout, job_id=None, on_tick=None):
+    """Run make.py; on timeout or cancel kill it and every FFmpeg child it started.
+
+    on_tick() runs about once a second while it renders, so finished reels can be handled early.
+    """
     group_args = (
         {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
         if os.name == "nt" else {"start_new_session": True}
@@ -2018,16 +2163,34 @@ def _run_render(cmd, timeout):
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        env={**os.environ, "MAX_VIDEO_SECONDS": str(MAX_VIDEO_SECONDS)},
         **group_args,
     )
+    if job_id:
+        with GENERATION_JOBS_LOCK:
+            if job_id in GENERATION_JOBS:
+                GENERATION_JOBS[job_id]["_proc"] = process
     try:
-        stdout, stderr = process.communicate(timeout=timeout)
-    except subprocess.TimeoutExpired:
-        _kill_process_tree(process)
-        process.communicate()
-        raise RuntimeError(f"Rendering took longer than {timeout} seconds and was stopped.")
+        while True:
+            try:
+                stdout, stderr = process.communicate(timeout=1)
+                break
+            except subprocess.TimeoutExpired:
+                if job_id and _job_cancelled(job_id):
+                    _kill_process_tree(process)
+                    process.communicate()
+                    raise RuntimeError("Generation cancelled because the account is unavailable.")
+                if time.monotonic() - started > timeout:
+                    _kill_process_tree(process)
+                    process.communicate()
+                    raise RuntimeError(f"Rendering took longer than {timeout} seconds and was stopped.")
+                if on_tick:
+                    on_tick()
     finally:
         done.set()
+        if job_id:
+            with GENERATION_JOBS_LOCK:
+                GENERATION_JOBS.get(job_id, {}).pop("_proc", None)
         # rc -9 / SIGKILL with no error text is how an OOM kill looks from here.
         LOGGER.info(
             "render end quality=%s max_dur=%s rc=%s secs=%.0f peak_mem=%sMiB",
@@ -2057,6 +2220,65 @@ def _run_generation_job(
         if job:
             job["status"] = "processing"
     started = time.monotonic()
+    handled = set()  # manifest positions already uploaded + recorded
+
+    def settle(entries, final=False, default_reason=None):
+        """Upload and record every newly finished reel, mark failed ones, refund their slots."""
+        done_videos = [e for e in entries if isinstance(e.get("filename"), str)]
+        for n, v in enumerate(done_videos, 1):
+            v.setdefault("index", n)
+        failures = {e.get("index"): e.get("error") for e in entries if "filename" not in e}
+        for position, video in enumerate(done_videos):
+            if position in handled:
+                continue
+            handled.add(position)
+            warning = None
+            if SUPABASE_SERVICE_KEY:
+                try:
+                    stored_video = f"videos/{uuid4().hex}_{video['filename']}"
+                    _upload_media_file(OUTPUT_DIR / video["filename"], stored_video, "video/mp4")
+                    video["object_path"] = stored_video
+                    video["url"] = _signed_media_url(stored_video)
+                except Exception as exc:
+                    warning = "Cloud copy failed; download this reel soon."
+                    LOGGER.error("Upload failed (job_id=%s): %s", job_id, _redact_secrets(str(exc)))
+            history_id = None
+            if user_id is not None:
+                try:
+                    history_id = _record_video_history(user_id, [video], content_mode, quality, styles)[0]
+                except Exception as history_error:
+                    LOGGER.error(
+                        "Could not update generated-video history (job_id=%s, user_id=%s): %s",
+                        job_id, user_id, _redact_secrets(str(history_error)),
+                    )
+            video["history_id"] = history_id
+            with GENERATION_JOBS_LOCK:
+                job = GENERATION_JOBS.get(job_id)
+                if not job:
+                    continue
+                job["videos"] = [v for v in job.get("videos", []) if v.get("filename") != video["filename"]] + [video]
+                item = _item_for(job, video.get("index") or position + 1)
+                if item:
+                    item.update(status="done", filename=video["filename"], history_id=history_id,
+                                batch_id=job.get("batch_id"), warning=warning)
+        with GENERATION_JOBS_LOCK:
+            job = GENERATION_JOBS.get(job_id)
+            if not job:
+                return
+            for item in job.get("items", []):
+                if item["status"] in {"queued", "rendering"} and (
+                    item["index"] in failures or (final and item["index"] not in {v.get("index") for v in done_videos})
+                ):
+                    reason = failures.get(item["index"]) or default_reason or "The renderer did not produce this reel."
+                    item.update(status="failed", reason=_redact_secrets(str(reason))[:300])
+                    if job.get("per_video_charge") and job["refunded"] < job["charged"]:
+                        job["refunded"] += 1
+                        if not job.get("admin"):
+                            _refund_daily_slot(job["owner_id"])
+            waiting = [i for i in job.get("items", []) if i["status"] == "queued"]
+            if waiting and not final:
+                waiting[0]["status"] = "rendering"
+
     try:
         with GENERATION_LOCK:
             if styles:
@@ -2070,8 +2292,15 @@ def _run_generation_job(
                 EPHEMERAL_MEDIA_READY = True
             _sync_render_media(cmd[cmd.index("--music") + 1] if "--music" in cmd else None)
             _cleanup_orphaned_output_files()
-            completed = _run_render(cmd, timeout)
-            videos = _read_generation_manifest(manifest_path)
+            with GENERATION_JOBS_LOCK:
+                job = GENERATION_JOBS.get(job_id)
+                if job and job.get("items"):
+                    job["items"][0]["status"] = "rendering"
+            completed = _run_render(
+                cmd, timeout, job_id=job_id, on_tick=lambda: settle(_read_manifest(manifest_path)),
+            )
+            entries = _read_manifest(manifest_path)
+            videos = [e for e in entries if isinstance(e.get("filename"), str)]
             if _job_cancelled(job_id):
                 for video in videos:
                     (OUTPUT_DIR / video["filename"]).unlink(missing_ok=True)
@@ -2080,48 +2309,40 @@ def _run_generation_job(
                 raise RuntimeError(completed.stderr or completed.stdout or "Video rendering failed.")
             if not videos:
                 raise RuntimeError("No video output was generated.")
-
-            for video in videos:
-                if SUPABASE_SERVICE_KEY:
-                    video_path = OUTPUT_DIR / video["filename"]
-                    stored_video = f"videos/{uuid4().hex}_{video['filename']}"
-                    _upload_media_file(video_path, stored_video, "video/mp4")
-                    video["object_path"] = stored_video
-                    video["url"] = _signed_media_url(stored_video)
+            tail = (completed.stderr or "").strip().splitlines()
+            settle(entries, final=True, default_reason=tail[-1] if completed.returncode != 0 and tail else None)
 
             if SUPABASE_SERVICE_KEY:
                 captions_path = OUTPUT_DIR / "captions.csv"
                 used_path = CACHE_DIR / "used.json"
-                if captions_path.exists():
-                    _upload_media_file(captions_path, "metadata/captions.csv", "text/csv")
-                if used_path.exists():
-                    _upload_media_file(used_path, "state/used.json", "application/json")
-
-        status = "completed" if completed.returncode == 0 else "partial"
-        try:
-            if user_id is not None:
-                _record_video_history(user_id, videos, content_mode, quality, styles)
-        except Exception as history_error:
-            LOGGER.error(
-                "Could not update generated-video history (job_id=%s, user_id=%s): %s",
-                job_id,
-                user_id,
-                _redact_secrets(str(history_error)),
-            )
+                try:
+                    if captions_path.exists():
+                        _upload_media_file(captions_path, "metadata/captions.csv", "text/csv")
+                    if used_path.exists():
+                        _upload_media_file(used_path, "state/used.json", "application/json")
+                except Exception as exc:
+                    LOGGER.error("Could not back up captions/used state: %s", _redact_secrets(str(exc)))
 
         with GENERATION_JOBS_LOCK:
             job = GENERATION_JOBS.get(job_id)
             if job:
-                job["videos"] = videos
+                skipped = [i for i in job.get("items", []) if i["status"] == "failed"]
                 job["warnings"] = list(dict.fromkeys(
-                    warning
-                    for video in videos
-                    for warning in video.get("warnings", [])
+                    warning for video in job["videos"] for warning in video.get("warnings", [])
                 ))
-                job["status"] = status
-                job["message"] = "All reels are ready." if completed.returncode == 0 else "Some reels could not be rendered; completed reels are ready."
+                clean = completed.returncode == 0 and not skipped
+                job["status"] = "completed" if clean else "partial"
+                job["message"] = (
+                    "All reels are ready." if clean else
+                    f"{len(skipped)} reel(s) could not be rendered and were refunded; the rest are ready."
+                    if skipped else "Some reels could not be rendered; completed reels are ready."
+                )
+        seconds = sum(v.get("duration") or 0 for v in videos)
         RENDER_DURATIONS.append((time.monotonic() - started) / max(1, len(videos)))
         del RENDER_DURATIONS[:-10]
+        if seconds:
+            RENDER_RATES.append((time.monotonic() - started) / seconds)
+            del RENDER_RATES[:-10]
     except Exception as exc:
         safe_error = _redact_secrets(str(exc))
         LOGGER.error(
@@ -2130,18 +2351,26 @@ def _run_generation_job(
             user_id,
             safe_error,
         )
-        if user_id is not None:
-            _refund_daily_slot(user_id)
         with GENERATION_JOBS_LOCK:
             job = GENERATION_JOBS.get(job_id)
             if job:
+                _refund_job_remaining(job)
                 job["status"] = "failed"
                 job["error"] = safe_error
-                job["videos"] = _read_generation_manifest(manifest_path)
+                job["videos"] = [v for v in job["videos"]] or _read_generation_manifest(manifest_path)
+                for item in job.get("items", []):
+                    if item["status"] in {"queued", "rendering"}:
+                        item.update(status="failed", reason=safe_error[:300])
+            elif user_id is not None:
+                _refund_daily_slot(user_id)
     finally:
         shutil.rmtree(work_dir, ignore_errors=True)
         manifest_path.unlink(missing_ok=True)
         manifest_path.with_suffix(manifest_path.suffix + ".tmp").unlink(missing_ok=True)
+
+
+def _item_for(job, index):
+    return next((i for i in job.get("items", []) if i["index"] == index), None)
 
 
 @app.get("/api/generate/{job_id}")
@@ -2150,12 +2379,15 @@ def generation_status(job_id: str, user=Depends(get_current_user)):
         job = GENERATION_JOBS.get(job_id)
         if not job or job["owner_id"] != user["id"]:
             raise HTTPException(status_code=404, detail="Generation job not found.")
-        response = {key: value for key, value in job.items() if key not in {"owner_id", "manifest_path"}}
-        manifest_path = Path(job["manifest_path"])
+        response = {
+            key: (list(value) if isinstance(value, list) else value) for key, value in job.items()
+            if key not in {"owner_id", "manifest_path", "_proc", "admin", "charged", "refunded", "per_video_charge"}
+        }
         if job["status"] in {"queued", "processing"}:
             response["queue_ahead"], response["estimated_wait_seconds"] = _queue_info(job_id)
+        manifest_path = Path(job["manifest_path"])
 
-    if response["status"] in {"queued", "processing"}:
+    if response["status"] in {"queued", "processing"} and not response.get("videos"):
         response["videos"] = _read_generation_manifest(manifest_path)
 
     response["warnings"] = list(dict.fromkeys(
@@ -2180,13 +2412,14 @@ def create_batch_download_url(job_id: str, user=Depends(get_current_user)):
         if not videos:
             raise HTTPException(status_code=404, detail="This batch has no completed reels to download.")
 
-    filenames = []
+    filenames, missing = [], []
     for video in videos:
         filename = video.get("filename") if isinstance(video, dict) else None
         if not isinstance(filename, str):
             raise HTTPException(status_code=500, detail="The batch contains an invalid video entry.")
-        _local_video_path(filename)
-        filenames.append(filename)
+        (filenames if _video_available(filename, video.get("object_path")) else missing).append(filename)
+    if not filenames:
+        raise HTTPException(status_code=404, detail="The reels in this batch are no longer available.")
 
     expires = int(time.time()) + VIDEO_URL_TTL_SECONDS
     archive_name = f"batch-{job_id}.zip"
@@ -2196,6 +2429,7 @@ def create_batch_download_url(job_id: str, user=Depends(get_current_user)):
         "url": f"/api/batch-download/{quote(job_id, safe='')}?{query}",
         "filename": f"noor-ul-quran-reels-{job_id[:10]}.zip",
         "video_count": len(filenames),
+        "missing": missing,
         "expires_at": expires,
     }
 
@@ -2231,16 +2465,21 @@ def download_generation_batch(job_id: str, exp: Optional[str] = None, sig: Optio
         videos = list(job.get("videos", []))
         owner_id = job["owner_id"]
 
-    filenames = []
-    video_paths = []
+    filenames, video_paths, temporary, missing = [], [], [], []
     for video in videos:
         filename = video.get("filename") if isinstance(video, dict) else None
         if not isinstance(filename, str):
             raise HTTPException(status_code=500, detail="The batch contains an invalid video entry.")
-        video_paths.append(_local_video_path(filename))
+        source = _video_source(filename, video.get("object_path"))
+        if source is None:
+            missing.append(filename)
+            continue
+        video_paths.append(source[0])
         filenames.append(filename)
+        if source[1]:
+            temporary.append(source[0])
     if not video_paths:
-        raise HTTPException(status_code=404, detail="This batch has no completed reels to download.")
+        raise HTTPException(status_code=404, detail="This batch has no available reels to download.")
 
     archive_dir = CACHE_DIR / "tmp"
     archive_dir.mkdir(parents=True, exist_ok=True)
@@ -2256,6 +2495,8 @@ def download_generation_batch(job_id: str, exp: Optional[str] = None, sig: Optio
         with zipfile.ZipFile(archive_path, "w", compression=zipfile.ZIP_STORED) as archive:
             for filename, video_path in zip(filenames, video_paths):
                 archive.write(video_path, arcname=filename)
+            if missing:
+                archive.writestr("MISSING.txt", _missing_note(missing))
     except (OSError, RuntimeError, zipfile.BadZipFile) as exc:
         _remove_temporary_archive(archive_path)
         LOGGER.exception("Could not create reel archive for generation batch %s", job_id)
@@ -2285,6 +2526,373 @@ def download_generation_batch(job_id: str, exp: Optional[str] = None, sig: Optio
         filename=f"noor-ul-quran-reels-{job_id[:10]}.zip",
         background=BackgroundTask(_remove_temporary_archive, archive_path),
     )
+
+
+# ---------------------------------------------------------------------------------------------
+# Managed Picks: admin-curated ayah lists per bucket (30/60/120 s) x mode (urdu/arabic).
+# Stored in state/picks.json (Supabase, local copy beside the output dir), seeded from
+# data/picks_default.json. Writes fail loudly: if Supabase rejects the save, nothing changes.
+# ---------------------------------------------------------------------------------------------
+PICKS_OBJECT = "state/picks.json"
+PICKS_DEFAULT_FILE = BASE_DIR / "data" / "picks_default.json"
+PICKS_LOCK = Lock()
+_PICKS_PULLED = False
+RECOMPUTE = {"state": "idle", "done": 0, "total": 0, "errors": [], "error": None}
+RECOMPUTE_LOCK = Lock()
+
+
+def _picks_file():
+    return OUTPUT_DIR / "picks.json"
+
+
+def _load_picks():
+    global _PICKS_PULLED
+    path = _picks_file()
+    if SUPABASE_SERVICE_KEY and not _PICKS_PULLED:
+        _PICKS_PULLED = True
+        try:
+            _download_media_file(PICKS_OBJECT, path)  # Supabase is the source of truth when it has a copy
+        except Exception as exc:
+            LOGGER.error("Could not restore %s: %s", PICKS_OBJECT, _redact_secrets(str(exc)))
+    for source in (path, PICKS_DEFAULT_FILE):
+        try:
+            data = json.loads(source.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            continue
+        if isinstance(data, list):
+            return [p for p in data if isinstance(p, dict)]
+    return []
+
+
+def _save_picks(picks):
+    """Persist to Supabase first (when configured), then locally. Raises 502 so the admin sees a failure."""
+    path = _picks_file()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp = path.with_suffix(".tmp")
+    temp.write_text(json.dumps(picks, ensure_ascii=False, indent=1), encoding="utf-8")
+    try:
+        if SUPABASE_SERVICE_KEY:
+            _upload_media_file(temp, PICKS_OBJECT, "application/json")
+    except Exception as exc:
+        temp.unlink(missing_ok=True)
+        detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
+        raise HTTPException(
+            status_code=502,
+            detail=f"Could not save picks to Supabase, nothing was changed: {_redact_secrets(str(detail))}",
+        ) from exc
+    temp.replace(path)
+
+
+def _pick_seconds(mode, surah, start, end, measure=True):
+    """Real seconds for the default reciter / Urdu voice; None if unknown and measure is False."""
+    import make as renderer
+
+    cached = picks_lib.seconds_lookup(renderer.load_duration_cache())(mode, surah, start, end)
+    if cached is not None or not measure:
+        return cached
+    plan = _plan_or_http(surah, start, end, 10_000, picks_lib.MODE_TO_CONTENT[mode], None, None)
+    return round(plan["range_seconds"], 2)
+
+
+def _pick_view(pick, quran, cap):
+    surah = picks_lib.split_ref(pick["ref"])[0]
+    seconds = pick.get("seconds")
+    return {
+        **pick,
+        "surah": surah,
+        "surah_name": quran["surahs"][str(surah)]["english"],
+        "selectable": seconds is not None and seconds <= cap,
+        "over_bucket": seconds is not None and seconds > pick["bucket"],
+    }
+
+
+def _check_bucket_mode(bucket, mode):
+    if bucket not in picks_lib.BUCKETS:
+        raise HTTPException(status_code=400, detail="Bucket must be 30, 60 or 120.")
+    if mode not in picks_lib.MODES:
+        raise HTTPException(status_code=400, detail="Mode must be urdu or arabic.")
+
+
+def _check_ref(ref):
+    try:
+        return picks_lib.parse_ref(ref, _quran_data())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+def _resolve_pick_batch(pick_ids):
+    """Snapshot of the picks behind pick_ids: one bucket x mode, at most 25, no repeats."""
+    if not pick_ids:
+        raise HTTPException(status_code=400, detail="Choose at least one pick (pick_ids).")
+    if len(pick_ids) > 25 or len(set(pick_ids)) != len(pick_ids):
+        raise HTTPException(status_code=400, detail="Choose up to 25 different picks.")
+    by_id = {p["id"]: p for p in _load_picks()}
+    rows = []
+    for pick_id in pick_ids:
+        if pick_id not in by_id:
+            raise HTTPException(status_code=400, detail=f"Unknown pick: {pick_id}")
+        rows.append(dict(by_id[pick_id]))
+    if len({(r["bucket"], r["mode"]) for r in rows}) != 1:
+        raise HTTPException(status_code=400, detail="Each batch must use one length tab and one Urdu/Arabic mode.")
+    return rows
+
+
+class PickBody(BaseModel):
+    bucket: Optional[int] = None
+    mode: Optional[str] = None
+    ref: Optional[str] = Field(default=None, max_length=16)
+
+
+class PickImport(BaseModel):
+    text: str = Field(max_length=200_000)
+    bucket: int
+    mode: Optional[str] = None
+    apply: bool = False
+
+
+class PickTrim(BaseModel):
+    to_ayah: Optional[int] = None
+    confirm: bool = False
+
+
+class RecomputeRequest(BaseModel):
+    remeasure: bool = False
+
+
+def _pick_audit(user, pick_id, action, detail):
+    _audit(user, pick_id, "", f"picks.{action}", detail)
+
+
+@app.get("/api/picks")
+def list_picks(bucket: Optional[int] = None, mode: Optional[str] = None, user=Depends(get_current_user)):
+    quran, cap = _quran_data(), MAX_VIDEO_SECONDS
+    rows = [
+        _pick_view(p, quran, cap) for p in _load_picks()
+        if (bucket is None or p["bucket"] == bucket) and (mode is None or p["mode"] == mode)
+    ]
+    return {
+        "picks": rows,
+        "cap": cap,
+        "counts": {"total": len(rows), "over_bucket": sum(r["over_bucket"] for r in rows),
+                   "over_cap": sum(not r["selectable"] for r in rows)},
+    }
+
+
+@app.post("/api/picks", status_code=201)
+def add_pick(body: PickBody, user=Depends(require_admin)):
+    _check_bucket_mode(body.bucket, body.mode)
+    ref, s, a, b = _check_ref(body.ref)
+    seconds = _pick_seconds(body.mode, s, a, b)
+    with PICKS_LOCK:
+        picks = _load_picks()
+        if any(p["bucket"] == body.bucket and p["mode"] == body.mode and p["ref"] == ref for p in picks):
+            raise HTTPException(status_code=409, detail=f"{ref} is already in this list.")
+        pick = {"id": f"{body.bucket}{body.mode[0]}-{uuid4().hex[:6]}", "bucket": body.bucket, "mode": body.mode,
+                "ref": ref, "seconds": seconds, "over_bucket": seconds > body.bucket}
+        _save_picks(picks + [pick])
+    _pick_audit(user, pick["id"], "add", f"{body.bucket}s {body.mode} {ref}")
+    return _pick_view(pick, _quran_data(), MAX_VIDEO_SECONDS)
+
+
+@app.put("/api/picks/{pick_id}")
+def edit_pick(pick_id: str, body: PickBody, user=Depends(require_admin)):
+    with PICKS_LOCK:
+        picks = _load_picks()
+        pick = next((p for p in picks if p["id"] == pick_id), None)
+        if pick is None:
+            raise HTTPException(status_code=404, detail="Pick not found.")
+        bucket = body.bucket if body.bucket is not None else pick["bucket"]
+        mode = body.mode or pick["mode"]
+        _check_bucket_mode(bucket, mode)
+        ref, s, a, b = _check_ref(body.ref or pick["ref"])
+        if any(p is not pick and p["bucket"] == bucket and p["mode"] == mode and p["ref"] == ref for p in picks):
+            raise HTTPException(status_code=409, detail=f"{ref} is already in this list.")
+        seconds = _pick_seconds(mode, s, a, b)
+        updated = {**pick, "bucket": bucket, "mode": mode, "ref": ref, "seconds": seconds,
+                   "over_bucket": seconds > bucket}
+        _save_picks([updated if p is pick else p for p in picks])
+    _pick_audit(user, pick_id, "edit", f"{pick['ref']} -> {bucket}s {mode} {ref}")
+    return _pick_view(updated, _quran_data(), MAX_VIDEO_SECONDS)
+
+
+@app.delete("/api/picks/{pick_id}")
+def delete_pick(pick_id: str, user=Depends(require_admin)):
+    with PICKS_LOCK:
+        picks = _load_picks()
+        pick = next((p for p in picks if p["id"] == pick_id), None)
+        if pick is None:
+            raise HTTPException(status_code=404, detail="Pick not found.")
+        _save_picks([p for p in picks if p is not pick])
+    _pick_audit(user, pick_id, "delete", f"{pick['bucket']}s {pick['mode']} {pick['ref']}")
+    return {"deleted": pick_id}
+
+
+@app.post("/api/picks/import")
+def import_picks(body: PickImport, user=Depends(require_admin)):
+    if body.mode is not None or body.bucket is not None:
+        _check_bucket_mode(body.bucket, body.mode or "urdu")
+    found, invalid = picks_lib.parse_import(body.text, _quran_data(), body.mode)
+    with PICKS_LOCK:
+        picks = _load_picks()
+        have = {(p["bucket"], p["mode"], p["ref"]) for p in picks}
+        add, dups = [], []
+        for mode, ref in found:
+            key = (body.bucket, mode, ref)
+            (dups if key in have else add).append({"mode": mode, "ref": ref})
+            have.add(key)
+        if body.apply and add:
+            import make as renderer
+
+            seconds_of = picks_lib.seconds_lookup(renderer.load_duration_cache())
+            new = [
+                picks_lib.make_pick(f"{body.bucket}{x['mode'][0]}-{uuid4().hex[:6]}", body.bucket, x["mode"], x["ref"], seconds_of)
+                for x in add
+            ]
+            _save_picks(picks + new)
+    if body.apply and add:
+        _pick_audit(user, "import", "import", f"{len(add)} added to {body.bucket}s, {len(invalid)} invalid")
+    return {"add": add, "duplicates": dups, "invalid": invalid, "applied": bool(body.apply and add)}
+
+
+@app.get("/api/picks/export")
+def export_picks(bucket: int, user=Depends(require_admin)):
+    _check_bucket_mode(bucket, "urdu")
+    rows = [p for p in _load_picks() if p["bucket"] == bucket]
+    return Response(
+        picks_lib.format_export(rows, _quran_data()),
+        media_type="text/plain; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="picks-{bucket}s.txt"'},
+    )
+
+
+def _recompute_worker(remeasure):
+    import make as renderer
+
+    state = RECOMPUTE
+    try:
+        picks = _load_picks()
+        ayat = sorted({
+            (p["mode"], s, n)
+            for p in picks for s, a, b in [picks_lib.split_ref(p["ref"])] for n in range(a, b + 1)
+        })
+        with RECOMPUTE_LOCK:
+            state.update(total=len(ayat), done=0)
+
+        def one(key):
+            mode, s, n = key
+            kind = "arabic" if mode == "arabic" else "urdu"
+            try:
+                if remeasure:
+                    renderer.forget_ayah_duration(s, n, kind)
+                if renderer.cached_ayah_duration(s, n, kind) is None and renderer.measure_ayah_audio(s, n, kind) is None:
+                    raise RuntimeError("audio unavailable")
+            except Exception as exc:
+                with RECOMPUTE_LOCK:
+                    state["errors"].append(f"{s}:{n} ({mode}): {_redact_secrets(str(exc))[:120]}")
+            with RECOMPUTE_LOCK:
+                state["done"] += 1
+
+        with renderer.batch_duration_writes(), ThreadPoolExecutor(max_workers=4) as pool:
+            list(pool.map(one, ayat))
+        with PICKS_LOCK:
+            fresh = _load_picks()
+            seconds_of = picks_lib.seconds_lookup(renderer.load_duration_cache())
+            for p in fresh:
+                s, a, b = picks_lib.split_ref(p["ref"])
+                seconds = seconds_of(p["mode"], s, a, b)
+                p["seconds"] = seconds
+                p["over_bucket"] = seconds is not None and seconds > p["bucket"]
+            _save_picks(fresh)
+        state["state"] = "done"
+    except Exception as exc:
+        state.update(state="failed", error=_redact_secrets(str(exc.detail if isinstance(exc, HTTPException) else exc)))
+
+
+@app.post("/api/picks/recompute", status_code=202)
+def recompute_picks(body: RecomputeRequest = RecomputeRequest(), user=Depends(require_admin)):
+    with RECOMPUTE_LOCK:
+        if RECOMPUTE["state"] == "running":
+            raise HTTPException(status_code=409, detail="A recompute is already running.")
+        RECOMPUTE.update(state="running", done=0, total=0, errors=[], error=None)
+    threading.Thread(target=_recompute_worker, args=(body.remeasure,), daemon=True).start()
+    _pick_audit(user, "all", "recompute", "remeasure" if body.remeasure else "fill missing")
+    return dict(RECOMPUTE)
+
+
+@app.get("/api/picks/recompute")
+def recompute_status(user=Depends(require_admin)):
+    with RECOMPUTE_LOCK:
+        return dict(RECOMPUTE, errors=list(RECOMPUTE["errors"])[:20])
+
+
+@app.post("/api/picks/{pick_id}/trim")
+def trim_pick(pick_id: str, body: PickTrim, user=Depends(require_admin)):
+    """Whole-ayah trim of an over-length pick into a NEW pick; the original stays. Needs confirm=true."""
+    with PICKS_LOCK:
+        picks = _load_picks()
+        pick = next((p for p in picks if p["id"] == pick_id), None)
+        if pick is None:
+            raise HTTPException(status_code=404, detail="Pick not found.")
+        s, a, b = picks_lib.split_ref(pick["ref"])
+        if a == b:
+            raise HTTPException(status_code=400, detail="A single ayah cannot be trimmed.")
+        content = picks_lib.MODE_TO_CONTENT[pick["mode"]]
+        plan = _plan_or_http(s, a, b, 10_000, content, None, None)
+        if body.to_ayah is not None:
+            if not a <= body.to_ayah < b:
+                raise HTTPException(status_code=400, detail=f"Last ayah must be between {a} and {b - 1}.")
+            last = body.to_ayah
+        else:
+            total, last = 0.0, None
+            for item in plan["items"]:
+                if total + item["len"] > pick["bucket"]:
+                    break
+                total, last = total + item["len"], item["ayah"]
+            if last is None or last == b:
+                raise HTTPException(status_code=400, detail="No whole-ayah trim fits this bucket.")
+        seconds = round(sum(i["len"] for i in plan["items"] if i["ayah"] <= last), 2)
+        ref = picks_lib.normalize(s, a, last, _quran_data())
+        preview = {"ref": ref, "seconds": seconds, "from": pick["ref"], "confirmed": False}
+        if not body.confirm:
+            return preview
+        if any(p["bucket"] == pick["bucket"] and p["mode"] == pick["mode"] and p["ref"] == ref for p in picks):
+            raise HTTPException(status_code=409, detail=f"{ref} is already in this list.")
+        new = {"id": f"{pick['bucket']}{pick['mode'][0]}-{uuid4().hex[:6]}", "bucket": pick["bucket"],
+               "mode": pick["mode"], "ref": ref, "seconds": seconds,
+               "over_bucket": seconds > pick["bucket"], "trimmed_from": pick["id"]}
+        _save_picks(picks + [new])
+    _pick_audit(user, new["id"], "trim", f"{pick['ref']} -> {ref}")
+    return {**preview, "confirmed": True, "pick": _pick_view(new, _quran_data(), MAX_VIDEO_SECONDS)}
+
+
+# --- Downloads: local file first, then the Supabase copy; what is missing is reported ---
+def _video_source(filename, object_path):
+    """(path, is_temporary) for a video, or None when neither the local nor the Supabase copy exists."""
+    path = _safe_history_video_path(filename)
+    if path is not None and path.is_file():
+        return path, False
+    if (
+        SUPABASE_SERVICE_KEY and isinstance(object_path, str) and object_path.startswith("videos/")
+        and ".." not in object_path.split("/") and isinstance(filename, str)
+    ):
+        target = CACHE_DIR / "tmp" / "dl" / f"{uuid4().hex}_{Path(filename).name}"
+        try:
+            if _download_media_file(object_path, target):
+                return target, True
+        except Exception as exc:
+            LOGGER.error("Supabase fallback download failed: %s", _redact_secrets(str(exc)))
+    return None
+
+
+def _video_available(filename, object_path):
+    path = _safe_history_video_path(filename)
+    return bool(path is not None and path.is_file()) or bool(
+        SUPABASE_SERVICE_KEY and isinstance(object_path, str) and object_path.startswith("videos/")
+    )
+
+
+def _missing_note(missing):
+    return "These videos were not available and are not in this ZIP:\n" + "\n".join(missing) + "\n"
 
 
 # ---------------------------------------------------------------------------------------------
@@ -2382,8 +2990,10 @@ def _cancel_user_jobs(user_id):
         for job in GENERATION_JOBS.values():
             if job.get("owner_id") == user_id and job["status"] in {"queued", "processing"}:
                 if job["status"] == "queued":
-                    _refund_daily_slot(user_id)
+                    _refund_job_remaining(job)
                 job.update(status="failed", cancelled=True, error="Generation cancelled because the account is unavailable.")
+                if job.get("_proc"):
+                    _kill_process_tree(job["_proc"])
 
 
 def _rate_limit(key, limit=5, window=15 * 60):

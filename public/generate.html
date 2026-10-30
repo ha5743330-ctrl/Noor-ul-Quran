@@ -8,7 +8,7 @@
     <script src="https://cdn.tailwindcss.com/3.4.16"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/ui.css?v=4">
+    <link rel="stylesheet" href="/ui.css?v=5">
 </head>
 <body class="ui-page ui-generate min-h-screen selection:bg-emerald-100">
     <header id="site-header"></header>
@@ -131,9 +131,8 @@
                         </div>
                     </div>
 
-                    <div id="mode-picks" class="mt-5 hidden space-y-2 rounded-xl border border-slate-700 bg-slate-900/70 p-4">
-                        <h3 class="font-semibold text-white">Custom verse list</h3>
-                        <p class="text-sm leading-6 text-slate-300">Generator <code class="text-amber-200">picks.txt</code> mein saved verse ranges use karega.</p>
+                    <div id="mode-picks" class="mt-5 hidden">
+                        <div id="picks-root" class="pk"></div>
                     </div>
                     <div id="mode-random" class="mt-5 hidden space-y-2">
                         <label for="input-random-count" class="block text-sm font-semibold text-slate-200">Number of random reels</label>
@@ -325,6 +324,8 @@
                         <ul id="generation-warnings" class="mt-3 hidden list-disc space-y-1 pl-5 text-sm font-semibold text-amber-200" aria-live="polite"></ul>
                     </div>
 
+                    <section id="picks-batch" class="pk-batch" aria-live="polite" hidden></section>
+
                     <div id="empty-results" class="mt-5 rounded-xl border border-dashed border-slate-600 bg-slate-900/50 px-5 py-9 text-center">
                         <span class="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-slate-800 text-slate-300">
                             <i class="fa-regular fa-circle-play text-xl" aria-hidden="true"></i>
@@ -423,6 +424,7 @@
     <script src="/config.js"></script>
     <script src="/auth.js?v=9"></script>
     <script src="/nav.js?v=2"></script>
-    <script src="/app.js?v=17"></script>
+    <script src="/app.js?v=18"></script>
+    <script src="/picks.js?v=1"></script>
 </body>
 </html>

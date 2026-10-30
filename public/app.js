@@ -573,6 +573,9 @@ async function generateVideo(event) {
         return;
     }
     if (generateButton?.disabled) return;
+    // Picks mode sends server pick ids (never refs); picks.js owns that selection.
+    const picksBatch = mode === "picks" ? window.NoorPicks?.batchRequest() : null;
+    if (mode === "picks" && !picksBatch) return;
     latestBatchJobId = null;
     document.getElementById("download-all-btn")?.classList.add("hidden");
 
@@ -618,13 +621,15 @@ async function generateVideo(event) {
                 styles: window.videoStyles,
                 music: contentMode === "arabic_only"
                     ? null
-                    : document.getElementById("input-music")?.value || null
+                    : document.getElementById("input-music")?.value || null,
+                ...picksBatch
             })
         });
 
         let result = await response.json().catch(() => ({ detail: `Server returned HTTP ${response.status}.` }));
         const generationJobId = result.job_id;
         if (response.status === 202 && result.job_id) {
+            window.NoorPicks?.onJob(result);
             result = await waitForGeneration(result.job_id, session.access_token, statusBox, logMsg, statusPercent);
         }
 
@@ -723,6 +728,7 @@ async function waitForGeneration(jobId, accessToken, statusBox, logMsg, statusPe
         retryStartedAt = null;
         pollDelayMs = 2000;
 
+        window.NoorPicks?.onJob(job);
         const videos = Array.isArray(job.videos) ? job.videos : [];
         renderGenerationWarnings(job.warnings || videos.flatMap((video) => video.warnings || []));
         if (videos.length) showGeneratedVideos(videos);
@@ -1263,6 +1269,7 @@ function setMode(mode) {
         icon.classList.toggle("hidden", hasPremium);
     });
     document.getElementById("locked-pro-notice")?.classList.toggle("hidden", !locked);
+    if (allowedMode === "picks" && !locked) window.NoorPicks?.show();
     const submitButton = document.getElementById("generate-button");
     if (submitButton) submitButton.disabled = locked || limitReached();
 }

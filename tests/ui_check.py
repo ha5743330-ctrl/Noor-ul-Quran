@@ -4,7 +4,7 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 BASE = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8001"
-PAGES = ["index", "auth", "signin", "generate", "admin-console", "admin-panel"]
+PAGES = ["index", "auth", "signin", "generate", "library", "profile", "admin-console", "admin-panel"]
 OUT = Path(__file__).parent / "output" / "ui"
 OUT.mkdir(parents=True, exist_ok=True)
 failed = False
@@ -25,4 +25,8 @@ with sync_playwright() as p:
             print(f"{'OK  ' if ok else 'FAIL'} {width} {name} -> {page.url.split(BASE)[-1]} overflow={overflow} errors={errors}")
             page.close()
     browser.close()
+import urllib.request
+status = urllib.request.urlopen(f"{BASE}/picks.js").status  # the Picks panel script must be served
+print(f"{'OK  ' if status == 200 else 'FAIL'} picks.js served ({status})")
+failed |= status != 200
 sys.exit(1 if failed else 0)
