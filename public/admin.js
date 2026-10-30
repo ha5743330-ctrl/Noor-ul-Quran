@@ -4,7 +4,7 @@ let adminStats = { total: 0, premium: 0 };
 let selfId = "";
 let usersPage = 1;
 let usersTotal = 0;
-const USERS_PER_PAGE = 50;
+let usersRows = [];
 
 function showAdminMessage(message, isError = false) {
     adminMessage.textContent = message;
@@ -79,19 +79,25 @@ function renderSummary() {
     if (backgroundsBadge) backgroundsBadge.textContent = `${backgroundCount?.dataset.count || 0} files`;
 }
 
-async function loadUsers() {
+// Fetches pages from..usersPage: a refresh keeps everything already loaded, Load more only asks for the new page.
+async function loadUsers(from = 1) {
     const list = document.getElementById("users-list");
-    const params = new URLSearchParams({
-        q: document.getElementById("user-search").value.trim(),
-        status: document.getElementById("user-status").value,
-        page: String(usersPage)
-    });
+    const rows = from === 1 ? [] : usersRows;
     try {
-        const result = await adminRequest(`/admin/users?${params}`);
-        adminStats = result.stats;
-        usersTotal = result.total;
+        for (let page = from; page <= usersPage; page += 1) {
+            const params = new URLSearchParams({
+                q: document.getElementById("user-search").value.trim(),
+                status: document.getElementById("user-status").value,
+                page: String(page)
+            });
+            const result = await adminRequest(`/admin/users?${params}`);
+            adminStats = result.stats;
+            usersTotal = result.total;
+            rows.push(...result.users);
+        }
+        usersRows = rows;
         renderSummary();
-        renderUsers(result.users);
+        renderUsers(rows);
     } catch (error) {
         list.replaceChildren();
         showAdminMessage(error.message, true);
@@ -180,10 +186,7 @@ function renderUsers(users) {
     list.replaceChildren();
     document.getElementById("user-count").textContent = `${usersTotal} users`;
     document.getElementById("users-badge").textContent = String(usersTotal);
-    const pages = Math.max(1, Math.ceil(usersTotal / USERS_PER_PAGE));
-    document.getElementById("users-page").textContent = `Page ${usersPage} of ${pages}`;
-    document.getElementById("users-prev").disabled = usersPage <= 1;
-    document.getElementById("users-next").disabled = usersPage >= pages;
+    document.getElementById("users-more").hidden = users.length >= usersTotal;
 
     if (!users.length) {
         const empty = document.createElement("li");
@@ -280,13 +283,14 @@ async function updatePremium(user, checkbox) {
     }
 }
 
-async function loadAudit() {
+async function loadAudit(offset = 0) {
     const list = document.getElementById("audit-list");
     try {
-        const { entries } = await adminRequest("/admin/audit");
-        document.getElementById("audit-badge").textContent = String(entries.length);
-        list.replaceChildren();
-        if (!entries.length) {
+        const { entries, total } = await adminRequest(`/admin/audit?offset=${offset}`);
+        document.getElementById("audit-badge").textContent = String(total ?? entries.length);
+        if (!offset) list.replaceChildren();
+        document.getElementById("audit-more").hidden = offset + entries.length >= (total ?? 0);
+        if (!entries.length && !offset) {
             const empty = document.createElement("li");
             empty.textContent = "No admin actions yet.";
             list.append(empty);
@@ -507,10 +511,9 @@ const SECTION_KEY = "noorAdminSections";
 function initializeSections() {
     let saved = {};
     try { saved = JSON.parse(localStorage.getItem(SECTION_KEY)) || {}; } catch { /* storage blocked */ }
-    const wide = window.matchMedia("(min-width: 821px)").matches;
     document.querySelectorAll("details[data-sec]").forEach((details) => {
         const id = details.dataset.sec;
-        details.open = id in saved ? Boolean(saved[id]) : (wide || id === "users");
+        details.open = id in saved ? Boolean(saved[id]) : id === "users";
         details.addEventListener("toggle", () => {
             saved[id] = details.open;
             try { localStorage.setItem(SECTION_KEY, JSON.stringify(saved)); } catch { /* storage blocked */ }
@@ -537,8 +540,8 @@ setupUpload({
     buttonHtml: '<i class="fa-solid fa-upload" aria-hidden="true"></i>Upload music', reload: loadMusic, maxLabel: "Music file"
 });
 
-document.getElementById("refresh-users").addEventListener("click", loadUsers);
-document.getElementById("refresh-audit").addEventListener("click", loadAudit);
+document.getElementById("refresh-users").addEventListener("click", () => loadUsers());
+document.getElementById("refresh-audit").addEventListener("click", () => loadAudit());
 document.getElementById("user-search").addEventListener("input", () => {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(reloadUsersFromStart, 300);
@@ -550,8 +553,8 @@ document.querySelectorAll(".ad-chips button").forEach((chip) => {
         reloadUsersFromStart();
     });
 });
-document.getElementById("users-prev").addEventListener("click", () => { usersPage -= 1; loadUsers(); });
-document.getElementById("users-next").addEventListener("click", () => { usersPage += 1; loadUsers(); });
+document.getElementById("users-more").addEventListener("click", () => { usersPage += 1; loadUsers(usersPage); });
+document.getElementById("audit-more").addEventListener("click", () => loadAudit(document.getElementById("audit-list").children.length));
 document.getElementById("refresh-diagnostics").addEventListener("click", loadDiagnostics);
 document.addEventListener("DOMContentLoaded", initializeAdmin);
 

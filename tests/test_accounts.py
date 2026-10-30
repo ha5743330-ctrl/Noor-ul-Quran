@@ -137,6 +137,15 @@ def test_non_admin_gets_403_on_every_admin_route(client):
         assert getattr(client, method)(path).status_code == 403, path
 
 
+def test_admin_audit_pages_newest_first(client):
+    _as(ADMIN)
+    main._write_state(main.AUDIT_FILE, main.AUDIT_OBJECT, [{"action": str(i)} for i in range(120)])
+    first = client.get("/api/admin/audit").json()
+    assert first["total"] == 120 and len(first["entries"]) == 50 and first["entries"][0]["action"] == "119"
+    last = client.get("/api/admin/audit", params={"offset": 100}).json()
+    assert [e["action"] for e in last["entries"]] == [str(i) for i in range(19, -1, -1)]
+
+
 def test_admin_user_list_filters_searches_and_pages(client, monkeypatch):
     _as(ADMIN)
     users = [

@@ -1,5 +1,7 @@
 // Library: all of the user's videos and ayah images. Mirrors the Recent list on the generate page.
 const DIRECT_DOWNLOAD_LIMIT = 5; // more than this goes through one ZIP
+const PAGE_SIZE = 50;
+let shownCount = PAGE_SIZE;
 let items = [];
 let filter = "all";
 let selecting = false;
@@ -48,7 +50,8 @@ function render() {
     const shown = visibleItems();
     list.replaceChildren();
     $("lib-empty").hidden = shown.length > 0;
-    for (const item of shown) {
+    $("lib-more").hidden = shown.length <= shownCount;
+    for (const item of shown.slice(0, shownCount)) {
         const isImage = item.type === "image";
         const li = document.createElement("li");
         li.className = "lib-item";
@@ -209,10 +212,12 @@ async function load() {
 document.querySelectorAll(".lib-tabs button").forEach((tab) => {
     tab.addEventListener("click", () => {
         filter = tab.dataset.filter;
+        shownCount = PAGE_SIZE;
         document.querySelectorAll(".lib-tabs button").forEach((other) => other.setAttribute("aria-pressed", String(other === tab)));
         render();
     });
 });
+$("lib-more").addEventListener("click", () => { shownCount += PAGE_SIZE; render(); });
 $("lib-select-toggle").addEventListener("click", () => setSelecting(true));
 $("lib-cancel").addEventListener("click", () => setSelecting(false));
 $("lib-select-all").addEventListener("change", (event) => {
