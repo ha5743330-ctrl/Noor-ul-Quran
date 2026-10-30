@@ -2,164 +2,138 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#f2f6f3">
     <title>Noor ul Quran | Admin Access</title>
-    <script src="https://cdn.tailwindcss.com/3.4.16"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/ui.css?v=2">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/ui.css?v=4">
 </head>
-<body class="ui-page ui-admin min-h-screen">
-    <div class="absolute inset-0 -z-10 overflow-hidden">
-        <div class="absolute left-[-12%] top-[-12%] h-80 w-80 rounded-full bg-amber-500/10 blur-3xl"></div>
-        <div class="absolute right-[-10%] top-24 h-72 w-72 rounded-full bg-sky-500/10 blur-3xl"></div>
-    </div>
-
+<body class="ui-page ui-admin">
     <header id="site-header"></header>
 
-    <main class="mx-auto max-w-7xl space-y-6 px-5 py-8">
-        <div id="admin-message" class="hidden rounded-xl border px-4 py-3 text-sm" role="status" aria-live="polite"></div>
+    <main class="ad-wrap">
+        <h1 class="page-title">Admin Access</h1>
 
-        <section class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 shadow-xl shadow-slate-950/30">
-                <div class="flex items-center justify-between">
-                    <p class="text-xs uppercase tracking-[0.18em] text-slate-400">Users</p>
-                    <span class="rounded-lg bg-amber-500/10 p-2 text-amber-300"><i class="fa-solid fa-users"></i></span>
-                </div>
-                <p id="stat-total-users" class="mt-5 text-3xl font-bold text-white">0</p>
-                <p class="mt-2 text-xs text-slate-400">Registered accounts</p>
-            </div>
+        <nav class="ad-jump" aria-label="Sections">
+            <a href="#users-section">Users</a>
+            <a href="#clips-section">Clips</a>
+            <a href="#music-section">Music</a>
+            <a href="#audit-section">Audit</a>
+            <a href="#server-section">Server</a>
+        </nav>
 
-            <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 shadow-xl shadow-slate-950/30">
-                <div class="flex items-center justify-between">
-                    <p class="text-xs uppercase tracking-[0.18em] text-slate-400">Premium</p>
-                    <span class="rounded-lg bg-emerald-500/10 p-2 text-emerald-300"><i class="fa-solid fa-crown"></i></span>
-                </div>
-                <p id="stat-premium-users" class="mt-5 text-3xl font-bold text-white">0</p>
-                <p class="mt-2 text-xs text-slate-400">Premium access enabled</p>
-            </div>
+        <div id="admin-message" class="ad-msg" role="status" aria-live="polite" hidden></div>
 
-            <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 shadow-xl shadow-slate-950/30">
-                <div class="flex items-center justify-between">
-                    <p class="text-xs uppercase tracking-[0.18em] text-slate-400">Clips</p>
-                    <span class="rounded-lg bg-sky-500/10 p-2 text-sky-300"><i class="fa-solid fa-film"></i></span>
-                </div>
-                <p id="stat-backgrounds" class="mt-5 text-3xl font-bold text-white">0</p>
-                <p class="mt-2 text-xs text-slate-400">Background MP4 files</p>
-            </div>
+        <div class="ad-stats">
+            <div class="ad-stat"><p class="ad-stat-label"><i class="fa-solid fa-users" aria-hidden="true"></i> Users</p><p id="stat-total-users" class="ad-stat-num">0</p><p class="ad-stat-note">Registered accounts</p></div>
+            <div class="ad-stat"><p class="ad-stat-label"><i class="fa-solid fa-crown" aria-hidden="true"></i> Premium</p><p id="stat-premium-users" class="ad-stat-num">0</p><p class="ad-stat-note">Premium access enabled</p></div>
+            <div class="ad-stat"><p class="ad-stat-label"><i class="fa-solid fa-film" aria-hidden="true"></i> Clips</p><p id="stat-backgrounds" class="ad-stat-num">0</p><p class="ad-stat-note">Background MP4 files</p></div>
+            <div class="ad-stat"><p class="ad-stat-label"><i class="fa-solid fa-shield-heart" aria-hidden="true"></i> Status</p><p class="ad-stat-num ad-ok">Online</p><p class="ad-stat-note">Studio and auth live</p></div>
+        </div>
 
-            <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 shadow-xl shadow-slate-950/30">
-                <div class="flex items-center justify-between">
-                    <p class="text-xs uppercase tracking-[0.18em] text-slate-400">Status</p>
-                    <span class="rounded-lg bg-rose-500/10 p-2 text-rose-300"><i class="fa-solid fa-shield-heart"></i></span>
-                </div>
-                <p class="mt-5 text-2xl font-bold text-emerald-400">Online</p>
-                <p class="mt-2 text-xs text-slate-400">Studio and auth services live</p>
-            </div>
-        </section>
-
-        <section class="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 shadow-xl shadow-slate-950/20" aria-labelledby="diagnostics-heading">
-            <div class="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                    <p class="text-xs uppercase tracking-[0.18em] text-slate-400">Server</p>
-                    <h2 id="diagnostics-heading" class="mt-1 text-lg font-semibold text-white">Diagnostics</h2>
-                </div>
-                <button id="refresh-diagnostics" type="button" class="rounded-xl border border-slate-700 bg-slate-950/70 px-3 py-2 text-sm text-slate-300 transition hover:border-slate-500 hover:bg-slate-800">
-                    <i class="fa-solid fa-rotate mr-2"></i>Refresh
-                </button>
-            </div>
-            <p id="diagnostics-status" class="mt-3 text-sm text-slate-400" role="status" aria-live="polite">Loading diagnostics...</p>
-            <dl id="diagnostics-grid" class="mt-3 grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-4"></dl>
-        </section>
-
-        <section class="grid gap-6 xl:grid-cols-[1.5fr_0.9fr]">
-            <div class="rounded-3xl border border-slate-800 bg-slate-900/60 p-5 shadow-2xl shadow-slate-950/20">
-                <div class="border-b border-slate-800 pb-4">
-                    <p class="text-xs uppercase tracking-[0.18em] text-slate-400">Registry</p>
-                    <h2 class="mt-2 text-xl font-semibold text-white">Users</h2>
-                    <p class="mt-1 text-sm text-slate-400">Premium, block, sign out everywhere, ya content delete karein.</p>
-                </div>
-                <div class="au-toolbar">
-                    <input id="user-search" type="search" placeholder="Search email or name" aria-label="Search users" class="control">
-                    <select id="user-status" aria-label="Filter by status" class="control">
-                        <option value="all">All statuses</option>
-                        <option value="active">Active</option>
-                        <option value="blocked">Blocked</option>
-                        <option value="deactivated">Deactivated</option>
-                    </select>
-                    <button id="refresh-users" type="button" class="btn btn-outline btn-sm" title="Refresh users" aria-label="Refresh users"><i class="fa-solid fa-rotate" aria-hidden="true"></i></button>
-                </div>
-                <p id="user-count" class="text-xs text-slate-500" role="status" aria-live="polite"></p>
-                <ul id="users-list" class="au-list"></ul>
-                <div class="au-pager">
-                    <button id="users-prev" type="button" class="btn btn-outline btn-sm" disabled>Previous</button>
-                    <span id="users-page" class="text-xs text-slate-500"></span>
-                    <button id="users-next" type="button" class="btn btn-outline btn-sm" disabled>Next</button>
-                </div>
-            </div>
-
-            <div class="rounded-3xl border border-slate-800 bg-slate-900/60 p-5 shadow-2xl shadow-slate-950/20">
-                <div class="flex items-center justify-between border-b border-slate-800 pb-5">
-                    <div>
-                        <p class="text-xs uppercase tracking-[0.18em] text-slate-400">Media</p>
-                        <h2 class="mt-2 text-xl font-semibold text-white">Background clips</h2>
+        <div class="ad-grid">
+            <section id="users-section" class="ad-sec ad-users">
+                <details data-sec="users">
+                    <summary><span class="ad-sec-title">Users</span><span id="users-badge" class="pf-badge">0</span></summary>
+                    <div class="ad-sec-body">
+                        <p class="hint">Premium, block, sign out everywhere, ya content delete karein.</p>
+                        <div class="au-toolbar">
+                            <input id="user-search" type="search" placeholder="Search email or name" aria-label="Search users" class="control">
+                            <input id="user-status" type="hidden" value="all">
+                            <div class="ad-chips" role="group" aria-label="Filter by status">
+                                <button type="button" data-status="all" aria-pressed="true">All</button>
+                                <button type="button" data-status="active" aria-pressed="false">Active</button>
+                                <button type="button" data-status="blocked" aria-pressed="false">Blocked</button>
+                                <button type="button" data-status="deactivated" aria-pressed="false">Deactivated</button>
+                            </div>
+                        </div>
+                        <div class="ad-count-row">
+                            <p id="user-count" role="status" aria-live="polite"></p>
+                            <button id="refresh-users" type="button" class="btn btn-outline btn-sm" aria-label="Refresh users"><i class="fa-solid fa-rotate" aria-hidden="true"></i><span>Refresh</span></button>
+                        </div>
+                        <ul id="users-list" class="au-list"></ul>
+                        <div class="au-pager">
+                            <button id="users-prev" type="button" class="btn btn-outline btn-sm" disabled>Previous</button>
+                            <span id="users-page"></span>
+                            <button id="users-next" type="button" class="btn btn-outline btn-sm" disabled>Next</button>
+                        </div>
                     </div>
-                    <span id="stat-backgrounds-badge" class="rounded-full border border-sky-500/20 bg-sky-500/10 px-2.5 py-1 text-xs font-medium text-sky-300">0 files</span>
-                </div>
+                </details>
+            </section>
 
-                <div class="mt-5 space-y-4">
-                    <p class="text-sm text-slate-400">Upload MP4 clips for generated reels. Maximum file size is 50 MB.</p>
-
-                    <form id="background-upload-form" class="flex flex-col gap-3 sm:flex-row sm:items-center">
-                        <label class="sr-only" for="background-file">Choose a video clip</label>
-                        <input id="background-file" type="file" accept="video/mp4,.mp4" required class="max-w-full text-sm text-slate-300 file:mr-3 file:rounded-xl file:border-0 file:bg-slate-800 file:px-3 file:py-2 file:text-slate-200">
-                        <button id="background-upload-button" type="submit" class="rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-amber-400">
-                            <i class="fa-solid fa-upload mr-2"></i>Upload clip
-                        </button>
-                    </form>
-
-                    <ul id="background-list" class="mt-4 space-y-2 divide-y divide-slate-800 text-sm text-slate-300"></ul>
-                </div>
-
-                <div class="mt-6 space-y-4 border-t border-slate-800 pt-5">
-                    <div>
-                        <h3 class="font-semibold text-white">Background music</h3>
-                        <p class="mt-1 text-sm text-slate-400">Upload MP3, MPEG, WAV, AAC, or M4A. Maximum file size is 50 MB.</p>
+            <section id="clips-section" class="ad-sec ad-clips">
+                <details data-sec="clips">
+                    <summary><span class="ad-sec-title">Background clips</span><span id="stat-backgrounds-badge" class="pf-badge">0 files</span></summary>
+                    <div class="ad-sec-body">
+                        <p class="hint">Upload MP4 clips for generated reels. Maximum file size is 50 MB.</p>
+                        <form id="background-upload-form" class="ad-upload" novalidate>
+                            <input id="background-file" class="ad-file-input" type="file" accept="video/mp4,.mp4">
+                            <label for="background-file" class="btn btn-outline"><i class="fa-solid fa-file-video" aria-hidden="true"></i>Choose file</label>
+                            <p id="background-file-info" class="ad-file-info">No file chosen</p>
+                            <progress id="background-progress" max="100" value="0" hidden></progress>
+                            <p id="background-error" class="pf-msg err" role="alert"></p>
+                            <button id="background-upload-button" type="submit" class="btn btn-primary"><i class="fa-solid fa-upload" aria-hidden="true"></i>Upload clip</button>
+                        </form>
+                        <ul id="background-list" class="ad-rows"></ul>
                     </div>
-                    <form id="music-upload-form" class="flex flex-col gap-3 sm:flex-row sm:items-center">
-                        <label class="sr-only" for="music-file">Choose a music file</label>
-                        <input id="music-file" type="file" accept=".mp3,.mpeg,.wav,.aac,.m4a,audio/mpeg,audio/mp4,audio/aac,audio/wav" required class="max-w-full text-sm text-slate-300 file:mr-3 file:rounded-xl file:border-0 file:bg-slate-800 file:px-3 file:py-2 file:text-slate-200">
-                        <button id="music-upload-button" type="submit" class="rounded-xl border border-slate-700 bg-slate-800 px-4 py-2.5 text-sm font-semibold text-slate-200 transition hover:bg-slate-700">
-                            <i class="fa-solid fa-upload mr-2"></i>Upload music
-                        </button>
-                    </form>
-                    <ul id="music-list" class="space-y-2 divide-y divide-slate-800 text-sm text-slate-300"></ul>
-                </div>
-            </div>
-        </section>
+                </details>
+            </section>
 
-        <section class="rounded-3xl border border-slate-800 bg-slate-900/60 p-5 shadow-2xl shadow-slate-950/20" aria-labelledby="audit-heading">
-            <div class="flex items-center justify-between gap-3">
-                <h2 id="audit-heading" class="text-xl font-semibold text-white">Audit log</h2>
-                <button id="refresh-audit" type="button" class="btn btn-outline btn-sm" aria-label="Refresh audit log"><i class="fa-solid fa-rotate" aria-hidden="true"></i></button>
-            </div>
-            <p class="mt-1 text-sm text-slate-400">Last 50 admin actions.</p>
-            <ul id="audit-list" class="au-audit"></ul>
-        </section>
+            <section id="music-section" class="ad-sec ad-music">
+                <details data-sec="music">
+                    <summary><span class="ad-sec-title">Background music</span><span id="music-badge" class="pf-badge">0 files</span></summary>
+                    <div class="ad-sec-body">
+                        <p class="hint">Upload MP3, MPEG, WAV, AAC, or M4A. Maximum file size is 50 MB.</p>
+                        <form id="music-upload-form" class="ad-upload" novalidate>
+                            <input id="music-file" class="ad-file-input" type="file" accept=".mp3,.mpeg,.wav,.aac,.m4a,audio/mpeg,audio/mp4,audio/aac,audio/wav">
+                            <label for="music-file" class="btn btn-outline"><i class="fa-solid fa-file-audio" aria-hidden="true"></i>Choose file</label>
+                            <p id="music-file-info" class="ad-file-info">No file chosen</p>
+                            <progress id="music-progress" max="100" value="0" hidden></progress>
+                            <p id="music-error" class="pf-msg err" role="alert"></p>
+                            <button id="music-upload-button" type="submit" class="btn btn-primary"><i class="fa-solid fa-upload" aria-hidden="true"></i>Upload music</button>
+                        </form>
+                        <ul id="music-list" class="ad-rows"></ul>
+                    </div>
+                </details>
+            </section>
 
-        <footer class="border-t border-slate-800 pt-4 text-xs">
-            <a href="/privacy.html" class="text-slate-400 hover:text-amber-300">Privacy</a>
-        <span class="mx-2" aria-hidden="true">·</span>
-        <a href="/terms.html" class="text-slate-400 hover:text-amber-300">Terms</a>
-            <span class="mx-2" aria-hidden="true">·</span>
-            <a href="/generate.html" class="inline-flex items-center text-sm text-amber-400 hover:text-amber-300"><i class="fa-solid fa-arrow-left mr-2"></i>Back to generator</a>
+            <section id="audit-section" class="ad-sec ad-audit">
+                <details data-sec="audit">
+                    <summary><span class="ad-sec-title">Audit log</span><span id="audit-badge" class="pf-badge">0</span></summary>
+                    <div class="ad-sec-body">
+                        <div class="ad-count-row">
+                            <p class="hint">Last 50 admin actions.</p>
+                            <button id="refresh-audit" type="button" class="btn btn-outline btn-sm" aria-label="Refresh audit log"><i class="fa-solid fa-rotate" aria-hidden="true"></i><span>Refresh</span></button>
+                        </div>
+                        <ul id="audit-list" class="au-audit"></ul>
+                    </div>
+                </details>
+            </section>
+
+            <section id="server-section" class="ad-sec ad-server">
+                <details data-sec="server">
+                    <summary><span class="ad-sec-title">Diagnostics</span></summary>
+                    <div class="ad-sec-body">
+                        <div class="ad-count-row">
+                            <p id="diagnostics-status" class="hint" role="status" aria-live="polite">Loading diagnostics...</p>
+                            <button id="refresh-diagnostics" type="button" class="btn btn-outline btn-sm" aria-label="Refresh diagnostics"><i class="fa-solid fa-rotate" aria-hidden="true"></i><span>Refresh</span></button>
+                        </div>
+                        <dl id="diagnostics-grid" class="ad-diag"></dl>
+                    </div>
+                </details>
+            </section>
+        </div>
+
+        <footer class="ad-foot">
+            <a href="/privacy.html">Privacy</a><span aria-hidden="true">·</span><a href="/terms.html">Terms</a><span aria-hidden="true">·</span><a href="/generate.html"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Back to generator</a>
         </footer>
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js" integrity="sha384-0w2KAL2YHP6wKOkUDzkCDGgVvfmHnj02DHeQ6XcHOgTfFsGyonKOpShMH1x6nk9o" crossorigin="anonymous"></script>
     <script src="/config.js"></script>
     <script src="/auth.js?v=9"></script>
-    <script src="/nav.js?v=1"></script>
-    <script src="/admin.js?v=6"></script>
+    <script src="/nav.js?v=2"></script>
+    <script src="/admin.js?v=9"></script>
 </body>
 </html>
