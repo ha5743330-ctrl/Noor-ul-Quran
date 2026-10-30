@@ -136,7 +136,9 @@
         const msg = el("p", "pk-msg");
         msg.id = "picks-msg";
         msg.setAttribute("role", "alert");
-        root.append(tabs, modes, search, actions, summary, msg, el("ul", "pk-list"));
+        const box = el("div", "scroll-box pk-box");
+        box.append(search, el("ul", "pk-list"));
+        root.append(tabs, modes, actions, summary, msg, box);
     }
 
     function renderList() {

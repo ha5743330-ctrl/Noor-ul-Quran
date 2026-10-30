@@ -7,7 +7,7 @@
     <title>Noor ul Quran | Admin Access</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/ui.css?v=5">
+    <link rel="stylesheet" href="/ui.css?v=6">
 </head>
 <body class="ui-page ui-admin">
     <header id="site-header"></header>
@@ -39,6 +39,7 @@
                     <summary><span class="ad-sec-title">Users</span><span id="users-badge" class="pf-badge">0</span></summary>
                     <div class="ad-sec-body">
                         <p class="hint">Premium, block, sign out everywhere, ya content delete karein.</p>
+                        <div class="scroll-box">
                         <div class="au-toolbar">
                             <input id="user-search" type="search" placeholder="Search email or name" aria-label="Search users" class="control">
                             <input id="user-status" type="hidden" value="all">
@@ -54,11 +55,8 @@
                             <button id="refresh-users" type="button" class="btn btn-outline btn-sm" aria-label="Refresh users"><i class="fa-solid fa-rotate" aria-hidden="true"></i><span>Refresh</span></button>
                         </div>
                         <ul id="users-list" class="au-list"></ul>
-                        <div class="au-pager">
-                            <button id="users-prev" type="button" class="btn btn-outline btn-sm" disabled>Previous</button>
-                            <span id="users-page"></span>
-                            <button id="users-next" type="button" class="btn btn-outline btn-sm" disabled>Next</button>
                         </div>
+                        <button id="users-more" type="button" class="btn btn-outline btn-sm load-more" hidden>Load more</button>
                     </div>
                 </details>
             </section>
@@ -142,10 +140,11 @@
                     <summary><span class="ad-sec-title">Audit log</span><span id="audit-badge" class="pf-badge">0</span></summary>
                     <div class="ad-sec-body">
                         <div class="ad-count-row">
-                            <p class="hint">Last 50 admin actions.</p>
+                            <p class="hint">Admin actions, newest first.</p>
                             <button id="refresh-audit" type="button" class="btn btn-outline btn-sm" aria-label="Refresh audit log"><i class="fa-solid fa-rotate" aria-hidden="true"></i><span>Refresh</span></button>
                         </div>
-                        <ul id="audit-list" class="au-audit"></ul>
+                        <ul id="audit-list" class="au-audit" tabindex="0" aria-label="Audit log"></ul>
+                        <button id="audit-more" type="button" class="btn btn-outline btn-sm load-more" hidden>Load more</button>
                     </div>
                 </details>
             </section>
@@ -173,6 +172,6 @@
     <script src="/config.js"></script>
     <script src="/auth.js?v=9"></script>
     <script src="/nav.js?v=2"></script>
-    <script src="/admin.js?v=10"></script>
+    <script src="/admin.js?v=12"></script>
 </body>
 </html>

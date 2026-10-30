@@ -3464,9 +3464,11 @@ def admin_purge(user_id: str, user=Depends(require_admin)):
 
 
 @app.get("/api/admin/audit")
-def admin_audit(user=Depends(require_admin)):
+def admin_audit(offset: int = 0, user=Depends(require_admin)):
     with STATE_LOCK:
-        return {"entries": list(reversed(_read_state(AUDIT_FILE, [])[-50:]))}
+        log = _read_state(AUDIT_FILE, [])
+    offset = max(0, offset)
+    return {"entries": log[::-1][offset:offset + ADMIN_PAGE_SIZE], "total": len(log)}
 
 
 # 7. Static Web Files Serve Karein (MUST BE AT THE VERY BOTTOM)

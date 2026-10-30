@@ -742,7 +742,6 @@ dialog.confirm .pf-row { justify-content: flex-end; margin-top: 14px; }
 .au-facts dt { color: var(--muted); font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
 .au-facts dd { margin: 0; overflow-wrap: anywhere; }
 .au-actions { display: flex; flex-wrap: wrap; gap: 6px; }
-.au-pager { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; }
 .au-audit { display: grid; gap: 6px; padding: 0; margin: 10px 0 0; list-style: none; font-size: 0.85rem; }
 .au-audit li { padding: 8px 10px; border-radius: 10px; background: var(--surface-soft); overflow-wrap: anywhere; }
 
@@ -861,7 +860,6 @@ body.ui-admin { font-size: 15px; }
 .au-actions .btn { width: 100%; }
 .au-actions .au-wide { grid-column: 1 / -1; }
 .au-actions input[type="checkbox"], .lib-check input { accent-color: var(--accent); }
-.au-pager { align-items: center; }
 .au-audit li { font-size: 15px; }
 
 /* upload + rows */
@@ -1011,3 +1009,10 @@ body.ui-page .ap-import { width: 100%; min-height: 120px; font-size: 16px !impor
     .ap-form { grid-template-columns: repeat(4, minmax(0, 1fr)) auto; align-items: end; }
     .ap-row-actions { display: flex; }
 }
+
+/* long lists scroll in their own box, so the page stays short; search/filters stick to the top of the box */
+.scroll-box, .ad-rows, .au-audit, .pk-batch-list, .lib-grid, #recent-videos-list { max-height: 60vh; overflow-y: auto; }
+.scroll-box .au-toolbar, .pk-box .pk-search { position: sticky; top: 0; z-index: 2; }
+.scroll-box .au-toolbar { padding-bottom: 8px; background: var(--surface); }
+.pk-box { display: grid; gap: 8px; }
+.load-more { width: 100%; margin-top: 10px; }
