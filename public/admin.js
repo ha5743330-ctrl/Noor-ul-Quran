@@ -8,10 +8,8 @@ const USERS_PER_PAGE = 50;
 
 function showAdminMessage(message, isError = false) {
     adminMessage.textContent = message;
-    adminMessage.className = isError
-        ? "rounded-lg border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-300"
-        : "rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300";
-    adminMessage.classList.remove("hidden");
+    adminMessage.className = `ad-msg ${isError ? "err" : "ok"}`;
+    adminMessage.hidden = false;
 }
 
 async function adminRequest(path, options = {}) {
@@ -159,7 +157,7 @@ function askReason(email) {
         ok.textContent = "Block";
         row.append(cancel, ok);
         dialog.append(title, label, input, row);
-        const done = (value) => { dialog.close(); dialog.remove(); resolve(value); };
+        const done = (value) => { cancel.disabled = ok.disabled = true; dialog.close(); dialog.remove(); resolve(value); };
         cancel.addEventListener("click", () => done(null));
         ok.addEventListener("click", () => done(input.value.trim()));
         dialog.addEventListener("cancel", (event) => { event.preventDefault(); done(null); });
@@ -181,6 +179,7 @@ function renderUsers(users) {
     const list = document.getElementById("users-list");
     list.replaceChildren();
     document.getElementById("user-count").textContent = `${usersTotal} users`;
+    document.getElementById("users-badge").textContent = String(usersTotal);
     const pages = Math.max(1, Math.ceil(usersTotal / USERS_PER_PAGE));
     document.getElementById("users-page").textContent = `Page ${usersPage} of ${pages}`;
     document.getElementById("users-prev").disabled = usersPage <= 1;
@@ -254,7 +253,7 @@ function renderUsers(users) {
         }
         actions.append(
             actionButton("Sign out everywhere", "btn-outline", () => userAction(user, "signout")),
-            actionButton("Delete content", "btn-danger-outline", async () => {
+            actionButton("Delete content", "btn-danger-outline au-wide", async () => {
                 const ok = await window.noorConfirm(`Delete all content of ${user.email}?`, "Saari videos aur images delete hongi. Yeh wapas nahi ho sakta.", { label: "Delete content", danger: true });
                 if (ok) await userAction(user, "purge");
             })
@@ -285,6 +284,7 @@ async function loadAudit() {
     const list = document.getElementById("audit-list");
     try {
         const { entries } = await adminRequest("/admin/audit");
+        document.getElementById("audit-badge").textContent = String(entries.length);
         list.replaceChildren();
         if (!entries.length) {
             const empty = document.createElement("li");
@@ -307,14 +307,46 @@ function reloadUsersFromStart() {
     loadUsers();
 }
 
+function formatSize(bytes) {
+    return bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+function mediaRow(name, sizeText, button) {
+    const item = document.createElement("li");
+    item.className = "ad-row";
+    const label = document.createElement("span");
+    label.className = "ad-row-name";
+    label.textContent = name;
+    item.append(label, button);
+    if (sizeText) {
+        const size = document.createElement("span");
+        size.className = "ad-row-size";
+        size.textContent = sizeText;
+        item.insertBefore(size, button);
+    }
+    return item;
+}
+
+function emptyRow(text) {
+    const empty = document.createElement("li");
+    empty.className = "ad-row-empty";
+    empty.textContent = text;
+    return empty;
+}
+
 function deleteButton(path, filename, reload) {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "shrink-0 text-xs font-semibold text-rose-400 hover:text-rose-300";
+    button.className = "btn btn-sm btn-danger-outline";
     button.textContent = "Delete";
+    button.setAttribute("aria-label", `Delete ${filename}`);
     button.addEventListener("click", async () => {
-        if (!window.confirm(`Delete ${filename}?`)) return;
         button.disabled = true;
+        const ok = await window.noorConfirm(`Delete ${filename}?`, "Yeh wapas nahi ho sakta.", { label: "Delete", danger: true });
+        if (!ok) {
+            button.disabled = false;
+            return;
+        }
         try {
             await adminRequest(`${path}/${encodeURIComponent(filename)}`, { method: "DELETE" });
             showAdminMessage(`${filename} deleted.`);
@@ -336,25 +368,11 @@ async function loadBackgrounds() {
             countEl.dataset.count = String(clips.length);
             countEl.textContent = String(clips.length);
         }
-        document.getElementById("stat-backgrounds-badge")?.replaceChildren(document.createTextNode(`${clips.length} files`));
+        document.getElementById("stat-backgrounds-badge").textContent = `${clips.length} files`;
         list.replaceChildren();
-        if (!clips.length) {
-            const empty = document.createElement("li");
-            empty.className = "py-3 text-slate-500";
-            empty.textContent = "No background clips uploaded.";
-            list.append(empty);
-            return;
-        }
+        if (!clips.length) list.append(emptyRow("No background clips uploaded."));
         for (const clip of clips) {
-            const item = document.createElement("li");
-            item.className = "flex items-center justify-between gap-4 py-3";
-            const name = document.createElement("span");
-            name.textContent = clip.filename;
-            const size = document.createElement("span");
-            size.className = "shrink-0 text-slate-500";
-            size.textContent = `${(clip.size / (1024 * 1024)).toFixed(1)} MB`;
-            item.append(name, size, deleteButton("/admin/backgrounds", clip.filename, loadBackgrounds));
-            list.append(item);
+            list.append(mediaRow(clip.filename, formatSize(clip.size), deleteButton("/admin/backgrounds", clip.filename, loadBackgrounds)));
         }
     } catch (error) {
         showAdminMessage(error.message, true);
@@ -365,20 +383,11 @@ async function loadMusic() {
     const list = document.getElementById("music-list");
     try {
         const result = await adminRequest("/admin/music");
+        document.getElementById("music-badge").textContent = `${result.music_files.length} files`;
         list.replaceChildren();
+        if (!result.music_files.length) list.append(emptyRow("No background music uploaded."));
         for (const filename of result.music_files) {
-            const item = document.createElement("li");
-            item.className = "flex items-center justify-between gap-4 py-2";
-            const name = document.createElement("span");
-            name.textContent = filename;
-            item.append(name, deleteButton("/admin/music", filename, loadMusic));
-            list.append(item);
-        }
-        if (!result.music_files.length) {
-            const empty = document.createElement("li");
-            empty.className = "py-2 text-slate-500";
-            empty.textContent = "No background music uploaded.";
-            list.append(empty);
+            list.append(mediaRow(filename, "", deleteButton("/admin/music", filename, loadMusic)));
         }
     } catch (error) {
         showAdminMessage(error.message, true);
@@ -410,10 +419,8 @@ async function loadDiagnostics() {
         for (const [label, value] of values) {
             const item = document.createElement("div");
             const name = document.createElement("dt");
-            name.className = "text-xs text-slate-500";
             name.textContent = label;
             const detail = document.createElement("dd");
-            detail.className = "mt-1 break-words text-sm font-medium text-slate-200";
             detail.textContent = String(value);
             item.append(name, detail);
             grid.append(item);
@@ -425,67 +432,110 @@ async function loadDiagnostics() {
     }
 }
 
-async function uploadBackground(event) {
-    event.preventDefault();
-    const input = document.getElementById("background-file");
-    const button = document.getElementById("background-upload-button");
-    const file = input.files[0];
-    if (!file) return;
-    if (file.size > 50 * 1024 * 1024) {
-        showAdminMessage("Background clip must be 50 MB or smaller.", true);
-        return;
-    }
+// --- uploads: file name/size, progress, inline error ---
+const UPLOAD_LIMIT = 50 * 1024 * 1024;
 
-    button.disabled = true;
-    button.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>Uploading';
-    try {
-        const filename = encodeURIComponent(file.name);
-        await adminRequest(`/admin/backgrounds?filename=${filename}`, {
-            method: "POST",
-            body: file,
-            headers: { "Content-Type": file.type || "video/mp4" }
-        });
-        input.value = "";
-        showAdminMessage("Background clip uploaded.");
-        await loadBackgrounds();
-    } catch (error) {
-        showAdminMessage(error.message, true);
-    } finally {
-        button.disabled = false;
-        button.innerHTML = '<i class="fa-solid fa-upload mr-2"></i>Upload clip';
-    }
+async function sendWithProgress(path, file, contentType, onProgress) {
+    const { data: { session } } = await window.supabaseClient.auth.getSession();
+    if (!session) throw new Error("Your session expired. Please sign in again.");
+    return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", `${API_BASE_URL}${path}`);
+        xhr.setRequestHeader("Authorization", `Bearer ${session.access_token}`);
+        xhr.setRequestHeader("Content-Type", contentType);
+        xhr.upload.onprogress = (event) => event.lengthComputable && onProgress(Math.round((event.loaded / event.total) * 100));
+        xhr.onerror = () => reject(new Error("Network error. Upload failed."));
+        xhr.onload = () => {
+            let body = {};
+            try { body = JSON.parse(xhr.responseText); } catch { /* non-JSON error body */ }
+            if (xhr.status >= 200 && xhr.status < 300) resolve(body);
+            else reject(new Error(body.detail || `Upload failed (HTTP ${xhr.status}).`));
+        };
+        xhr.send(file);
+    });
 }
 
-async function uploadMusic(event) {
-    event.preventDefault();
-    const input = document.getElementById("music-file");
-    const button = document.getElementById("music-upload-button");
-    const file = input.files[0];
-    if (!file) return;
-    if (file.size > 50 * 1024 * 1024) {
-        showAdminMessage("Music file must be 50 MB or smaller.", true);
-        return;
-    }
+function setupUpload({ prefix, endpoint, fallbackType, successText, buttonHtml, reload, maxLabel }) {
+    const form = document.getElementById(`${prefix}-upload-form`);
+    const input = document.getElementById(`${prefix}-file`);
+    const info = document.getElementById(`${prefix}-file-info`);
+    const bar = document.getElementById(`${prefix}-progress`);
+    const error = document.getElementById(`${prefix}-error`);
+    const button = document.getElementById(`${prefix}-upload-button`);
+    const fail = (message) => { error.textContent = message; };
 
-    button.disabled = true;
-    button.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>Uploading';
-    try {
-        const filename = encodeURIComponent(file.name);
-        await adminRequest(`/admin/music?filename=${filename}`, {
-            method: "POST",
-            body: file,
-            headers: { "Content-Type": file.type || "audio/mpeg" }
-        });
-        input.value = "";
-        showAdminMessage("Background music uploaded.");
-        await loadMusic();
-    } catch (error) {
-        showAdminMessage(error.message, true);
-    } finally {
-        button.disabled = false;
-        button.innerHTML = '<i class="fa-solid fa-upload mr-2"></i>Upload music';
-    }
+    input.addEventListener("change", () => {
+        const file = input.files[0];
+        fail("");
+        bar.hidden = true;
+        info.textContent = file ? `${file.name} · ${formatSize(file.size)}` : "No file chosen";
+        if (file && file.size > UPLOAD_LIMIT) fail(`${maxLabel} must be 50 MB or smaller.`);
+    });
+
+    form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const file = input.files[0];
+        if (!file) return fail("Pehle file chunein.");
+        if (file.size > UPLOAD_LIMIT) return fail(`${maxLabel} must be 50 MB or smaller.`);
+        fail("");
+        button.disabled = true;
+        button.textContent = "Uploading…";
+        bar.value = 0;
+        bar.hidden = false;
+        try {
+            await sendWithProgress(`${endpoint}?filename=${encodeURIComponent(file.name)}`, file, file.type || fallbackType, (percent) => {
+                bar.value = percent;
+                info.textContent = `${file.name} · ${formatSize(file.size)} · ${percent}%`;
+            });
+            input.value = "";
+            info.textContent = "No file chosen";
+            bar.hidden = true;
+            showAdminMessage(successText);
+            await reload();
+        } catch (uploadError) {
+            fail(uploadError.message);
+        } finally {
+            button.disabled = false;
+            button.innerHTML = buttonHtml;
+        }
+    });
 }
+
+// --- accordion sections, remembered per browser ---
+const SECTION_KEY = "noorAdminSections";
+
+function initializeSections() {
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem(SECTION_KEY)) || {}; } catch { /* storage blocked */ }
+    const wide = window.matchMedia("(min-width: 821px)").matches;
+    document.querySelectorAll("details[data-sec]").forEach((details) => {
+        const id = details.dataset.sec;
+        details.open = id in saved ? Boolean(saved[id]) : (wide || id === "users");
+        details.addEventListener("toggle", () => {
+            saved[id] = details.open;
+            try { localStorage.setItem(SECTION_KEY, JSON.stringify(saved)); } catch { /* storage blocked */ }
+        });
+    });
+    document.querySelectorAll(".ad-jump a").forEach((link) => {
+        link.addEventListener("click", (event) => {
+            event.preventDefault();
+            const section = document.querySelector(link.getAttribute("href"));
+            section.querySelector("details").open = true; // open first so the scroll lands on the final layout
+            section.scrollIntoView({ block: "start" });
+            history.replaceState(null, "", link.getAttribute("href"));
+        });
+    });
+}
+
+initializeSections();
+setupUpload({
+    prefix: "background", endpoint: "/admin/backgrounds", fallbackType: "video/mp4", successText: "Background clip uploaded.",
+    buttonHtml: '<i class="fa-solid fa-upload" aria-hidden="true"></i>Upload clip', reload: loadBackgrounds, maxLabel: "Background clip"
+});
+setupUpload({
+    prefix: "music", endpoint: "/admin/music", fallbackType: "audio/mpeg", successText: "Background music uploaded.",
+    buttonHtml: '<i class="fa-solid fa-upload" aria-hidden="true"></i>Upload music', reload: loadMusic, maxLabel: "Music file"
+});
 
 document.getElementById("refresh-users").addEventListener("click", loadUsers);
 document.getElementById("refresh-audit").addEventListener("click", loadAudit);
@@ -493,10 +543,14 @@ document.getElementById("user-search").addEventListener("input", () => {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(reloadUsersFromStart, 300);
 });
-document.getElementById("user-status").addEventListener("change", reloadUsersFromStart);
+document.querySelectorAll(".ad-chips button").forEach((chip) => {
+    chip.addEventListener("click", () => {
+        document.getElementById("user-status").value = chip.dataset.status;
+        document.querySelectorAll(".ad-chips button").forEach((other) => other.setAttribute("aria-pressed", String(other === chip)));
+        reloadUsersFromStart();
+    });
+});
 document.getElementById("users-prev").addEventListener("click", () => { usersPage -= 1; loadUsers(); });
 document.getElementById("users-next").addEventListener("click", () => { usersPage += 1; loadUsers(); });
 document.getElementById("refresh-diagnostics").addEventListener("click", loadDiagnostics);
-document.getElementById("background-upload-form").addEventListener("submit", uploadBackground);
-document.getElementById("music-upload-form").addEventListener("submit", uploadMusic);
 document.addEventListener("DOMContentLoaded", initializeAdmin);

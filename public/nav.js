@@ -320,7 +320,7 @@
             cancel.type = ok.type = "button";
             row.append(cancel, ok);
             dialog.append(heading, el("p", "", message), row);
-            const done = (value) => { dialog.close(); dialog.remove(); resolve(value); };
+            const done = (value) => { cancel.disabled = ok.disabled = true; dialog.close(); dialog.remove(); resolve(value); };
             cancel.addEventListener("click", () => done(false));
             ok.addEventListener("click", () => done(true));
             dialog.addEventListener("cancel", (event) => { event.preventDefault(); done(false); });
