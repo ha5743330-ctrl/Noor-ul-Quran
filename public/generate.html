@@ -8,7 +8,7 @@
     <script src="https://cdn.tailwindcss.com/3.4.16"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/ui.css?v=6">
+    <link rel="stylesheet" href="/ui.css?v=8">
 </head>
 <body class="ui-page ui-generate min-h-screen selection:bg-emerald-100">
     <header id="site-header"></header>
@@ -64,7 +64,9 @@
 
                 </section>
 
-                <section class="glass-card rounded-2xl p-4 shadow-xl sm:p-6" aria-label="Reciter and voice">
+                <section class="glass-card rounded-2xl p-4 shadow-xl sm:p-6 gen-card" aria-label="Reciter and voice">
+                    <details class="gen-acc">
+                    <summary>
                     <div class="mb-5 flex items-center gap-3">
                         <span class="flex h-9 w-9 items-center justify-center rounded-full bg-amber-400/15 font-bold text-amber-300">2</span>
                         <div>
@@ -72,6 +74,8 @@
                             <p class="text-xs text-slate-300">Choose the voices for this reel</p>
                         </div>
                     </div>
+                    <span id="sum-reciter" class="gen-val"></span>
+                    </summary>
                     <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <div>
                             <label for="input-reciter" class="mb-1.5 block text-sm font-semibold text-slate-200">Arabic reciter</label>
@@ -87,6 +91,7 @@
                         </div>
                     </div>
                     <p id="reciter-load-status" class="mt-2 hidden text-xs text-red-300" role="status"></p>
+                    </details>
                 </section>
 
                 <section class="glass-card rounded-2xl p-4 shadow-xl sm:p-6" aria-label="Surah and ayah">
@@ -146,7 +151,7 @@
                 </section>
 
                 <details class="advanced-style-card rounded-2xl border border-slate-700 bg-white p-2 shadow-xl">
-                    <summary class="cursor-pointer rounded-xl px-3 py-3 text-sm font-bold text-slate-200">Advanced video style</summary>
+                    <summary class="cursor-pointer rounded-xl px-3 py-3 text-sm font-bold text-slate-200">Advanced video style<span id="sum-style" class="gen-val"></span></summary>
                     <section class="glass-card rounded-2xl p-4 shadow-xl sm:p-6" aria-labelledby="video-style-heading">
                     <div class="mb-5 flex items-center gap-3">
                         <span class="flex h-9 w-9 items-center justify-center rounded-full bg-amber-400/15 font-bold text-amber-300"><i class="fa-solid fa-palette" aria-hidden="true"></i></span>
@@ -201,7 +206,9 @@
                     </section>
                 </details>
 
-                <section class="glass-card rounded-2xl p-4 shadow-xl sm:p-6" aria-labelledby="output-settings-heading">
+                <section class="glass-card rounded-2xl p-4 shadow-xl sm:p-6 gen-card" aria-labelledby="output-settings-heading">
+                    <details class="gen-acc">
+                    <summary>
                     <div class="mb-5 flex items-center gap-3">
                         <span class="flex h-9 w-9 items-center justify-center rounded-full bg-amber-400/15 font-bold text-amber-300">4</span>
                         <div>
@@ -209,6 +216,8 @@
                             <p class="text-xs text-slate-300">Set a time limit and render detail</p>
                         </div>
                     </div>
+                    <span id="sum-quality" class="gen-val"></span>
+                    </summary>
                     <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div>
                             <label for="input-max-dur" class="mb-1.5 block text-sm font-semibold text-slate-200">Maximum video duration</label>
@@ -232,10 +241,11 @@
                             </select>
                         </div>
                     </div>
+                    </details>
                 </section>
 
                 <details class="background-music-card rounded-2xl border border-slate-700 bg-white p-2 shadow-xl">
-                    <summary class="cursor-pointer rounded-xl px-3 py-3 text-sm font-bold text-slate-200">Background &amp; music</summary>
+                    <summary class="cursor-pointer rounded-xl px-3 py-3 text-sm font-bold text-slate-200">Background &amp; music<span id="sum-background" class="gen-val"></span></summary>
                     <div class="space-y-4 p-3">
                             <div>
                                 <label for="input-background" class="mb-1.5 block text-sm font-semibold text-slate-200">Background source</label>
@@ -424,7 +434,7 @@
     <script src="/config.js"></script>
     <script src="/auth.js?v=9"></script>
     <script src="/nav.js?v=2"></script>
-    <script src="/app.js?v=18"></script>
+    <script src="/app.js?v=19"></script>
     <script src="/picks.js?v=2"></script>
 </body>
 </html>
