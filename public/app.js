@@ -42,6 +42,7 @@ document.addEventListener("DOMContentLoaded", () => {
         initializeRecentSelection();
         document.getElementById("generate-image-button")?.addEventListener("click", generateAyahImage);
         initializeImageSuggestions();
+        initializeSettingCards();
     } else {
         initializeLandingAuth();
     }
@@ -229,6 +230,44 @@ function scheduleDurationEstimate() {
     if (panel) panel.classList.toggle("hidden", mode !== "pick");
     if (mode !== "pick") return;
     estimateTimer = window.setTimeout(requestDurationEstimate, 400);
+}
+
+// Reciter and Quality are plain open cards on wide screens, accordions at <=820px (matches ui.css).
+function initializeSettingCards() {
+    const mobile = window.matchMedia("(max-width: 820px)");
+    const cards = document.querySelectorAll("details.gen-acc");
+    const sync = () => cards.forEach((card) => {
+        card.open = !mobile.matches;
+        card.querySelector("summary").tabIndex = mobile.matches ? 0 : -1;
+    });
+    cards.forEach((card) => card.querySelector("summary").addEventListener("click", (event) => {
+        if (!mobile.matches) event.preventDefault();
+    }));
+    mobile.addEventListener("change", sync);
+    sync();
+
+    const form = document.getElementById("reel-generator-form");
+    const refresh = () => setTimeout(updateSettingSummaries);
+    form.addEventListener("change", refresh);
+    form.addEventListener("click", refresh);
+    const observer = new MutationObserver(updateSettingSummaries); // selects are filled and limited after async loads
+    ["input-reciter", "input-urdu-voice", "input-max-dur", "input-music"].forEach((id) => {
+        observer.observe(document.getElementById(id), { childList: true, subtree: true, attributes: true, attributeFilter: ["disabled"] });
+    });
+    updateSettingSummaries();
+}
+
+function updateSettingSummaries() {
+    const text = (id) => document.getElementById(id)?.selectedOptions[0]?.textContent.trim() || "";
+    const arabicOnly = document.getElementById("input-content-mode")?.value === "arabic_only";
+    const reciter = text("input-reciter").replace(/\s*\(.*\)/, "").split(" ").pop();
+    const voice = text("input-urdu-voice").split(" ")[0];
+    const music = document.getElementById("input-music");
+    const styles = Object.keys(window.videoStyles).length;
+    document.getElementById("sum-reciter").textContent = arabicOnly ? reciter : `${reciter} / ${voice}`;
+    document.getElementById("sum-quality").textContent = `${document.getElementById("input-max-dur")?.value} s / ${text("input-quality").split(" · ")[0]}`;
+    document.getElementById("sum-style").textContent = styles ? `${styles} custom` : "Default";
+    document.getElementById("sum-background").textContent = `${text("input-background").split(" ")[0]} / ${music?.value && !music.disabled ? music.value : "No music"}`;
 }
 
 function updateMusicAvailability() {
