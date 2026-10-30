@@ -3,6 +3,7 @@ import functools
 import json
 import hashlib
 import hmac
+import io
 import logging
 import ntpath
 import os
@@ -29,9 +30,9 @@ import requests
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, RedirectResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from PIL import features
+from PIL import Image, ImageOps, features
 from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 
@@ -76,7 +77,7 @@ IMAGE_COOLDOWN_SECONDS = 10
 CLEANUP_DAYS = float(os.getenv("CLEANUP_DAYS", "3"))
 CLEANUP_INTERVAL_SECONDS = 6 * 60 * 60
 DAILY_LIMIT = int(os.getenv("DAILY_LIMIT", "5"))
-MAX_VIDEO_SECONDS = int(os.getenv("MAX_VIDEO_SECONDS", "30"))
+MAX_VIDEO_SECONDS = int(os.getenv("MAX_VIDEO_SECONDS", "35"))
 DEFAULT_QUALITY = os.getenv("DEFAULT_QUALITY", "fast")
 MAX_ACTIVE_JOBS_PER_USER = int(os.getenv("MAX_ACTIVE_JOBS_PER_USER", "1"))
 DEFAULT_RENDER_SECONDS = 90.0
@@ -313,7 +314,7 @@ def _delete_media_objects(object_paths):
         path
         for path in object_paths
         if isinstance(path, str)
-        and path.startswith(("videos/", "ayah-images/"))
+        and path.startswith(("videos/", "ayah-images/", "avatars/"))
         and ".." not in path.split("/")
     })
     if paths:
@@ -421,7 +422,39 @@ def _raise_supabase_error(response: requests.Response):
     raise HTTPException(status_code=502, detail="Supabase access check failed.")
 
 
-def get_current_user(authorization: Optional[str] = Header(default=None)):
+class AccountError(Exception):
+    """Blocked / deactivated account; rendered as 403 {"error": code, "reason": ...}."""
+
+    def __init__(self, code, reason=""):
+        self.code, self.reason = code, reason
+
+
+@app.exception_handler(AccountError)
+async def _account_error_handler(request: Request, exc: AccountError):
+    message = {
+        "account_blocked": "Your account has been blocked." + (f" Reason: {exc.reason}" if exc.reason else ""),
+        "account_deactivated": "Your account is deactivated. Open your Profile and click Reactivate.",
+    }[exc.code]
+    return JSONResponse(status_code=403, content={"error": exc.code, "reason": exc.reason, "detail": message})
+
+
+def _token_claims(token: str):
+    try:
+        payload = token.split(".")[1]
+        return json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+    except (IndexError, ValueError):
+        return {}
+
+
+def _token_auth_time(token: str) -> int:
+    """When the user actually logged in (newest amr timestamp); survives token refreshes, unlike iat."""
+    claims = _token_claims(token)
+    stamps = [a.get("timestamp") for a in claims.get("amr") or [] if isinstance(a, dict)]
+    stamps = [t for t in stamps if isinstance(t, (int, float))]
+    return int(max(stamps)) if stamps else int(claims.get("iat") or 0)
+
+
+def _authenticate(authorization, allow_deactivated=False):
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(status_code=401, detail="Please sign in to continue.")
     token = authorization[7:].strip()
@@ -429,14 +462,32 @@ def get_current_user(authorization: Optional[str] = Header(default=None)):
     now = time.monotonic()
     with AUTH_CACHE_LOCK:
         cached = AUTH_CACHE.get(cache_key)
-        if cached and cached[0] > now:
-            return dict(cached[1])
-    user = _fetch_current_user(token)
-    with AUTH_CACHE_LOCK:
-        if len(AUTH_CACHE) >= 1000:
-            AUTH_CACHE.clear()
-        AUTH_CACHE[cache_key] = (now + AUTH_CACHE_SECONDS, user)
-    return dict(user)
+    if cached and cached[0] > now:
+        user = dict(cached[1])
+    else:
+        user = _fetch_current_user(token)
+        with AUTH_CACHE_LOCK:
+            if len(AUTH_CACHE) >= 1000:
+                AUTH_CACHE.clear()
+            AUTH_CACHE[cache_key] = (now + AUTH_CACHE_SECONDS, user)
+        user = dict(user)
+    # Per request, never cached with the token: admin actions must bite on live tokens.
+    state = _users_state().get(user["id"]) or {}
+    if state.get("blocked"):
+        raise AccountError("account_blocked", state.get("reason", ""))
+    if state.get("deactivated") and not allow_deactivated:
+        raise AccountError("account_deactivated")
+    if state.get("signed_out_at") and _token_auth_time(token) < state["signed_out_at"]:
+        raise HTTPException(status_code=401, detail="Session ended. Please sign in again.")
+    return user
+
+
+def get_current_user(authorization: Optional[str] = Header(default=None)):
+    return _authenticate(authorization)
+
+
+def get_user_allow_deactivated(authorization: Optional[str] = Header(default=None)):
+    return _authenticate(authorization, allow_deactivated=True)
 
 
 def _fetch_current_user(token: str):
@@ -458,6 +509,10 @@ def _fetch_current_user(token: str):
         "is_admin": bool(access.get("is_admin")),
         "premium_access": bool(access.get("premium_access")),
         "token": token,
+        "metadata": user.get("user_metadata") or {},
+        "email_confirmed": bool(user.get("email_confirmed_at") or user.get("confirmed_at")),
+        "new_email": user.get("new_email") or "",
+        "created_at": user.get("created_at"),
     }
 
 
@@ -977,6 +1032,7 @@ def cleanup_output_on_startup():
     _quran_data()
     _cleanup_orphaned_output_files()
     _pull_history()
+    _pull_account_state()
     if os.getenv("DISABLE_CLEANUP_THREAD") != "1":
         threading.Thread(target=_cleanup_loop, name="media-cleanup", daemon=True).start()
 
@@ -1634,18 +1690,6 @@ def admin_diagnostics(user=Depends(require_admin)):
     }
 
 
-@app.get("/api/admin/users")
-def list_users(user=Depends(require_admin)):
-    response = _supabase_request(
-        "POST",
-        "/rest/v1/rpc/noor_admin_list_users",
-        user["token"],
-        json={},
-    )
-    _raise_supabase_error(response)
-    return response.json()
-
-
 @app.patch("/api/admin/users/{user_id}/premium")
 def set_premium_access(user_id: UUID, req: PremiumAccessRequest, user=Depends(require_admin)):
     response = _supabase_request(
@@ -2008,6 +2052,8 @@ def _run_generation_job(
     global EPHEMERAL_MEDIA_READY
     with GENERATION_JOBS_LOCK:
         job = GENERATION_JOBS.get(job_id)
+        if job and job.get("cancelled"):
+            return
         if job:
             job["status"] = "processing"
     started = time.monotonic()
@@ -2026,6 +2072,10 @@ def _run_generation_job(
             _cleanup_orphaned_output_files()
             completed = _run_render(cmd, timeout)
             videos = _read_generation_manifest(manifest_path)
+            if _job_cancelled(job_id):
+                for video in videos:
+                    (OUTPUT_DIR / video["filename"]).unlink(missing_ok=True)
+                raise RuntimeError("Generation cancelled because the account is unavailable.")
             if completed.returncode != 0 and not videos:
                 raise RuntimeError(completed.stderr or completed.stdout or "Video rendering failed.")
             if not videos:
@@ -2235,6 +2285,578 @@ def download_generation_batch(job_id: str, exp: Optional[str] = None, sig: Optio
         filename=f"noor-ul-quran-reels-{job_id[:10]}.zip",
         background=BackgroundTask(_remove_temporary_archive, archive_path),
     )
+
+
+# ---------------------------------------------------------------------------------------------
+# Accounts: profile, deactivate/delete, and admin user management.
+# Authoritative status lives in state/users.json (server-only). user_metadata is client-writable,
+# so it is only ever used for display_name / avatar presence, and re-validated on read.
+# ---------------------------------------------------------------------------------------------
+USERS_OBJECT = "state/users.json"
+AUDIT_OBJECT = "state/audit.json"
+USERS_FILE = OUTPUT_DIR / "users.json"
+AUDIT_FILE = OUTPUT_DIR / "audit.json"
+STATE_LOCK = Lock()
+USER_STATE_TTL = 60
+_USERS_CACHE = {"at": -1e9, "data": {}}
+_AUTH_LIST_CACHE = {"at": -1e9, "users": []}
+_SIZES_CACHE = {"at": -1e9, "sizes": {}}
+ATTEMPTS = {}
+ATTEMPTS_LOCK = Lock()
+AVATAR_MAX_BYTES = 2 * 1024 * 1024
+AVATAR_SIZE = 256
+AVATAR_MAX_PIXELS = 25_000_000
+AVATAR_MAGIC = (b"\x89PNG\r\n\x1a\n", b"\xff\xd8\xff")
+ADMIN_PAGE_SIZE = 50
+USER_ID_PATTERN = re.compile(r"[0-9a-fA-F-]{36}\Z")
+AUDIT_KEEP = 1000
+
+
+def _read_state(path, default):
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return default
+    return data if isinstance(data, type(default)) else default
+
+
+def _write_state(path, object_path, data):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(path)
+    if SUPABASE_SERVICE_KEY:
+        try:
+            _upload_media_file(path, object_path, "application/json")
+        except Exception as exc:
+            LOGGER.error("Could not back up %s to Supabase: %s", object_path, _redact_secrets(str(exc)))
+
+
+def _pull_account_state():
+    if not SUPABASE_SERVICE_KEY:
+        return
+    for object_path, path in ((USERS_OBJECT, USERS_FILE), (AUDIT_OBJECT, AUDIT_FILE)):
+        if path.exists():
+            continue
+        try:
+            _download_media_file(object_path, path)
+        except Exception as exc:
+            LOGGER.error("Could not restore %s: %s", object_path, _redact_secrets(str(exc)))
+
+
+def _users_state():
+    """{user_id: {blocked, reason, deactivated, signed_out_at}} with a 60 s in-memory cache."""
+    now = time.monotonic()
+    with STATE_LOCK:
+        if now - _USERS_CACHE["at"] > USER_STATE_TTL:
+            _USERS_CACHE.update(at=now, data=_read_state(USERS_FILE, {}))
+        return _USERS_CACHE["data"]
+
+
+def _update_user_state(user_id, **fields):
+    with STATE_LOCK:
+        data = _read_state(USERS_FILE, {})
+        entry = {**data.get(user_id, {}), **fields}
+        entry = {k: v for k, v in entry.items() if v not in (None, False, "")}
+        if entry:
+            data[user_id] = entry
+        else:
+            data.pop(user_id, None)
+        _write_state(USERS_FILE, USERS_OBJECT, data)
+        _USERS_CACHE.update(at=time.monotonic(), data=data)  # invalidate: next read sees this change
+    with AUTH_CACHE_LOCK:
+        AUTH_CACHE.clear()
+    _AUTH_LIST_CACHE["at"] = -1e9
+
+
+def _status_of(state):
+    return "blocked" if state.get("blocked") else "deactivated" if state.get("deactivated") else "active"
+
+
+def _job_cancelled(job_id):
+    return bool(GENERATION_JOBS.get(job_id, {}).get("cancelled"))
+
+
+def _cancel_user_jobs(user_id):
+    with GENERATION_JOBS_LOCK:
+        for job in GENERATION_JOBS.values():
+            if job.get("owner_id") == user_id and job["status"] in {"queued", "processing"}:
+                if job["status"] == "queued":
+                    _refund_daily_slot(user_id)
+                job.update(status="failed", cancelled=True, error="Generation cancelled because the account is unavailable.")
+
+
+def _rate_limit(key, limit=5, window=15 * 60):
+    now = time.monotonic()
+    with ATTEMPTS_LOCK:
+        recent = [t for t in ATTEMPTS.get(key, []) if now - t < window]
+        if len(recent) >= limit:
+            ATTEMPTS[key] = recent
+            raise HTTPException(status_code=429, detail="Too many attempts. Try again in 15 minutes.")
+        ATTEMPTS[key] = recent + [now]
+
+
+# --- Supabase admin API (service role, server-side only) ---
+def _admin_auth(method, path, **kwargs):
+    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+        raise HTTPException(status_code=503, detail="Supabase admin access is not configured on the server.")
+    try:
+        response = requests.request(
+            method,
+            f"{SUPABASE_URL}/auth/v1/admin{path}",
+            headers={"apikey": SUPABASE_SERVICE_KEY, "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}"},
+            timeout=20,
+            **kwargs,
+        )
+    except requests.RequestException as exc:
+        raise HTTPException(status_code=503, detail="Could not reach Supabase.") from exc
+    if response.status_code == 404:
+        raise HTTPException(status_code=404, detail="User not found.")
+    if not response.ok:
+        raise HTTPException(status_code=502, detail="Supabase admin request failed.")
+    return response
+
+
+def _set_user_metadata(user_id, **fields):
+    """Merge fields into user_metadata (None removes a key). Read-merge-write so it is safe whether
+    GoTrue merges or replaces."""
+    current = _admin_auth("GET", f"/users/{user_id}").json().get("user_metadata") or {}
+    merged = {k: v for k, v in {**current, **fields}.items() if v is not None}
+    nulls = {k: None for k, v in fields.items() if v is None}
+    _admin_auth("PUT", f"/users/{user_id}", json={"user_metadata": {**merged, **nulls}})
+    with AUTH_CACHE_LOCK:
+        AUTH_CACHE.clear()
+
+
+def _admin_ids():
+    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+        return set()
+    try:
+        response = requests.get(
+            f"{SUPABASE_URL}/rest/v1/noor_admins?select=user_id",
+            headers={"apikey": SUPABASE_SERVICE_KEY, "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}"},
+            timeout=15,
+        )
+        response.raise_for_status()
+        return {row["user_id"] for row in response.json()}
+    except (requests.RequestException, ValueError, KeyError) as exc:
+        raise HTTPException(status_code=503, detail="Could not verify the admin list.") from exc
+
+
+def _is_last_active_admin(user_id):
+    """True if user_id is an admin and no other unblocked admin would remain."""
+    admins = _admin_ids()
+    if user_id not in admins:
+        return False
+    state = _users_state()
+    return not any(a != user_id and not (state.get(a) or {}).get("blocked") for a in admins)
+
+
+def _verify_password(user, password):
+    response = _supabase_request(
+        "POST", "/auth/v1/token?grant_type=password", SUPABASE_KEY,
+        json={"email": user["email"], "password": password},
+    )
+    if response.status_code in (400, 401, 403, 422):
+        raise HTTPException(status_code=403, detail="Current password is incorrect.")
+    if not response.ok:
+        raise HTTPException(status_code=502, detail="Could not verify the password.")
+
+
+# --- profile helpers ---
+def _clean_text(value, limit):
+    if not isinstance(value, str):
+        return ""
+    return "".join(ch for ch in value if ch.isprintable()).strip()[:limit]
+
+
+def _avatar_path(user_id):
+    return f"avatars/{user_id}.webp"
+
+
+def _display_name(user):
+    meta = user.get("metadata") or {}
+    name = _clean_text(meta.get("display_name"), 40) or _clean_text(meta.get("full_name"), 40)
+    return name if len(name) >= 2 else (user.get("email") or "User").split("@")[0][:40]
+
+
+def _avatar_url(user):
+    if (user.get("metadata") or {}).get("avatar_path") != _avatar_path(user["id"]) or not SUPABASE_SERVICE_KEY:
+        return None
+    try:
+        return _signed_media_url(_avatar_path(user["id"]))
+    except Exception:
+        return None
+
+
+def _profile(user):
+    state = _users_state().get(user["id"]) or {}
+    return {
+        "id": user["id"],
+        "email": user["email"],
+        "email_confirmed": user.get("email_confirmed", True),
+        "new_email": user.get("new_email", ""),
+        "display_name": _display_name(user),
+        "avatar_url": _avatar_url(user),
+        "status": _status_of(state),
+        "is_admin": user["is_admin"],
+        "premium_access": user["premium_access"],
+        "created_at": user.get("created_at"),
+    }
+
+
+def _storage_sizes():
+    """{object_path: bytes} for videos/, ayah-images/ and avatars/, cached 60 s."""
+    now = time.monotonic()
+    if now - _SIZES_CACHE["at"] > 60:
+        sizes = {}
+        if SUPABASE_SERVICE_KEY:
+            try:
+                for prefix in ("videos", "ayah-images", "avatars"):
+                    for item in _list_all_media_objects(prefix):
+                        sizes[f"{prefix}/{item['name']}"] = int((item.get("metadata") or {}).get("size") or 0)
+            except Exception as exc:
+                LOGGER.warning("Could not list storage sizes: %s", _redact_secrets(str(exc)))
+        _SIZES_CACHE.update(at=now, sizes=sizes)
+    return _SIZES_CACHE["sizes"]
+
+
+def _entry_object_path(entry):
+    if entry.get("object_path"):
+        return entry["object_path"]
+    return f"ayah-images/{entry['filename']}" if entry.get("type") == "image" and entry.get("filename") else None
+
+
+def _user_entries(user_id):
+    with HISTORY_LOCK:
+        entries = _read_video_history_unlocked()["users"].get(user_id, [])
+    return [e for e in entries if isinstance(e, dict)] if isinstance(entries, list) else []
+
+
+def _usage(user_id):
+    sizes = _storage_sizes()
+    entries = _user_entries(user_id)
+    total = sizes.get(_avatar_path(user_id), 0)
+    for entry in entries:
+        local = _safe_history_video_path(entry.get("filename"))
+        if local is not None and local.is_file():
+            total += local.stat().st_size
+        else:
+            total += sizes.get(_entry_object_path(entry), 0)
+    images = sum(e.get("type") == "image" for e in entries)
+    return {"videos": len(entries) - images, "images": images, "bytes": total}
+
+
+def _purge_user_content(user_id, avatar=True):
+    """Delete the user's stored files (raises on storage failure, nothing else is touched then) and history."""
+    entries = _user_entries(user_id)
+    paths = {p for p in map(_entry_object_path, entries) if p}
+    if avatar:
+        paths.add(_avatar_path(user_id))
+    paths = sorted(paths)
+    for start in range(0, len(paths), 100):
+        _delete_media_objects(paths[start:start + 100])
+    for entry in entries:
+        local = _safe_history_video_path(entry.get("filename"))
+        if local is not None:
+            local.unlink(missing_ok=True)
+    with HISTORY_LOCK:
+        history = _read_video_history_unlocked()
+        history["users"].pop(user_id, None)
+        _write_video_history_unlocked(history)
+    _SIZES_CACHE["at"] = -1e9
+    return len(entries)
+
+
+# --- /api/me ---
+class ProfileUpdate(BaseModel):
+    display_name: str
+
+
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str
+
+
+class DeleteAccount(BaseModel):
+    password: str
+    confirm: str
+
+
+class BlockRequest(BaseModel):
+    reason: str = Field(default="", max_length=200)
+
+
+@app.get("/api/me")
+def get_me(user=Depends(get_user_allow_deactivated)):
+    return _profile(user)
+
+
+@app.get("/api/me/usage")
+def get_my_usage(user=Depends(get_current_user)):
+    return _usage(user["id"])
+
+
+@app.put("/api/me")
+def update_me(req: ProfileUpdate, user=Depends(get_current_user)):
+    name = _clean_text(req.display_name, 41)
+    if not 2 <= len(name) <= 40:
+        raise HTTPException(status_code=400, detail="Name must be 2 to 40 characters.")
+    _set_user_metadata(user["id"], display_name=name)
+    return {**_profile(user), "display_name": name}
+
+
+def _decode_avatar(data: bytes) -> bytes:
+    if not data.startswith(AVATAR_MAGIC) and not (data[:4] == b"RIFF" and data[8:12] == b"WEBP"):
+        raise HTTPException(status_code=400, detail="Photo must be a PNG, JPG or WebP image.")
+    try:
+        image = Image.open(io.BytesIO(data))
+        if image.width * image.height > AVATAR_MAX_PIXELS:
+            raise HTTPException(status_code=400, detail="Photo dimensions are too large.")
+        image = ImageOps.exif_transpose(image)
+        image = ImageOps.fit(image.convert("RGBA" if "A" in image.getbands() else "RGB"), (AVATAR_SIZE, AVATAR_SIZE))
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Photo could not be read.") from exc
+    out = io.BytesIO()
+    image.save(out, "WEBP", quality=85)
+    return out.getvalue()
+
+
+def _put_media_bytes(object_path, data, content_type):
+    _storage_request(
+        "POST", f"/object/{quote(MEDIA_BUCKET, safe='')}/{quote(object_path, safe='/')}",
+        data=data, headers={"Content-Type": content_type, "x-upsert": "true"},
+    )
+
+
+@app.post("/api/me/avatar")
+async def upload_avatar(request: Request, user=Depends(get_current_user)):
+    length = request.headers.get("content-length", "")
+    if length.isdigit() and int(length) > AVATAR_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="Photo must be 2 MB or smaller.")
+    body = bytearray()
+    async for chunk in request.stream():
+        body.extend(chunk)
+        if len(body) > AVATAR_MAX_BYTES:
+            raise HTTPException(status_code=413, detail="Photo must be 2 MB or smaller.")
+    webp = _decode_avatar(bytes(body))
+    _put_media_bytes(_avatar_path(user["id"]), webp, "image/webp")
+    _set_user_metadata(user["id"], avatar_path=_avatar_path(user["id"]))
+    return {"avatar_url": _signed_media_url(_avatar_path(user["id"]))}
+
+
+@app.delete("/api/me/avatar")
+def remove_avatar(user=Depends(get_current_user)):
+    _delete_media_objects([_avatar_path(user["id"])])
+    _set_user_metadata(user["id"], avatar_path=None)
+    return {"avatar_url": None}
+
+
+@app.post("/api/me/password")
+def change_password(req: PasswordChange, user=Depends(get_current_user)):
+    _rate_limit(f"pw:{user['id']}")
+    if len(req.new_password) < 8 or len(req.new_password) > 128:
+        raise HTTPException(status_code=400, detail="New password must be 8 to 128 characters.")
+    _verify_password(user, req.current_password)
+    _admin_auth("PUT", f"/users/{user['id']}", json={"password": req.new_password})
+    return {"changed": True}
+
+
+@app.post("/api/me/deactivate")
+def deactivate_me(user=Depends(get_current_user)):
+    _update_user_state(user["id"], deactivated=True)
+    _cancel_user_jobs(user["id"])
+    try:
+        _set_user_metadata(user["id"], status="deactivated")
+    except HTTPException:
+        LOGGER.warning("Could not mirror deactivated status to user_metadata")
+    return {"status": "deactivated"}
+
+
+@app.post("/api/me/reactivate")
+def reactivate_me(user=Depends(get_user_allow_deactivated)):
+    _update_user_state(user["id"], deactivated=False)
+    try:
+        _set_user_metadata(user["id"], status=None)
+    except HTTPException:
+        LOGGER.warning("Could not clear deactivated status in user_metadata")
+    return {"status": "active"}
+
+
+@app.post("/api/me/delete")
+def delete_me(req: DeleteAccount, user=Depends(get_user_allow_deactivated)):
+    if req.confirm != "DELETE":
+        raise HTTPException(status_code=400, detail="Type DELETE to confirm.")
+    _rate_limit(f"pw:{user['id']}")
+    _verify_password(user, req.password)
+    if _is_last_active_admin(user["id"]):
+        raise HTTPException(status_code=409, detail="You are the last admin and cannot delete this account.")
+    _cancel_user_jobs(user["id"])
+    removed = _purge_user_content(user["id"])
+    _admin_auth("DELETE", f"/users/{user['id']}")
+    _update_user_state(user["id"], blocked=False, deactivated=False, reason="", signed_out_at=None)
+    return {"deleted": True, "items_removed": removed}
+
+
+@app.get("/api/me/export")
+def export_me(user=Depends(get_current_user)):
+    profile = _profile(user)
+    profile.pop("avatar_url")
+    return {
+        "exported_at": datetime.now(timezone.utc).isoformat(),
+        "profile": profile,
+        "history": [{k: v for k, v in e.items() if k != "object_path"} for e in _user_entries(user["id"])],
+    }
+
+
+# --- admin: users ---
+def _audit(actor, target_id, target_email, action, reason=""):
+    with STATE_LOCK:
+        log = _read_state(AUDIT_FILE, [])
+        log.append({
+            "at": datetime.now(timezone.utc).isoformat(), "actor_id": actor["id"], "actor_email": actor["email"],
+            "target_id": target_id, "target_email": target_email, "action": action, "reason": reason,
+        })
+        _write_state(AUDIT_FILE, AUDIT_OBJECT, log[-AUDIT_KEEP:])
+
+
+def _all_auth_users():
+    now = time.monotonic()
+    if now - _AUTH_LIST_CACHE["at"] > 20:
+        users, page = [], 1
+        while page <= 10:
+            batch = _admin_auth("GET", f"/users?page={page}&per_page=1000").json().get("users", [])
+            users.extend(batch)
+            if len(batch) < 1000:
+                break
+            page += 1
+        _AUTH_LIST_CACHE.update(at=now, users=users)
+    return _AUTH_LIST_CACHE["users"]
+
+
+def _premium_ids():
+    try:
+        response = requests.get(
+            f"{SUPABASE_URL}/rest/v1/noor_user_access?select=user_id&premium_access=eq.true",
+            headers={"apikey": SUPABASE_SERVICE_KEY, "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}"},
+            timeout=15,
+        )
+        response.raise_for_status()
+        return {row["user_id"] for row in response.json()}
+    except (requests.RequestException, ValueError, KeyError):
+        return set()
+
+
+def _signed_urls(paths):
+    """Batch-sign storage paths -> {path: url}; best effort."""
+    if not paths:
+        return {}
+    try:
+        response = _storage_request(
+            "POST", f"/object/sign/{quote(MEDIA_BUCKET, safe='')}",
+            json={"expiresIn": 3600, "paths": list(paths)},
+        )
+        return {
+            row["path"]: (row["signedURL"] if row["signedURL"].startswith("http") else f"{SUPABASE_URL}/storage/v1{row['signedURL']}")
+            for row in response.json() if row.get("signedURL")
+        }
+    except Exception:
+        return {}
+
+
+@app.get("/api/admin/users")
+def admin_users(q: str = "", status: str = "all", page: int = 1, user=Depends(require_admin)):
+    if status not in {"all", "active", "blocked", "deactivated"}:
+        raise HTTPException(status_code=400, detail="Invalid status filter.")
+    state, premium, admins = _users_state(), _premium_ids(), _admin_ids()
+    rows = []
+    for item in _all_auth_users():
+        meta = item.get("user_metadata") or {}
+        entry = state.get(item["id"]) or {}
+        rows.append({
+            "id": item["id"],
+            "email": item.get("email") or "",
+            "display_name": _clean_text(meta.get("display_name"), 40) or _clean_text(meta.get("full_name"), 40),
+            "created_at": item.get("created_at"),
+            "last_sign_in_at": item.get("last_sign_in_at"),
+            "status": _status_of(entry),
+            "reason": entry.get("reason", ""),
+            "premium_access": item["id"] in premium or item["id"] in admins,
+            "is_admin": item["id"] in admins,
+            "_avatar": meta.get("avatar_path") if meta.get("avatar_path") == _avatar_path(item["id"]) else None,
+        })
+    stats = {"total": len(rows), "premium": sum(r["premium_access"] for r in rows)}
+    needle = q.strip().lower()
+    rows = [
+        r for r in rows
+        if (status == "all" or r["status"] == status)
+        and (not needle or needle in f"{r['email']} {r['display_name']}".lower())
+    ]
+    rows.sort(key=lambda r: r["created_at"] or "", reverse=True)
+    page = max(1, page)
+    window = rows[(page - 1) * ADMIN_PAGE_SIZE: page * ADMIN_PAGE_SIZE]
+    urls = _signed_urls([r["_avatar"] for r in window if r["_avatar"]])
+    today = _today()
+    for r in window:
+        r["avatar_url"] = urls.get(r.pop("_avatar"))
+        day, count = DAILY_USAGE.get(r["id"], (None, 0))
+        r["videos_today"] = count if day == today else 0
+        r["storage_bytes"] = _usage(r["id"])["bytes"]
+    return {"users": window, "total": len(rows), "page": page, "per_page": ADMIN_PAGE_SIZE, "stats": stats}
+
+
+def _target(user_id):
+    if USER_ID_PATTERN.fullmatch(user_id) is None:
+        raise HTTPException(status_code=400, detail="Invalid user id.")
+    return _admin_auth("GET", f"/users/{user_id}").json()
+
+
+@app.post("/api/admin/users/{user_id}/block")
+def admin_block(user_id: str, req: BlockRequest, user=Depends(require_admin)):
+    target = _target(user_id)
+    if user_id == user["id"] or _is_last_active_admin(user_id):
+        raise HTTPException(status_code=409, detail="You cannot block yourself or the last admin.")
+    reason = _clean_text(req.reason, 200)
+    _admin_auth("PUT", f"/users/{user_id}", json={"ban_duration": "876000h"})
+    _update_user_state(user_id, blocked=True, reason=reason)
+    _cancel_user_jobs(user_id)
+    _audit(user, user_id, target.get("email", ""), "block", reason)
+    return {"status": "blocked"}
+
+
+@app.post("/api/admin/users/{user_id}/unblock")
+def admin_unblock(user_id: str, user=Depends(require_admin)):
+    target = _target(user_id)
+    _admin_auth("PUT", f"/users/{user_id}", json={"ban_duration": "none"})
+    _update_user_state(user_id, blocked=False, reason="")
+    _audit(user, user_id, target.get("email", ""), "unblock")
+    return {"status": "active"}
+
+
+@app.post("/api/admin/users/{user_id}/signout")
+def admin_signout(user_id: str, user=Depends(require_admin)):
+    target = _target(user_id)
+    # Supabase has no revoke-by-id endpoint; instead reject every token whose login predates now.
+    _update_user_state(user_id, signed_out_at=int(time.time()))
+    _audit(user, user_id, target.get("email", ""), "signout")
+    return {"signed_out": True}
+
+
+@app.post("/api/admin/users/{user_id}/purge")
+def admin_purge(user_id: str, user=Depends(require_admin)):
+    target = _target(user_id)
+    _cancel_user_jobs(user_id)
+    removed = _purge_user_content(user_id, avatar=False)
+    _audit(user, user_id, target.get("email", ""), "purge", f"{removed} items")
+    return {"items_removed": removed}
+
+
+@app.get("/api/admin/audit")
+def admin_audit(user=Depends(require_admin)):
+    with STATE_LOCK:
+        return {"entries": list(reversed(_read_state(AUDIT_FILE, [])[-50:]))}
 
 
 # 7. Static Web Files Serve Karein (MUST BE AT THE VERY BOTTOM)

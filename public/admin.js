@@ -1,6 +1,10 @@
 const adminMessage = document.getElementById("admin-message");
 const API_BASE_URL = (window.NOOR_API_BASE_URL || window.NOOR_SUPABASE_CONFIG?.apiBaseUrl || "/api").replace(/\/$/, "");
-let adminUsers = [];
+let adminStats = { total: 0, premium: 0 };
+let selfId = "";
+let usersPage = 1;
+let usersTotal = 0;
+const USERS_PER_PAGE = 50;
 
 function showAdminMessage(message, isError = false) {
     adminMessage.textContent = message;
@@ -54,8 +58,9 @@ async function initializeAdmin() {
             window.location.replace("/");
             return;
         }
-        document.getElementById("admin-email").textContent = access.email;
+        selfId = access.user_id;
         await loadUsers();
+        await loadAudit();
         await loadBackgrounds();
         await loadMusic();
         await loadDiagnostics();
@@ -65,92 +70,241 @@ async function initializeAdmin() {
 }
 
 function renderSummary() {
-    const totalUsers = adminUsers.length;
-    const premiumUsers = adminUsers.filter((user) => Boolean(user.premium_access)).length;
     const totalUsersStat = document.getElementById("stat-total-users");
     const premiumUsersStat = document.getElementById("stat-premium-users");
     const backgroundsBadge = document.getElementById("stat-backgrounds-badge");
     const backgroundCount = document.getElementById("stat-backgrounds");
 
-    if (totalUsersStat) totalUsersStat.textContent = String(totalUsers);
-    if (premiumUsersStat) premiumUsersStat.textContent = String(premiumUsers);
+    if (totalUsersStat) totalUsersStat.textContent = String(adminStats.total);
+    if (premiumUsersStat) premiumUsersStat.textContent = String(adminStats.premium);
     if (backgroundCount) backgroundCount.textContent = String(backgroundCount.dataset.count || "0");
     if (backgroundsBadge) backgroundsBadge.textContent = `${backgroundCount?.dataset.count || 0} files`;
 }
 
 async function loadUsers() {
-    const body = document.getElementById("users-table");
-    body.innerHTML = '<tr><td colspan="4" class="px-3 py-8 text-center text-slate-500">Loading users...</td></tr>';
+    const list = document.getElementById("users-list");
+    const params = new URLSearchParams({
+        q: document.getElementById("user-search").value.trim(),
+        status: document.getElementById("user-status").value,
+        page: String(usersPage)
+    });
     try {
-        adminUsers = await adminRequest("/admin/users");
+        const result = await adminRequest(`/admin/users?${params}`);
+        adminStats = result.stats;
+        usersTotal = result.total;
         renderSummary();
-        renderUsers();
+        renderUsers(result.users);
     } catch (error) {
-        body.innerHTML = "";
+        list.replaceChildren();
         showAdminMessage(error.message, true);
     }
 }
 
-function renderUsers() {
-    const body = document.getElementById("users-table");
-    const query = document.getElementById("user-search").value.trim().toLowerCase();
-    const filtered = adminUsers.filter((user) =>
-        `${user.display_name || ""} ${user.email || ""} ${user.user_id}`.toLowerCase().includes(query)
-    );
-    document.getElementById("user-count").textContent = `${filtered.length} of ${adminUsers.length} users`;
-    body.replaceChildren();
+function formatWhen(value) {
+    const date = value ? new Date(value) : null;
+    return date && !Number.isNaN(date.getTime()) ? date.toLocaleString() : "—";
+}
 
-    if (!filtered.length) {
-        body.innerHTML = '<tr><td colspan="4" class="px-3 py-8 text-center text-slate-500">No users found.</td></tr>';
+function userFact(label, value) {
+    const box = document.createElement("div");
+    const term = document.createElement("dt");
+    term.textContent = label;
+    const detail = document.createElement("dd");
+    detail.textContent = value;
+    box.append(term, detail);
+    return box;
+}
+
+function actionButton(label, className, onClick) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `btn btn-sm ${className}`;
+    button.textContent = label;
+    button.addEventListener("click", async () => {
+        button.disabled = true;
+        try {
+            await onClick();
+        } catch (error) {
+            showAdminMessage(error.message, true);
+        } finally {
+            button.disabled = false;
+        }
+    });
+    return button;
+}
+
+function askReason(email) {
+    return new Promise((resolve) => {
+        const dialog = document.createElement("dialog");
+        dialog.className = "confirm";
+        const title = document.createElement("h3");
+        title.textContent = `Block ${email}?`;
+        const label = document.createElement("label");
+        label.textContent = "Reason (optional, user ko dikhayi jayegi)";
+        label.htmlFor = "block-reason";
+        const input = document.createElement("textarea");
+        input.id = "block-reason";
+        input.maxLength = 200;
+        input.rows = 3;
+        input.className = "control";
+        const row = document.createElement("div");
+        row.className = "pf-row";
+        const cancel = document.createElement("button");
+        cancel.type = "button";
+        cancel.className = "btn btn-outline";
+        cancel.textContent = "Cancel";
+        const ok = document.createElement("button");
+        ok.type = "button";
+        ok.className = "btn btn-danger";
+        ok.textContent = "Block";
+        row.append(cancel, ok);
+        dialog.append(title, label, input, row);
+        const done = (value) => { dialog.close(); dialog.remove(); resolve(value); };
+        cancel.addEventListener("click", () => done(null));
+        ok.addEventListener("click", () => done(input.value.trim()));
+        dialog.addEventListener("cancel", (event) => { event.preventDefault(); done(null); });
+        document.body.append(dialog);
+        dialog.showModal();
+        input.focus();
+    });
+}
+
+async function userAction(user, action, body) {
+    await adminRequest(`/admin/users/${encodeURIComponent(user.id)}/${action}`, {
+        method: "POST",
+        ...(body ? { body: JSON.stringify(body) } : {})
+    });
+    await Promise.all([loadUsers(), loadAudit()]);
+}
+
+function renderUsers(users) {
+    const list = document.getElementById("users-list");
+    list.replaceChildren();
+    document.getElementById("user-count").textContent = `${usersTotal} users`;
+    const pages = Math.max(1, Math.ceil(usersTotal / USERS_PER_PAGE));
+    document.getElementById("users-page").textContent = `Page ${usersPage} of ${pages}`;
+    document.getElementById("users-prev").disabled = usersPage <= 1;
+    document.getElementById("users-next").disabled = usersPage >= pages;
+
+    if (!users.length) {
+        const empty = document.createElement("li");
+        empty.className = "lib-empty";
+        empty.textContent = "No users found.";
+        list.append(empty);
         return;
     }
 
-    for (const user of filtered) {
-        const row = document.createElement("tr");
-        row.className = "hover:bg-slate-900/70";
-        const nameCell = document.createElement("td");
-        nameCell.className = "px-3 py-4 font-medium text-slate-200";
-        nameCell.textContent = user.display_name || "No display name";
-        const emailCell = document.createElement("td");
-        emailCell.className = "px-3 py-4 text-slate-400";
-        emailCell.textContent = user.email || user.user_id;
-        const dateCell = document.createElement("td");
-        dateCell.className = "px-3 py-4 text-slate-500";
-        dateCell.textContent = user.created_at ? new Date(user.created_at).toLocaleDateString() : "";
-        const accessCell = document.createElement("td");
-        accessCell.className = "px-3 py-4";
-        const label = document.createElement("label");
-        label.className = "inline-flex items-center gap-2 text-sm text-slate-300";
+    for (const user of users) {
+        const item = document.createElement("li");
+        item.className = "au-item";
+
+        const head = document.createElement("div");
+        head.className = "au-head";
+        const avatar = document.createElement("span");
+        avatar.className = "nav-avatar nav-avatar-md";
+        if (user.avatar_url) {
+            const img = document.createElement("img");
+            img.alt = "";
+            img.src = user.avatar_url;
+            avatar.append(img);
+        } else {
+            avatar.textContent = (user.display_name || user.email || "?").charAt(0).toUpperCase();
+        }
+        const who = document.createElement("div");
+        who.className = "au-who";
+        const name = document.createElement("strong");
+        name.textContent = user.display_name || "No display name";
+        const email = document.createElement("small");
+        email.textContent = user.email;
+        who.append(name, email);
+        const status = document.createElement("span");
+        status.className = `pf-badge au-status ${user.status === "blocked" ? "bad" : user.status === "deactivated" ? "warn" : ""}`;
+        status.textContent = user.status;
+        head.append(avatar, who, status);
+
+        const facts = document.createElement("dl");
+        facts.className = "au-facts";
+        facts.append(
+            userFact("Created", formatWhen(user.created_at)),
+            userFact("Last sign-in", formatWhen(user.last_sign_in_at)),
+            userFact("Videos today", String(user.videos_today)),
+            userFact("Storage", `${(user.storage_bytes / (1024 * 1024)).toFixed(1)} MB`)
+        );
+        if (user.reason) facts.append(userFact("Block reason", user.reason));
+
+        const actions = document.createElement("div");
+        actions.className = "au-actions";
+        const premium = document.createElement("label");
+        premium.className = "lib-check";
         const checkbox = document.createElement("input");
         checkbox.type = "checkbox";
         checkbox.checked = Boolean(user.premium_access);
-        checkbox.className = "h-4 w-4 accent-amber-500";
-        checkbox.setAttribute("aria-label", `Premium access for ${user.email || user.user_id}`);
+        checkbox.disabled = user.is_admin;
+        checkbox.setAttribute("aria-label", `Premium access for ${user.email}`);
         checkbox.addEventListener("change", () => updatePremium(user, checkbox));
-        const accessText = document.createElement("span");
-        accessText.textContent = "Premium";
-        label.append(checkbox, accessText);
-        accessCell.append(label);
-        row.append(nameCell, emailCell, dateCell, accessCell);
-        body.append(row);
+        premium.append(checkbox, document.createTextNode("Premium"));
+        actions.append(premium);
+        if (user.status === "blocked") {
+            actions.append(actionButton("Unblock", "btn-outline", () => userAction(user, "unblock")));
+        } else if (user.id !== selfId) {
+            actions.append(actionButton("Block", "btn-danger-outline", async () => {
+                const reason = await askReason(user.email);
+                if (reason !== null) await userAction(user, "block", { reason });
+            }));
+        }
+        actions.append(
+            actionButton("Sign out everywhere", "btn-outline", () => userAction(user, "signout")),
+            actionButton("Delete content", "btn-danger-outline", async () => {
+                const ok = await window.noorConfirm(`Delete all content of ${user.email}?`, "Saari videos aur images delete hongi. Yeh wapas nahi ho sakta.", { label: "Delete content", danger: true });
+                if (ok) await userAction(user, "purge");
+            })
+        );
+        item.append(head, facts, actions);
+        list.append(item);
     }
 }
 
 async function updatePremium(user, checkbox) {
     checkbox.disabled = true;
     try {
-        await adminRequest(`/admin/users/${encodeURIComponent(user.user_id)}/premium`, {
+        await adminRequest(`/admin/users/${encodeURIComponent(user.id)}/premium`, {
             method: "PATCH",
             body: JSON.stringify({ enabled: checkbox.checked })
         });
         user.premium_access = checkbox.checked;
-        showAdminMessage(`${user.email || user.user_id}: premium access ${checkbox.checked ? "granted" : "revoked"}.`);
+        showAdminMessage(`${user.email}: premium access ${checkbox.checked ? "granted" : "revoked"}.`);
     } catch (error) {
         checkbox.checked = !checkbox.checked;
         showAdminMessage(error.message, true);
     } finally {
         checkbox.disabled = false;
     }
+}
+
+async function loadAudit() {
+    const list = document.getElementById("audit-list");
+    try {
+        const { entries } = await adminRequest("/admin/audit");
+        list.replaceChildren();
+        if (!entries.length) {
+            const empty = document.createElement("li");
+            empty.textContent = "No admin actions yet.";
+            list.append(empty);
+        }
+        for (const entry of entries) {
+            const row = document.createElement("li");
+            row.textContent = `${formatWhen(entry.at)} · ${entry.actor_email} → ${entry.action} → ${entry.target_email}${entry.reason ? ` (${entry.reason})` : ""}`;
+            list.append(row);
+        }
+    } catch (error) {
+        showAdminMessage(error.message, true);
+    }
+}
+
+let searchTimer = null;
+function reloadUsersFromStart() {
+    usersPage = 1;
+    loadUsers();
 }
 
 function deleteButton(path, filename, reload) {
@@ -334,8 +488,15 @@ async function uploadMusic(event) {
 }
 
 document.getElementById("refresh-users").addEventListener("click", loadUsers);
+document.getElementById("refresh-audit").addEventListener("click", loadAudit);
+document.getElementById("user-search").addEventListener("input", () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(reloadUsersFromStart, 300);
+});
+document.getElementById("user-status").addEventListener("change", reloadUsersFromStart);
+document.getElementById("users-prev").addEventListener("click", () => { usersPage -= 1; loadUsers(); });
+document.getElementById("users-next").addEventListener("click", () => { usersPage += 1; loadUsers(); });
 document.getElementById("refresh-diagnostics").addEventListener("click", loadDiagnostics);
-document.getElementById("user-search").addEventListener("input", renderUsers);
 document.getElementById("background-upload-form").addEventListener("submit", uploadBackground);
 document.getElementById("music-upload-form").addEventListener("submit", uploadMusic);
 document.addEventListener("DOMContentLoaded", initializeAdmin);

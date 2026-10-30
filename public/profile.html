@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#f2f6f3">
+    <title>Profile | Noor ul Quran</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/ui.css?v=2">
+</head>
+<body class="ui-page ui-profile">
+    <header id="site-header"></header>
+
+    <main class="page-wrap">
+        <h1 class="page-title">Profile</h1>
+        <p class="page-sub">Apna naam, photo, email aur password yahan se manage karein.</p>
+
+        <div class="stack">
+            <section class="ui-card pf-card" aria-labelledby="h-profile">
+                <h2 id="h-profile">Profile</h2>
+                <p class="hint">Display name 2–40 characters. Photo: PNG, JPG ya WebP, max 2 MB.</p>
+                <div class="pf-row" style="margin-bottom:14px">
+                    <span id="pf-avatar" class="nav-avatar nav-avatar-xl" aria-hidden="true"></span>
+                    <div class="pf-row">
+                        <input id="pf-avatar-file" type="file" accept="image/png,image/jpeg,image/webp" hidden>
+                        <button id="pf-avatar-pick" type="button" class="btn btn-outline">Change photo</button>
+                        <button id="pf-avatar-remove" type="button" class="btn btn-danger-outline" hidden>Remove photo</button>
+                    </div>
+                </div>
+                <p id="pf-avatar-msg" class="pf-msg" role="status"></p>
+                <form id="pf-name-form" novalidate>
+                    <div class="pf-field">
+                        <label for="pf-name">Display name</label>
+                        <input id="pf-name" type="text" minlength="2" maxlength="40" autocomplete="nickname" required>
+                    </div>
+                    <button class="btn btn-primary" type="submit">Save name</button>
+                    <p id="pf-name-msg" class="pf-msg" role="status"></p>
+                </form>
+            </section>
+
+            <section class="ui-card pf-card" aria-labelledby="h-email">
+                <h2 id="h-email">Email</h2>
+                <p class="hint"><span id="pf-email"></span> <span id="pf-email-state" class="pf-badge"></span></p>
+                <p id="pf-email-pending" class="pf-msg" hidden></p>
+                <form id="pf-email-form" novalidate>
+                    <div class="pf-field">
+                        <label for="pf-new-email">New email</label>
+                        <input id="pf-new-email" type="email" autocomplete="email" required>
+                    </div>
+                    <button class="btn btn-outline" type="submit">Change email</button>
+                    <p class="hint" style="margin-top:8px">Ek confirmation mail naye address par bheji jayegi; email tab tak nahi badlegi jab tak aap link na kholein.</p>
+                    <p id="pf-email-msg" class="pf-msg" role="status"></p>
+                </form>
+            </section>
+
+            <section class="ui-card pf-card" aria-labelledby="h-password">
+                <h2 id="h-password">Password</h2>
+                <form id="pf-pass-form" novalidate>
+                    <div class="pf-field">
+                        <label for="pf-pass-current">Current password</label>
+                        <div class="pw-wrap"><input id="pf-pass-current" type="password" autocomplete="current-password" required><button type="button" class="pw-toggle" aria-label="Show password"><i class="fa-solid fa-eye" aria-hidden="true"></i></button></div>
+                    </div>
+                    <div class="pf-field">
+                        <label for="pf-pass-new">New password (min 8)</label>
+                        <div class="pw-wrap"><input id="pf-pass-new" type="password" minlength="8" autocomplete="new-password" required><button type="button" class="pw-toggle" aria-label="Show password"><i class="fa-solid fa-eye" aria-hidden="true"></i></button></div>
+                    </div>
+                    <div class="pf-field">
+                        <label for="pf-pass-confirm">Confirm new password</label>
+                        <div class="pw-wrap"><input id="pf-pass-confirm" type="password" minlength="8" autocomplete="new-password" required><button type="button" class="pw-toggle" aria-label="Show password"><i class="fa-solid fa-eye" aria-hidden="true"></i></button></div>
+                    </div>
+                    <div class="pf-row">
+                        <button class="btn btn-primary" type="submit">Change password</button>
+                        <button id="pf-signout-others" type="button" class="btn btn-outline" hidden>Sign out of other devices</button>
+                    </div>
+                    <p id="pf-pass-msg" class="pf-msg" role="status"></p>
+                </form>
+            </section>
+
+            <section class="ui-card pf-card" aria-labelledby="h-usage">
+                <h2 id="h-usage">Usage</h2>
+                <div class="pf-stats">
+                    <div class="pf-stat"><b id="us-left">–</b><span>Videos left today</span></div>
+                    <div class="pf-stat"><b id="us-videos">–</b><span>Stored videos</span></div>
+                    <div class="pf-stat"><b id="us-images">–</b><span>Stored images</span></div>
+                    <div class="pf-stat"><b id="us-storage">–</b><span>Storage used (approx.)</span></div>
+                </div>
+                <div class="pf-row" style="margin-top:14px">
+                    <button id="pf-export" type="button" class="btn btn-outline"><i class="fa-solid fa-download" aria-hidden="true"></i>Download my data</button>
+                </div>
+                <p id="pf-export-msg" class="pf-msg" role="status"></p>
+            </section>
+
+            <section class="ui-card pf-card danger-zone">
+                <details id="pf-danger">
+                    <summary>Danger zone</summary>
+                    <div class="danger-block">
+                        <h2>Deactivate account</h2>
+                        <p class="hint">Aap sign out ho jayenge aur dobara sign in karke Reactivate tak kuch generate ya dekh nahi sakenge. Aap ki files mehfooz rehti hain.</p>
+                        <button id="pf-deactivate" type="button" class="btn btn-danger-outline">Deactivate account</button>
+                        <p id="pf-deactivate-msg" class="pf-msg" role="status"></p>
+                    </div>
+                    <form id="pf-delete-form" class="danger-block" novalidate>
+                        <h2>Delete account permanently</h2>
+                        <p class="hint">Aap ki saari videos, images, photo aur history hamesha ke liye delete ho jayengi. Yeh wapas nahi ho sakta.</p>
+                        <div class="pf-field">
+                            <label for="pf-del-confirm">Type DELETE to confirm</label>
+                            <input id="pf-del-confirm" type="text" autocomplete="off" autocapitalize="characters">
+                        </div>
+                        <div class="pf-field">
+                            <label for="pf-del-pass">Password</label>
+                            <div class="pw-wrap"><input id="pf-del-pass" type="password" autocomplete="current-password"><button type="button" class="pw-toggle" aria-label="Show password"><i class="fa-solid fa-eye" aria-hidden="true"></i></button></div>
+                        </div>
+                        <button id="pf-delete" class="btn btn-danger" type="submit" disabled>Delete my account</button>
+                        <p id="pf-delete-msg" class="pf-msg" role="status" aria-live="polite"></p>
+                    </form>
+                </details>
+            </section>
+        </div>
+    </main>
+
+    <footer class="page-wrap" style="padding-top:0;text-align:center">
+        <a href="/privacy.html">Privacy</a> · <a href="/terms.html">Terms</a>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js" integrity="sha384-0w2KAL2YHP6wKOkUDzkCDGgVvfmHnj02DHeQ6XcHOgTfFsGyonKOpShMH1x6nk9o" crossorigin="anonymous"></script>
+    <script src="/config.js"></script>
+    <script src="/auth.js?v=9"></script>
+    <script src="/nav.js?v=1"></script>
+    <script src="/profile.js?v=1"></script>
+</body>
+</html>

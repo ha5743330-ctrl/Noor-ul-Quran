@@ -16,25 +16,13 @@
     <script src="/config.js" defer></script>
     <!-- Updated JS with Cache-Buster Version -->
     <script src="auth.js?v=9" defer></script>
-    <link rel="stylesheet" href="/ui.css">
+    <script src="/nav.js?v=1" defer></script>
+    <link rel="stylesheet" href="/ui.css?v=2">
 </head>
 <body class="ui-page ui-auth min-h-screen flex flex-col justify-between selection:bg-emerald-100">
 
     <!-- Top Navigation Bar -->
-    <header class="h-20 border-b border-slate-800/80 px-6 flex items-center justify-between">
-        <a href="/" class="flex items-center space-x-3">
-            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-yellow-300 flex items-center justify-center text-slate-950 font-bold text-lg shadow-lg shadow-amber-500/20">
-                <i class="fa-solid fa-quran"></i>
-            </div>
-            <div>
-                <h1 class="font-bold text-lg bg-gradient-to-r from-amber-300 to-yellow-500 bg-clip-text text-transparent">Noor ul Quran</h1>
-                <p class="text-[10px] text-slate-400 font-medium">Auto Quran Reel Generator</p>
-            </div>
-        </a>
-        <a href="/" class="text-xs text-slate-400 hover:text-white transition-colors flex items-center gap-2 bg-slate-900 px-4 py-2 rounded-xl border border-slate-800">
-            <i class="fa-solid fa-arrow-left"></i> Back to Home
-        </a>
-    </header>
+    <header id="site-header"></header>
 
     <!-- Authentication Card Container -->
     <main class="my-12 px-4 max-w-md mx-auto w-full">

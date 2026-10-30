@@ -8,6 +8,8 @@ services:
     dockerContext: .
     healthCheckPath: /api/health
     envVars:
+      - key: MAX_VIDEO_SECONDS
+        value: "35"
       - key: RENDER_MEMORY_PROFILE
         value: low
       - key: OUTPUT_DIR

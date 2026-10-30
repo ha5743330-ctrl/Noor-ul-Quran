@@ -15,12 +15,13 @@ RUN apt-get update \
         libharfbuzz-dev \
         libjpeg62-turbo-dev \
         libraqm-dev \
+        libwebp-dev \
         zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir --no-binary=Pillow -r requirements.txt \
-    && python -c "from PIL import features; assert features.check('raqm'), 'Pillow was built without RAQM'; print('RAQM:', features.check('raqm'))"
+    && python -c "from PIL import features; assert features.check('raqm') and features.check('webp'), 'Pillow missing RAQM or WebP'; print('RAQM:', features.check('raqm'), 'WEBP:', features.check('webp'))"
 
 COPY data/quran_qpc_hafs.json data/quran_qpc_hafs.sha256 ./data/
 COPY . .

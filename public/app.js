@@ -7,6 +7,7 @@ let latestBatchJobId = null;
 let estimateTimer = null;
 let estimateRequestId = 0;
 let lastEstimateRangeSeconds = 0;
+const RECENT_LIMIT = 5;
 let recentItems = [];
 let recentSelecting = false;
 const recentSelected = new Set();
@@ -149,11 +150,17 @@ async function initializeLandingAuth() {
 function applyFreeTierLimits() {
     const access = window.userAccess || {};
     const cap = access.max_video_seconds;
-    document.querySelectorAll("#input-max-dur option").forEach((option) => {
-        if (cap && Number(option.value) > cap) option.disabled = true;
-    });
     const select = document.getElementById("input-max-dur");
-    if (select && select.selectedOptions[0]?.disabled) select.value = String(cap);
+    if (select && cap && ![...select.options].some((option) => Number(option.value) === cap)) {
+        // The server cap is the longest free length; offer exactly that instead of a hard-coded value.
+        const capOption = new Option(`${cap} seconds`, String(cap));
+        const next = [...select.options].find((option) => Number(option.value) > cap);
+        select.add(capOption, next || null);
+    }
+    document.querySelectorAll("#input-max-dur option").forEach((option) => {
+        option.disabled = Boolean(cap && Number(option.value) > cap);
+    });
+    if (select && cap && select.selectedOptions[0]?.disabled) select.value = String(cap);
     const remaining = document.getElementById("daily-remaining");
     if (remaining) {
         remaining.classList.remove("hidden");
@@ -1045,7 +1052,7 @@ async function refreshRecentVideos() {
         });
         const result = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(result.detail || "Could not load recent videos.");
-        renderRecentVideos(Array.isArray(result.videos) ? result.videos : []);
+        renderRecentVideos((Array.isArray(result.videos) ? result.videos : []).slice(0, RECENT_LIMIT)); // full list lives in /library.html
         setRecentVideosStatus("");
     } catch (error) {
         console.error("Recent video history error:", error);
