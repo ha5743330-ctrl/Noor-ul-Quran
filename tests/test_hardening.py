@@ -1112,7 +1112,7 @@ def test_suggest_ranges_whole_ayahs_within_target(client, monkeypatch):
     assert any(i["origin"] == "selected" and i["start"] == 3 for i in items)
 
 
-def test_suggest_ranges_admin_not_capped_and_long_ayah(client, monkeypatch):
+def test_suggest_ranges_admin_capped_like_everyone_and_long_ayah(client, monkeypatch):
     monkeypatch.setattr(main, "MAX_VIDEO_SECONDS", 30)
     main.app.dependency_overrides[main.get_current_user] = lambda: ADMIN_USER
     monkeypatch.setattr(make, "plan_duration", _fake_plan([80] * 300))  # 2:282-like: one ayah > 60 s
@@ -1123,7 +1123,8 @@ def test_suggest_ranges_admin_not_capped_and_long_ayah(client, monkeypatch):
         assert item["reason"] == f"one ayah is longer than {item['target']} s"
     monkeypatch.setattr(make, "plan_duration", _fake_plan([10] * 300))
     items = client.get("/api/suggest-ranges", params={"surah": "2", "mode": "full"}).json()["suggestions"]
-    assert all(i["allowed"] for i in items) and items[2]["end"] == 6
+    assert [i["allowed"] for i in items] == [True, True, False]  # the real-seconds cap now covers admins too
+    assert items[2]["end"] == 6
 
 
 def test_suggest_ranges_rejects_bad_input(client):

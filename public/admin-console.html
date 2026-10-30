@@ -7,7 +7,7 @@
     <title>Noor ul Quran | Admin Access</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/ui.css?v=4">
+    <link rel="stylesheet" href="/ui.css?v=5">
 </head>
 <body class="ui-page ui-admin">
     <header id="site-header"></header>
@@ -19,6 +19,7 @@
             <a href="#users-section">Users</a>
             <a href="#clips-section">Clips</a>
             <a href="#music-section">Music</a>
+            <a href="#picks-section">Picks</a>
             <a href="#audit-section">Audit</a>
             <a href="#server-section">Server</a>
         </nav>
@@ -98,6 +99,44 @@
                 </details>
             </section>
 
+            <section id="picks-section" class="ad-sec ad-picks">
+                <details data-sec="picks">
+                    <summary><span class="ad-sec-title">Picks</span><span id="picks-badge" class="pf-badge">0</span></summary>
+                    <div class="ad-sec-body">
+                        <p class="hint">Curated ayah lists users generate from. Each list is one length (30 s / 1 min / 2 min) and one mode.</p>
+                        <div id="ap-buckets" class="ad-chips" role="group" aria-label="Length"></div>
+                        <div id="ap-modes" class="ad-chips" role="group" aria-label="Mode" style="margin-top:8px"></div>
+                        <p id="ap-counts" class="hint" style="margin-top:10px" role="status"></p>
+                        <form id="ap-add" class="ap-form" novalidate>
+                            <div>
+                                <label for="ap-ref">Add ayah or range</label>
+                                <input id="ap-ref" class="control" placeholder="e.g. 18:9-12" autocomplete="off" inputmode="text">
+                            </div>
+                            <button type="submit" class="btn btn-primary"><i class="fa-solid fa-plus" aria-hidden="true"></i>Add pick</button>
+                        </form>
+                        <p id="ap-estimate" class="ap-est" role="status" aria-live="polite"></p>
+                        <ul id="ap-list" class="ad-rows"></ul>
+                        <h3 style="margin:18px 0 6px">Import / export</h3>
+                        <p class="hint">Same format as the seed files: <code>=== URDU ONLY REFERENCES ===</code> then one ref per line (names are ignored). Imports go into the length chosen above.</p>
+                        <textarea id="ap-import" class="control ap-import" aria-label="Import text" placeholder="=== URDU ONLY REFERENCES ===&#10;1. (Surah Al-Ikhlas 112:1-4)"></textarea>
+                        <div class="ap-bar" style="margin-top:8px">
+                            <button id="ap-preview" type="button" class="btn btn-outline">Preview import</button>
+                            <button id="ap-apply" type="button" class="btn btn-primary" disabled>Apply import</button>
+                            <button id="ap-export" type="button" class="btn btn-outline"><i class="fa-solid fa-download" aria-hidden="true"></i>Export .txt</button>
+                        </div>
+                        <ul id="ap-import-result" class="au-audit"></ul>
+                        <h3 style="margin:18px 0 6px">Durations</h3>
+                        <p class="hint">Fill missing durations, or re-measure every ayah from the audio (slow).</p>
+                        <div class="ap-bar">
+                            <button id="ap-recompute" type="button" class="btn btn-outline"><i class="fa-solid fa-rotate" aria-hidden="true"></i>Recompute durations</button>
+                            <button id="ap-remeasure" type="button" class="btn btn-outline">Re-measure all audio</button>
+                        </div>
+                        <progress id="ap-progress" class="ap-progress" max="100" value="0" hidden></progress>
+                        <p id="ap-recompute-status" class="hint" role="status" aria-live="polite"></p>
+                    </div>
+                </details>
+            </section>
+
             <section id="audit-section" class="ad-sec ad-audit">
                 <details data-sec="audit">
                     <summary><span class="ad-sec-title">Audit log</span><span id="audit-badge" class="pf-badge">0</span></summary>
@@ -134,6 +173,6 @@
     <script src="/config.js"></script>
     <script src="/auth.js?v=9"></script>
     <script src="/nav.js?v=2"></script>
-    <script src="/admin.js?v=9"></script>
+    <script src="/admin.js?v=10"></script>
 </body>
 </html>

@@ -27,6 +27,7 @@ def client(tmp_path, monkeypatch):
     main.GENERATION_JOBS.clear()
     main.DAILY_USAGE.clear()
     main.RENDER_DURATIONS.clear()
+    main.RENDER_RATES.clear()
     main.app.dependency_overrides[main.get_current_user] = lambda: FREE
     with TestClient(main.app) as c:
         yield c
@@ -72,16 +73,18 @@ def test_duration_cap_default_quality_and_single_active_job(client):
     assert r.status_code == 429 and "already have" in r.json()["detail"]
 
 
-def test_queue_position_and_wait_use_measured_average(client):
-    main.RENDER_DURATIONS.extend([30.0, 50.0])
-    main.GENERATION_JOBS["running"] = {"owner_id": "other", "status": "processing"}
-    main.GENERATION_JOBS["waiting"] = {"owner_id": "other2", "status": "queued"}
+def test_queue_position_and_wait_count_videos_and_seconds(client):
+    main.RENDER_RATES.extend([2.0, 4.0])  # render seconds per video second, average 3
+    main.GENERATION_JOBS["running"] = {"owner_id": "other", "status": "processing", "planned_seconds": 20}
+    main.GENERATION_JOBS["waiting"] = {"owner_id": "other2", "status": "queued", "planned_seconds": 20}
     r = client.post("/api/generate", json=PAYLOAD)
     body = r.json()
-    assert (body["queue_ahead"], body["estimated_wait_seconds"]) == (2, 120)
+    own = main.GENERATION_JOBS[body["job_id"]]["planned_seconds"]
+    expected = round((40 + own) * 3)
+    assert (body["queue_ahead"], body["estimated_wait_seconds"]) == (2, expected)
 
     status = client.get(f"/api/generate/{body['job_id']}").json()
-    assert (status["queue_ahead"], status["estimated_wait_seconds"]) == (2, 120)
+    assert (status["queue_ahead"], status["estimated_wait_seconds"]) == (2, expected)
     main.GENERATION_JOBS["running"]["status"] = "completed"
     assert client.get(f"/api/generate/{body['job_id']}").json()["queue_ahead"] == 1
 

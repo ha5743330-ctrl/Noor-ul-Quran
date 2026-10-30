@@ -103,3 +103,14 @@ Supabase user credentials; do not place credentials in logs or chat.
 Render Free services sleep after inactivity and use temporary local storage, so the first request can be slow while the service wakes. Supabase Free Storage currently includes 1 GB total and a 50 MB per-file limit; generated reels larger than 50 MB are rejected rather than silently lost. Storage fills over time, so old media may need deletion. Supabase Free projects can also pause after a week without activity.
 
 Vercel's `config.js` rewrite serves the runtime Supabase and API configuration from `api/config.js`. Keep secrets in platform environment variables, not in source files. The publishable Supabase key is intended for the browser; the service-role key is not.
+
+## Render cap and Picks
+
+- `MAX_VIDEO_SECONDS` is enforced on real planned seconds for Single, Picks and Random, admins included
+  (admins skip only the daily count). Render stays at `35` with `RENDER_MEMORY_PROFILE=low`.
+- Local app: set `MAX_VIDEO_SECONDS=120` in `.env`. `start.ps1` forces `RENDER_MEMORY_PROFILE=low` (480x854);
+  a manual `docker run` without that variable uses the full profile (1080p/720p).
+- Picks live in `state/picks.json` (Supabase, local copy in `OUTPUT_DIR`), seeded from `data/picks_default.json`.
+  Admin writes return an error if the Supabase save fails. Rebuild the seed with `python tools/build_picks.py <ayah_durations.json>`.
+- `data/ayah_durations_seed.json` ships measured durations only (no audio or text); the runtime cache in `cache/` overrides it.
+- Optional `PREMIUM_DAILY_LIMIT` raises the daily count for premium users.

@@ -63,6 +63,9 @@ def api(route):
         body = CLIPS
     elif path == "/admin/music":
         body = MUSIC
+    elif path == "/picks":
+        body = {"cap": 35, "picks": [{"id": f"30u{i}", "bucket": 30, "mode": "urdu", "ref": f"2:{i}-{i + 2}", "surah_name": "Al-Baqara",
+                                      "seconds": 20.0 + 9 * i, "over_bucket": i > 1, "selectable": i < 3} for i in range(1, 5)]}
     route.fulfill(status=200, content_type="application/json", body=json.dumps(body))
 
 
@@ -89,7 +92,7 @@ def shoot(page, width, name, selector):
 
 
 CARDS = {"top": ".ad-stats", "diagnostics": "#server-section", "users": "#users-section",
-         "clips": "#clips-section", "music": "#music-section", "audit": "#audit-section"}
+         "clips": "#clips-section", "music": "#music-section", "picks": "#picks-section", "audit": "#audit-section"}
 
 server = subprocess.Popen([sys.executable, "-m", "http.server", str(PORT), "-d", str(ROOT / "public")], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 time.sleep(1)
@@ -113,7 +116,7 @@ try:
                 check(f"{width}px: no console errors", not page.errors, str(page.errors))
                 if width <= 820:
                     state = page.evaluate("[...document.querySelectorAll('details[data-sec]')].map(d => d.dataset.sec + ':' + d.open).join()")
-                    check(f"{width}px: users open, others collapsed", state == "users:true,clips:false,music:false,audit:false,server:false", state)
+                    check(f"{width}px: users open, others collapsed", state == "users:true,clips:false,music:false,picks:false,audit:false,server:false", state)
                     page.click('.ad-jump a[href="#clips-section"]')
                     page.wait_for_timeout(2500)  # html has smooth scrolling
                     check(f"{width}px: chip opens + scrolls to section", page.evaluate("document.querySelector('#clips-section details').open && Math.abs(document.querySelector('#clips-section').getBoundingClientRect().top - 128) < 40 || document.documentElement.scrollTop + innerHeight >= document.documentElement.scrollHeight - 2"))
@@ -127,6 +130,14 @@ try:
                     page.wait_for_selector("dialog.confirm")
                     box = page.locator("dialog.confirm").bounding_box()
                     check(f"{width}px: confirm is a full-width bottom sheet", box["width"] >= width - 1 and abs(box["y"] + box["height"] - height) < 2, str(box))
+                    page.keyboard.press("Escape")
+                    page.click('.ad-jump a[href="#picks-section"]')
+                    page.wait_for_selector(".ap-row")
+                    check(f"{width}px: picks section lists rows and counts", "over the 30 s bucket" in page.inner_text("#ap-counts"))
+                    page.click(".ap-row-actions .btn-danger-outline >> nth=0")
+                    page.wait_for_selector("dialog.confirm")
+                    box = page.locator("dialog.confirm").bounding_box()
+                    check(f"{width}px: picks confirm is a bottom sheet", box["width"] >= width - 1, str(box))
                     page.keyboard.press("Escape")
                 small = page.evaluate("""[...document.querySelectorAll('main button, main a, main input:not([type=checkbox]):not([type=file]), main select')].filter(e => e.offsetParent && !e.closest('[hidden]'))
                     .filter(e => { const b = e.getBoundingClientRect(); return b.height < 43.5 }).map(e => (e.id || e.className || e.tagName).toString().slice(0, 30))""")

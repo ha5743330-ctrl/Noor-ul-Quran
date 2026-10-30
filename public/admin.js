@@ -554,3 +554,275 @@ document.getElementById("users-prev").addEventListener("click", () => { usersPag
 document.getElementById("users-next").addEventListener("click", () => { usersPage += 1; loadUsers(); });
 document.getElementById("refresh-diagnostics").addEventListener("click", loadDiagnostics);
 document.addEventListener("DOMContentLoaded", initializeAdmin);
+
+// ---------------- Picks manager ----------------
+const picksUi = { bucket: 30, mode: "urdu", cap: 35, all: [], preview: null, poll: null };
+
+function picksDialog(title, build) {
+    return new Promise((resolve) => {
+        const dialog = document.createElement("dialog");
+        dialog.className = "confirm";
+        const heading = document.createElement("h3");
+        heading.textContent = title;
+        const row = document.createElement("div");
+        row.className = "pf-row";
+        const cancel = document.createElement("button");
+        cancel.type = "button";
+        cancel.className = "btn btn-outline";
+        cancel.textContent = "Cancel";
+        const ok = document.createElement("button");
+        ok.type = "button";
+        ok.className = "btn btn-primary";
+        row.append(cancel, ok);
+        const done = (value) => { dialog.close(); dialog.remove(); resolve(value); };
+        const { nodes, okText, danger, value } = build();
+        ok.textContent = okText;
+        if (danger) ok.className = "btn btn-danger";
+        dialog.append(heading, ...nodes, row);
+        cancel.addEventListener("click", () => done(null));
+        ok.addEventListener("click", () => done(value()));
+        dialog.addEventListener("cancel", (event) => { event.preventDefault(); done(null); });
+        document.body.append(dialog);
+        dialog.showModal();
+    });
+}
+
+function picksConfirm(title, text, okText, danger = false) {
+    return picksDialog(title, () => {
+        const body = document.createElement("p");
+        body.textContent = text;
+        return { nodes: [body], okText, danger, value: () => true };
+    }).then(Boolean);
+}
+
+function picksAsk(title, label, current) {
+    return picksDialog(title, () => {
+        const field = document.createElement("label");
+        field.textContent = label;
+        field.htmlFor = "ap-edit-ref";
+        const input = document.createElement("input");
+        input.id = "ap-edit-ref";
+        input.className = "control";
+        input.value = current;
+        setTimeout(() => input.focus(), 0);
+        return { nodes: [field, input], okText: "Save", value: () => input.value.trim() };
+    });
+}
+
+function picksChips(container, options, current, onPick) {
+    container.replaceChildren();
+    options.forEach(([value, label]) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = label;
+        button.setAttribute("aria-pressed", String(value === current));
+        button.addEventListener("click", () => onPick(value));
+        container.append(button);
+    });
+}
+
+async function loadPicks() {
+    try {
+        const all = await adminRequest("/picks");
+        picksUi.cap = all.cap;
+        picksUi.all = all.picks;
+        document.getElementById("picks-badge").textContent = String(all.picks.length);
+        renderPicks();
+    } catch (error) {
+        showAdminMessage(error.message, true);
+    }
+}
+
+function renderPicks() {
+    picksChips(document.getElementById("ap-buckets"), [[30, "30 sec"], [60, "1 min"], [120, "2 min"]], picksUi.bucket,
+        (value) => { picksUi.bucket = value; picksUi.preview = null; renderPicks(); });
+    picksChips(document.getElementById("ap-modes"), [["urdu", "Urdu-only"], ["arabic", "Arabic-only"]], picksUi.mode,
+        (value) => { picksUi.mode = value; picksUi.preview = null; renderPicks(); });
+    const rows = picksUi.all.filter((row) => row.bucket === picksUi.bucket && row.mode === picksUi.mode);
+    const overBucket = rows.filter((row) => row.over_bucket).length;
+    const overCap = rows.filter((row) => !row.selectable).length;
+    document.getElementById("ap-counts").textContent =
+        `${rows.length} picks · ${overBucket} over the ${picksUi.bucket} s bucket · ${overCap} over the ${picksUi.cap} s server cap (kept, users cannot tick them)`;
+    const list = document.getElementById("ap-list");
+    list.replaceChildren();
+    if (!rows.length) list.append(emptyRow("No picks in this list."));
+    rows.forEach((row) => list.append(picksRow(row)));
+    document.getElementById("ap-apply").disabled = !picksUi.preview?.add?.length;
+}
+
+function picksRow(row) {
+    const item = document.createElement("li");
+    item.className = "ap-row";
+    const top = document.createElement("div");
+    top.className = "ap-row-top";
+    const ref = document.createElement("strong");
+    ref.textContent = row.ref;
+    const name = document.createElement("span");
+    name.textContent = row.surah_name;
+    const secs = document.createElement("span");
+    secs.textContent = row.seconds == null ? "? s" : `${row.seconds.toFixed(1)} s`;
+    top.append(ref, name, secs);
+    [[row.over_bucket, `Over ${row.bucket} s`, "bad"], [!row.selectable, `Over ${picksUi.cap} s cap`, "bad"], [row.trimmed_from, "Trimmed copy", ""]]
+        .filter(([show]) => show).forEach(([, text, tone]) => {
+            const badge = document.createElement("span");
+            badge.className = `pf-badge ${tone}`;
+            badge.textContent = text;
+            top.append(badge);
+        });
+    const actions = document.createElement("div");
+    actions.className = "ap-row-actions";
+    const edit = picksButton("Edit", "btn btn-outline btn-sm", async () => {
+        const value = await picksAsk("Edit pick", "Surah:Ayah or range", row.ref);
+        if (value && value !== row.ref) await picksCall(`/picks/${encodeURIComponent(row.id)}`, "PUT", { ref: value }, "Pick updated.");
+    });
+    const trim = picksButton("Trim", "btn btn-outline btn-sm", async () => {
+        let preview = null;
+        try {
+            preview = await adminRequest(`/picks/${encodeURIComponent(row.id)}/trim`, { method: "POST", body: JSON.stringify({}) });
+        } catch (error) {
+            showAdminMessage(error.message, true);
+            return;
+        }
+        const yes = await picksConfirm("Trim to whole ayat?",
+            `${row.ref} (${row.seconds.toFixed(1)} s) becomes a NEW pick ${preview.ref} (${preview.seconds.toFixed(1)} s). The original stays.`, "Create trimmed pick");
+        if (yes) await picksCall(`/picks/${encodeURIComponent(row.id)}/trim`, "POST", { confirm: true }, "Trimmed pick created.");
+    });
+    trim.disabled = !row.over_bucket || !row.ref.includes("-");
+    const remove = picksButton("Remove", "btn btn-danger-outline btn-sm", async () => {
+        if (await picksConfirm("Remove pick?", `${row.ref} will disappear from the ${row.bucket} s ${row.mode} list.`, "Remove", true)) {
+            await picksCall(`/picks/${encodeURIComponent(row.id)}`, "DELETE", null, "Pick removed.");
+        }
+    });
+    actions.append(edit, trim, remove);
+    item.append(top, actions);
+    return item;
+}
+
+function picksButton(text, className, onClick) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = className;
+    button.textContent = text;
+    button.addEventListener("click", async () => {
+        button.disabled = true;
+        try { await onClick(); } finally { button.disabled = false; }
+    });
+    return button;
+}
+
+async function picksCall(path, method, body, okText) {
+    try {
+        await adminRequest(path, { method, ...(body ? { body: JSON.stringify(body) } : {}) });
+        showAdminMessage(okText);
+        await Promise.all([loadPicks(), loadAudit()]);
+    } catch (error) {
+        showAdminMessage(error.message, true); // includes Supabase save failures
+    }
+}
+
+let picksEstimateTimer = null;
+function picksEstimate() {
+    clearTimeout(picksEstimateTimer);
+    const out = document.getElementById("ap-estimate");
+    const match = /^(\d{1,3}):(\d{1,3})(?:-(\d{1,3}))?$/.exec(document.getElementById("ap-ref").value.trim());
+    if (!match) { out.textContent = ""; return; }
+    picksEstimateTimer = setTimeout(async () => {
+        const [, surah, start, end] = match;
+        const mode = picksUi.mode === "arabic" ? "arabic_only" : "urdu_only";
+        try {
+            const result = await adminRequest(`/estimate?surah=${surah}&start=${start}&end=${end || start}&mode=${mode}&length_limit=30`);
+            const secs = result.range_seconds;
+            out.textContent = `Estimate: ${secs.toFixed(1)} s` +
+                (secs > picksUi.bucket ? ` — over the ${picksUi.bucket} s bucket` : "") +
+                (secs > picksUi.cap ? ` and over the ${picksUi.cap} s server cap` : "");
+        } catch (error) {
+            out.textContent = error.message;
+        }
+    }, 400);
+}
+
+async function picksImport(apply) {
+    const text = document.getElementById("ap-import").value;
+    try {
+        const result = await adminRequest("/picks/import", {
+            method: "POST", body: JSON.stringify({ text, bucket: picksUi.bucket, mode: picksUi.mode, apply })
+        });
+        picksUi.preview = apply ? null : result;
+        const list = document.getElementById("ap-import-result");
+        list.replaceChildren();
+        const lines = [`${result.add.length} to add`, `${result.duplicates.length} already in the list`, `${result.invalid.length} invalid line(s)`, ...result.invalid];
+        lines.forEach((line) => { const li = document.createElement("li"); li.textContent = line; list.append(li); });
+        if (apply) {
+            showAdminMessage(`Imported ${result.add.length} picks.`);
+            await Promise.all([loadPicks(), loadAudit()]);
+        } else {
+            document.getElementById("ap-apply").disabled = !result.add.length;
+        }
+    } catch (error) {
+        showAdminMessage(error.message, true);
+    }
+}
+
+async function picksExport() {
+    try {
+        const { data: { session } } = await window.supabaseClient.auth.getSession();
+        const response = await fetch(`${API_BASE_URL}/picks/export?bucket=${picksUi.bucket}`, { headers: { Authorization: `Bearer ${session.access_token}` } });
+        if (!response.ok) throw new Error("Export failed.");
+        const url = URL.createObjectURL(await response.blob());
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `picks-${picksUi.bucket}s.txt`;
+        link.click();
+        URL.revokeObjectURL(url);
+    } catch (error) {
+        showAdminMessage(error.message, true);
+    }
+}
+
+async function picksRecompute(remeasure) {
+    const bar = document.getElementById("ap-progress");
+    const status = document.getElementById("ap-recompute-status");
+    try {
+        await adminRequest("/picks/recompute", { method: "POST", body: JSON.stringify({ remeasure }) });
+    } catch (error) {
+        showAdminMessage(error.message, true);
+        return;
+    }
+    bar.hidden = false;
+    clearInterval(picksUi.poll);
+    picksUi.poll = setInterval(async () => {
+        try {
+            const state = await adminRequest("/picks/recompute");
+            bar.value = state.total ? Math.round((state.done / state.total) * 100) : 0;
+            status.textContent = `${state.state}: ${state.done} / ${state.total} ayat` +
+                (state.errors.length ? ` · ${state.errors.length} error(s): ${state.errors.slice(0, 3).join("; ")}` : "") +
+                (state.error ? ` · ${state.error}` : "");
+            if (state.state !== "running") {
+                clearInterval(picksUi.poll);
+                bar.hidden = true;
+                showAdminMessage(state.state === "done" ? "Durations recomputed." : `Recompute failed: ${state.error}`, state.state !== "done");
+                await loadPicks();
+            }
+        } catch (error) {
+            clearInterval(picksUi.poll);
+            showAdminMessage(error.message, true);
+        }
+    }, 1500);
+}
+
+document.getElementById("ap-add").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const ref = document.getElementById("ap-ref").value.trim();
+    await picksCall("/picks", "POST", { bucket: picksUi.bucket, mode: picksUi.mode, ref }, `Added ${ref}.`);
+    document.getElementById("ap-ref").value = "";
+    document.getElementById("ap-estimate").textContent = "";
+});
+document.getElementById("ap-ref").addEventListener("input", picksEstimate);
+document.getElementById("ap-preview").addEventListener("click", () => picksImport(false));
+document.getElementById("ap-apply").addEventListener("click", () => picksImport(true));
+document.getElementById("ap-export").addEventListener("click", picksExport);
+document.getElementById("ap-recompute").addEventListener("click", () => picksRecompute(false));
+document.getElementById("ap-remeasure").addEventListener("click", async () => {
+    if (await picksConfirm("Re-measure all audio?", "Re-downloads every picked ayah (about 300 picks). This can take several minutes.", "Re-measure")) picksRecompute(true);
+});
+document.addEventListener("DOMContentLoaded", loadPicks);

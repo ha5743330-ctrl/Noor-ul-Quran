@@ -3,7 +3,7 @@
    python make.py --random 1                      (Standard ~1 min reel)
    python make.py --picks picks.txt --max-dur 90  (Waqia/Long Reel up to 1m 30s)
 """
-import argparse, csv, json, os, random, re, shutil, subprocess, sys, time, unicodedata
+import argparse, contextlib, csv, json, os, random, re, shutil, subprocess, sys, time, unicodedata
 import ctypes
 import functools
 import hashlib
@@ -83,12 +83,17 @@ STYLE_ELEMENTS = {"bismillah", "surah", "label", "arabic", "urdu", "english", "c
 OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", ROOT / "output"))
 BACKGROUND_DIR = Path(os.getenv("BACKGROUNDS_DIR", ROOT / "backgrounds"))
 CACHE_DIR = Path(os.getenv("CACHE_DIR", ROOT / "cache"))
-# Measured durations are runtime state: written under cache/, seeded from the shipped data file.
+# Measured durations are runtime state: written under cache/, seeded (read-only) from the shipped
+# data/ayah_durations_seed.json (durations only, no audio or text). Cache entries win over the seed.
 DURATION_CACHE_FILE = CACHE_DIR / "ayah_durations.json"
+DURATION_SEED_FILE = ROOT / "data" / "ayah_durations_seed.json"
+# Hard ceiling for any reel; the server sets MAX_VIDEO_SECONDS (35 on Render, 120 locally).
+ABS_MAX_DUR = int(os.getenv("MAX_VIDEO_SECONDS") or 180)
 CLIP_CACHE_DIR = CACHE_DIR / "backgrounds"
 _hardware_encoder = None
 _duration_cache = None
 _duration_cache_lock = Lock()
+_defer_saves = False  # True while batch_duration_writes() holds back disk writes
 
 def run(cmd, **kw):
     return subprocess.run(cmd, check=True, **kw)
@@ -109,9 +114,8 @@ def _read_duration_file(path):
     return raw if isinstance(raw, dict) else {}
 
 def _read_duration_cache():
-    raw = _read_duration_file(DURATION_CACHE_FILE)
     cache = {}
-    for key, value in raw.items():
+    for key, value in {**_read_duration_file(DURATION_SEED_FILE), **_read_duration_file(DURATION_CACHE_FILE)}.items():
         if not isinstance(key, str):
             continue
         if ":" in key and isinstance(value, (int, float)) and value > 0:
@@ -134,6 +138,32 @@ def load_duration_cache():
         if _duration_cache is None:
             _duration_cache = _read_duration_cache()
         return _duration_cache
+
+def _flush_duration_cache_unlocked():
+    DURATION_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = DURATION_CACHE_FILE.with_name(
+        f"{DURATION_CACHE_FILE.stem}.{os.getpid()}.{get_ident()}.tmp"
+    )
+    temp_path.write_text(json.dumps(_duration_cache, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    temp_path.replace(DURATION_CACHE_FILE)
+
+@contextlib.contextmanager
+def batch_duration_writes():
+    """Keep measurements in memory and write the cache file once on exit (recompute jobs)."""
+    global _defer_saves
+    load_duration_cache()
+    _defer_saves = True
+    try:
+        yield
+    finally:
+        with _duration_cache_lock:
+            _defer_saves = False
+            _flush_duration_cache_unlocked()
+
+def forget_ayah_duration(surah, ayah, kind, reciter_id=None):
+    reciter_id = resolve_reciter_id(kind, reciter_id)
+    load_duration_cache().pop(_duration_key(kind, reciter_id, surah, ayah), None)
+    audio_cache_path(kind, surah, ayah, reciter_id).unlink(missing_ok=True)
 
 def save_ayah_duration(surah, ayah, kind, seconds, reciter_id=None):
     global _duration_cache
@@ -909,7 +939,7 @@ def plan_duration(
     verse_count = int(Q["surahs"][str(s)]["n"])
     if not 1 <= start <= end <= verse_count:
         raise ValueError(f"Ayah range must be between 1 and {verse_count} for this surah.")
-    length_limit = min(max(float(length_limit), 1.0), 180.0)
+    length_limit = min(max(float(length_limit), 1.0), float(ABS_MAX_DUR))
     reciter_id = resolve_reciter_id("arabic", reciter_id)
     urdu_voice_id = resolve_reciter_id("urdu", urdu_voice_id)
 
@@ -938,7 +968,7 @@ def plan_duration(
         })
 
     requested_seconds = sum(item["len"] for item in items)
-    tolerance_limit = min(length_limit * (1 + DURATION_TOLERANCE), 180.0)
+    tolerance_limit = min(length_limit * (1 + DURATION_TOLERANCE), float(ABS_MAX_DUR))
     fit_items, tolerance_items = [], []
     fit_seconds = tolerance_seconds = 0.0
     for item in items:
@@ -1023,8 +1053,9 @@ def build(
             f"Range {a0}-{a1} thi, {max_duration}s mein sirf {a0}-{used_a1} fit hui."
         )
     if items[0]["len"] > max_duration:
-        warnings.append(
-            f"Ayat {a0} ki audio {total:.0f}s ki hai; poori ayat rakhi gayi."
+        # Never keep a first ayah past the cap: refuse instead of rendering an overrun reel.
+        raise ValueError(
+            f"Ayah {s}:{a0} is {items[0]['len']:.1f} s, over the {max_duration} s limit."
         )
     scale = W / 1080
     arabic_font_key = QURAN_ARABIC_FONT
@@ -1367,7 +1398,7 @@ def pick_random(Q, count, rng, min_dur, max_dur):
             if t > max_dur:
                 break
         a1 = selected_end
-        if ok and a1 >= a0 and (t >= min_dur or (a1 == n and t >= min_dur * .7)):
+        if ok and a1 >= a0 and t <= max_dur and (t >= min_dur or (a1 == n and t >= min_dur * .7)):
             picks.append((s, a0, a1)); used.update(f"{s}:{x}" for x in range(a0, a1 + 1))
             print(f"   chuna: {s}:{a0}-{a1} ({t:.0f}s)")
     used_f.parent.mkdir(exist_ok=True); used_f.write_text(json.dumps(sorted(used)))
@@ -1413,7 +1444,7 @@ def main():
     ap.add_argument("--reciter", default=DEFAULT_ARABIC_RECITER_ID)
     ap.add_argument("--urdu-voice", default=DEFAULT_URDU_VOICE_ID)
     a = ap.parse_args()
-    a.max_dur = min(max(1, a.max_dur), 180)
+    a.max_dur = min(max(1, a.max_dur), ABS_MAX_DUR)
     a.min_dur = min(max(1, a.min_dur), a.max_dur)
     styles = load_video_styles(a.style_json)
     CONTENT_MODE = "arabic_only" if a.arabic_only else "urdu_only" if a.urdu_only else "full"
@@ -1476,8 +1507,16 @@ def main():
             print(f"[{i}/{len(picks)}] Surah {s}:{a0}-{a1} [{a.quality}]")
         return
     
-    generated = []
+    generated, failed = [], []
     result_path = Path(a.result_json) if a.result_json else None
+
+    def write_result(entries):  # entries without "filename" are failed reels: {index, error}
+        if result_path:
+            result_path.parent.mkdir(exist_ok=True, parents=True)
+            temp_result_path = result_path.with_suffix(result_path.suffix + ".tmp")
+            temp_result_path.write_text(json.dumps(entries, ensure_ascii=False), encoding="utf-8")
+            temp_result_path.replace(result_path)
+
     with open(capf, "a", newline="", encoding="utf-8-sig") as fh:
         w = csv.writer(fh); newcap and w.writerow(["file", "caption"])
         for i, (s, a0, a1) in enumerate(picks, 1):
@@ -1491,12 +1530,21 @@ def main():
             name = outfile.name
             print(f"[{i}/{len(picks)}] Surah {s}:{a0}-{a1}", end=" ")
             content_mode = CONTENT_MODE
-            res = build(
-                Q, s, a0, a1, outfile, bgs, rng, tmp, styles,
-                a.max_dur, content_mode, a.music,
-                CURRENT_RECITER_ID, CURRENT_URDU_VOICE_ID,
-            )
-            if res is None: print("SKIP (audio download nahi hui)"); continue
+            try:
+                res = build(
+                    Q, s, a0, a1, outfile, bgs, rng, tmp, styles,
+                    a.max_dur, content_mode, a.music,
+                    CURRENT_RECITER_ID, CURRENT_URDU_VOICE_ID,
+                )
+            except Exception as exc:  # one bad reel must not stop the batch
+                res, why = None, str(exc)
+            else:
+                why = "Ayah audio could not be downloaded."
+            if res is None:
+                print("SKIP", why)
+                failed.append({"index": i, "error": why})
+                write_result(generated + failed)
+                continue
             S, total, used_a1, warnings = res
             print(f"-> {name} ({total:.0f}s)")
             caption = f"Surah {S['english']} ({s}) | Ayat {a0}" + (f"-{used_a1}" if used_a1 != a0 else "") + f"\n#Quran #Islam #{S['english'].replace(' ', '').replace('-', '')}"
@@ -1509,11 +1557,8 @@ def main():
                 "end_ayah": used_a1,
                 "duration": round(total, 2),
                 "warnings": warnings,
+                "index": i,
             })
-            if result_path:
-                result_path.parent.mkdir(exist_ok=True, parents=True)
-                temp_result_path = result_path.with_suffix(result_path.suffix + ".tmp")
-                temp_result_path.write_text(json.dumps(generated, ensure_ascii=False), encoding="utf-8")
-                temp_result_path.replace(result_path)
+            write_result(generated + failed)
 
 if __name__ == "__main__": main()
