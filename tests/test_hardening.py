@@ -302,7 +302,7 @@ def test_reciters_endpoint_returns_choices_and_defaults(client):
         "ar": "alafasy",
         "ur": "shamshad_ali_khan",
     }
-    assert len([r for r in response.json()["reciters"] if r["language"] == "ar"]) == 5
+    assert len([r for r in response.json()["reciters"] if r["language"] == "ar"]) == 6
     assert len([r for r in response.json()["reciters"] if r["language"] == "ur"]) == 1
 
 
