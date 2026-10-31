@@ -257,9 +257,12 @@ function initializeSettingCards() {
     updateSettingSummaries();
 }
 
+const ARABIC_AUDIO_MODES = new Set(["arabic_only", "arabic_urdu_text"]);
+const isArabicAudioMode = (mode) => ARABIC_AUDIO_MODES.has(mode);
+
 function updateSettingSummaries() {
     const text = (id) => document.getElementById(id)?.selectedOptions[0]?.textContent.trim() || "";
-    const arabicOnly = document.getElementById("input-content-mode")?.value === "arabic_only";
+    const arabicOnly = isArabicAudioMode(document.getElementById("input-content-mode")?.value);
     const reciter = text("input-reciter").replace(/\s*\(.*\)/, "").split(" ").pop();
     const voice = text("input-urdu-voice").split(" ")[0];
     const music = document.getElementById("input-music");
@@ -271,12 +274,14 @@ function updateSettingSummaries() {
 }
 
 function updateMusicAvailability() {
-    const arabicOnly = document.getElementById("input-content-mode")?.value === "arabic_only";
+    const mode = document.getElementById("input-content-mode")?.value;
+    const noMusic = mode === "arabic_only";          // Arabic + English keeps music off
+    const noUrduVoice = isArabicAudioMode(mode);     // no Urdu audio in either Arabic mode
     const musicSelect = document.getElementById("input-music");
     const note = document.getElementById("arabic-only-audio-note");
-    if (musicSelect) musicSelect.disabled = arabicOnly;
-    if (note) note.classList.toggle("hidden", !arabicOnly);
-    document.getElementById("urdu-voice-control")?.classList.toggle("hidden", arabicOnly);
+    if (musicSelect) musicSelect.disabled = noMusic;
+    if (note) note.classList.toggle("hidden", !noMusic);
+    document.getElementById("urdu-voice-control")?.classList.toggle("hidden", noUrduVoice);
 }
 
 async function initializeReciterChoices() {
@@ -356,7 +361,7 @@ async function requestDurationEstimate() {
         const reciterId = document.getElementById("input-reciter")?.value;
         const urduVoiceId = document.getElementById("input-urdu-voice")?.value;
         if (reciterId) params.set("reciter_id", reciterId);
-        if (urduVoiceId && contentMode !== "arabic_only") params.set("urdu_voice_id", urduVoiceId);
+        if (urduVoiceId && !isArabicAudioMode(contentMode)) params.set("urdu_voice_id", urduVoiceId);
         const response = await fetch(`${API_BASE_URL}/estimate?${params}`, {
             headers: { Authorization: `Bearer ${session.access_token}` }
         });
@@ -654,7 +659,7 @@ async function generateVideo(event) {
                 quality: document.getElementById("input-quality")?.value || "fast",
                 content_mode: contentMode,
                 reciter_id: document.getElementById("input-reciter")?.value || null,
-                urdu_voice_id: contentMode === "arabic_only"
+                urdu_voice_id: isArabicAudioMode(contentMode)
                     ? null
                     : document.getElementById("input-urdu-voice")?.value || null,
                 styles: window.videoStyles,
@@ -958,6 +963,7 @@ function renderRecentVideos(videos) {
         badges.appendChild(createHistoryBadge(isImage ? "Image" : "Video", "slate"));
         if (video.content_mode === "urdu_only") badges.appendChild(createHistoryBadge("Urdu-only", "amber"));
         if (video.content_mode === "arabic_only") badges.appendChild(createHistoryBadge("Arabic + English", "amber"));
+        if (video.content_mode === "arabic_urdu_text") badges.appendChild(createHistoryBadge("Arabic + Urdu text", "amber"));
         if (video.styled) badges.appendChild(createHistoryBadge("Styled", "amber"));
         if (video.downloaded_at || Number(video.download_count) > 0) {
             badges.appendChild(createHistoryBadge("Downloaded", "green"));
@@ -1414,7 +1420,7 @@ async function loadRangeSuggestions() {
         const reciter = document.getElementById("input-reciter")?.value;
         const urdu = document.getElementById("input-urdu-voice")?.value;
         if (reciter) params.set("reciter_id", reciter);
-        if (urdu && mode !== "arabic_only") params.set("urdu_voice_id", urdu);
+        if (urdu && !isArabicAudioMode(mode)) params.set("urdu_voice_id", urdu);
         const response = await fetch(`${API_BASE_URL}/suggest-ranges?${params}`, {
             headers: { Authorization: `Bearer ${session.access_token}` }
         });
