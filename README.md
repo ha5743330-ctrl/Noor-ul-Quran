@@ -13,6 +13,7 @@ Har ayat ki audio (**Arabic Tilawat + Urdu Tarjuma**) EveryAyah.com se khud-ba-k
 - **No-Repeat System:** Random mode mein koi bhi ayat repeat nahi hoti (`cache/used.json` track rakhta hai).
 - **Auto Captions:** Har video ke sath CSV file mein tayar caption aur hashtags milte hain.
 - **Ayah Images:** Generate a 1080×1350 still with Arabic, Pickthall's English translation, and a random image background; optionally enter a curated `Surah:Ayah`.
+- **Arabic + Urdu text reel mode (`arabic_urdu_text`):** Arabic tilawat (Alafasy, Yasser Ad-Dussary, etc.) with Arabic text on screen and the Urdu translation as *text* below it. No Urdu audio; background music is allowed. CLI: `python make.py --pick 2:255 --arabic-urdu-text --reciter yasser_ad_dussary`. Optional translator credit line: set `URDU_TRANSLATION_CREDIT` (or an `urdu_translation` key in `data/quran.json`).
 
 ---
 
