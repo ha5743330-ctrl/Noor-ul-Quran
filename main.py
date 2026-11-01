@@ -1081,8 +1081,14 @@ def cleanup_output_on_startup():
         threading.Thread(target=_cleanup_loop, name="media-cleanup", daemon=True).start()
 
 
+CONTENT_MODES = {"full", "urdu_only", "arabic_only", "arabic_urdu_text"}
+# Modes whose audio is Arabic recitation only (no Urdu voice is fetched or mixed).
+ARABIC_AUDIO_MODES = {"arabic_only", "arabic_urdu_text"}
+CONTENT_MODE_ERROR = "Mode must be full, urdu_only, arabic_only, or arabic_urdu_text."
+
+
 def _require_raqm_for_generation(content_mode: str):
-    if content_mode in {"full", "urdu_only", "arabic_only"} and not RAQM_AVAILABLE:
+    if content_mode in CONTENT_MODES and not RAQM_AVAILABLE:
         LOGGER.error(
             "%s (content_mode=%s)",
             RAQM_REQUIRED_ERROR,
@@ -1567,12 +1573,12 @@ def estimate_reel(
         selected_length = int(length_limit)
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail="Surah, ayah range, and length are required.") from exc
-    if mode not in {"full", "urdu_only", "arabic_only"}:
-        raise HTTPException(status_code=400, detail="Mode must be full, urdu_only, or arabic_only.")
+    if mode not in CONTENT_MODES:
+        raise HTTPException(status_code=400, detail=CONTENT_MODE_ERROR)
     reciter_id = _validate_reciter_id(
         reciter_id, "ar", DEFAULT_ARABIC_RECITER_ID
     )
-    if mode == "arabic_only":
+    if mode in ARABIC_AUDIO_MODES:
         urdu_voice_id = DEFAULT_URDU_VOICE_ID
     else:
         urdu_voice_id = _validate_reciter_id(
@@ -1660,10 +1666,10 @@ def suggest_ranges(
         selected_start = int(from_ayah) if from_ayah else 1
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail="Surah is required.") from exc
-    if mode not in {"full", "urdu_only", "arabic_only"}:
-        raise HTTPException(status_code=400, detail="Mode must be full, urdu_only, or arabic_only.")
+    if mode not in CONTENT_MODES:
+        raise HTTPException(status_code=400, detail=CONTENT_MODE_ERROR)
     reciter_id = _validate_reciter_id(reciter_id, "ar", DEFAULT_ARABIC_RECITER_ID)
-    urdu_voice_id = DEFAULT_URDU_VOICE_ID if mode == "arabic_only" else _validate_reciter_id(
+    urdu_voice_id = DEFAULT_URDU_VOICE_ID if mode in ARABIC_AUDIO_MODES else _validate_reciter_id(
         urdu_voice_id, "ur", DEFAULT_URDU_VOICE_ID
     )
     quran = _quran_data()
@@ -1929,10 +1935,10 @@ def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
             req.urdu_voice_id or DEFAULT_URDU_VOICE_ID
         ) != DEFAULT_URDU_VOICE_ID:
             raise HTTPException(status_code=400, detail="Picks use the default reciter and Urdu voice.")
-    if content_mode not in {"full", "urdu_only", "arabic_only"}:
+    if content_mode not in CONTENT_MODES:
         raise HTTPException(
             status_code=400,
-            detail="Content mode must be full, urdu_only, or arabic_only.",
+            detail="Content mode must be full, urdu_only, arabic_only, or arabic_urdu_text.",
         )
     if content_mode == "arabic_only" and req.music:
         raise HTTPException(
@@ -1942,7 +1948,7 @@ def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
     reciter_id = _validate_reciter_id(
         req.reciter_id, "ar", DEFAULT_ARABIC_RECITER_ID
     )
-    if content_mode == "arabic_only":
+    if content_mode in ARABIC_AUDIO_MODES:
         urdu_voice_id = DEFAULT_URDU_VOICE_ID
     else:
         urdu_voice_id = _validate_reciter_id(
@@ -2008,8 +2014,10 @@ def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
         cmd.append("--urdu-only")
     elif content_mode == "arabic_only":
         cmd.append("--arabic-only")
+    elif content_mode == "arabic_urdu_text":
+        cmd.append("--arabic-urdu-text")
     cmd.extend(["--reciter", reciter_id])
-    if content_mode != "arabic_only":
+    if content_mode not in ARABIC_AUDIO_MODES:
         cmd.extend(["--urdu-voice", urdu_voice_id])
 
     # Background music argument agar select kiya gaya ho (yeh ab bilkul theek jagah par hai):

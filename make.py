@@ -41,6 +41,12 @@ QURAN_ARABIC_LINE_SPACING = 2.1
 BRIGHTNESS = -0.18
 INCLUDE_ARABIC_AUDIO = True
 CONTENT_MODE = "full"
+# Modes: full = Arabic + Urdu audio; urdu_only = Urdu audio; arabic_only = Arabic audio +
+# Arabic text + English; arabic_urdu_text = Arabic audio + Arabic text + Urdu TEXT (no Urdu audio).
+ALL_CONTENT_MODES = {"full", "urdu_only", "arabic_only", "arabic_urdu_text"}
+ARABIC_AUDIO_ONLY_MODES = {"arabic_only", "arabic_urdu_text"}
+# Optional credit line under the Urdu text, e.g. "ترجمہ: ..." (or "urdu_translation" in quran.json).
+URDU_TRANSLATION_CREDIT = os.getenv("URDU_TRANSLATION_CREDIT", "").strip()
 GAP_AFTER_ARABIC = 0.35
 DURATION_TOLERANCE = 0.15
 NORMALIZE_AUDIO = True
@@ -500,14 +506,14 @@ def fetch_ayah(kind, s, a, reciter_id=None):
 _clip_cache = {}
 def ayah_clip(s, a, content_mode=None, reciter_id=None, urdu_voice_id=None):
     content_mode = content_mode or (
-        CONTENT_MODE if CONTENT_MODE == "arabic_only"
+        CONTENT_MODE if CONTENT_MODE in ARABIC_AUDIO_ONLY_MODES
         else "full" if INCLUDE_ARABIC_AUDIO else "urdu_only"
     )
     reciter_id = resolve_reciter_id("arabic", reciter_id)
     urdu_voice_id = resolve_reciter_id("urdu", urdu_voice_id)
     cache_key = (s, a, content_mode, reciter_id, urdu_voice_id)
     if cache_key in _clip_cache: return _clip_cache[cache_key]
-    if content_mode == "arabic_only":
+    if content_mode in ARABIC_AUDIO_ONLY_MODES:
         ar = fetch_ayah("arabic", s, a, reciter_id)
         if ar is None:
             c = None
@@ -746,34 +752,53 @@ def chunk_png(path, lines, font, spacing, base, is_arabic=False, color=None):
         "text_bounds": text_boxes,
     }
 
-def chunk_bilingual_png(path, arabic_lines, english_lines, arabic_font, english_font, base, styles):
+def chunk_bilingual_png(
+    path, arabic_lines, second_lines, arabic_font, second_font, base, styles,
+    second_kind="en", second_spacing=1.8, credit=None,
+):
+    """Arabic block on top, translation below. second_kind: 'en' (Pickthall) or 'ur' (Urdu text)."""
     scale = W / 1080
     im = Image.open(base).convert("RGBA")
     draw = ImageDraw.Draw(im)
-    arabic_spacing = QURAN_ARABIC_LINE_SPACING
-    english_spacing = 1.25
     arabic_positions, arabic_top, arabic_bottom = quran_arabic_line_layout(
         arabic_lines, arabic_font, int(round(3 * scale))
     )
     arabic_block_height = arabic_bottom - arabic_top
-    english_line_height = int(english_font.size * english_spacing)
-    attribution = "Translation: Mohammed Marmaduke William Pickthall"
-    attribution_font = load_font(
-        styled_font(styles, "english", "amiri_regular"),
-        max(14, int(round(english_font.size * 0.58))),
-        "amiri_regular",
-    )
-    attribution_line_height = int(attribution_font.size * 1.3)
     padding = int(round(42 * scale))
     separator_gap = int(round(24 * scale))
     attribution_gap = int(round(12 * scale))
-    text_height = (
-        arabic_block_height
-        + separator_gap
-        + english_line_height * len(english_lines)
-        + attribution_gap
-        + attribution_line_height
-    )
+    arabic_color = styled_color(styles, "arabic", (255, 224, 140, 255))
+
+    if second_kind == "ur":
+        stroke2 = int(round(2 * scale))
+        positions, second_top, second_bottom = shaped_line_layout(
+            second_lines, second_font, language="ur",
+            minimum_spacing=second_spacing, stroke=stroke2,
+        )
+        second_block = second_bottom - second_top
+        credit_font = None
+        credit_height = 0
+        if credit:
+            credit_font = second_font.font_variant(size=max(20, int(round(second_font.size * 0.72))))
+            credit_height = int(credit_font.size * 1.7)
+            second_block += attribution_gap + credit_height
+        text_height = arabic_block_height + separator_gap + second_block
+    else:
+        english_line_height = int(second_font.size * 1.25)
+        attribution = "Translation: Mohammed Marmaduke William Pickthall"
+        attribution_font = load_font(
+            styled_font(styles, "english", "amiri_regular"),
+            max(14, int(round(second_font.size * 0.58))),
+            "amiri_regular",
+        )
+        attribution_line_height = int(attribution_font.size * 1.3)
+        text_height = (
+            arabic_block_height
+            + separator_gap
+            + english_line_height * len(second_lines)
+            + attribution_gap
+            + attribution_line_height
+        )
     box_height = text_height + 2 * padding
     center_y = H // 2 + int(round(60 * scale))
     margin = int(round(50 * scale))
@@ -784,8 +809,6 @@ def chunk_bilingual_png(path, arabic_lines, english_lines, arabic_font, english_
     )
     block_top = center_y - text_height // 2
     y = block_top - arabic_top
-    arabic_color = styled_color(styles, "arabic", (255, 224, 140, 255))
-    english_color = styled_color(styles, "english", (245, 247, 250, 255))
     for index, line in enumerate(arabic_lines):
         put(
             draw, (W // 2, y), line, arabic_font, arabic_color,
@@ -793,19 +816,36 @@ def chunk_bilingual_png(path, arabic_lines, english_lines, arabic_font, english_
         )
         if index + 1 < len(arabic_lines):
             y += arabic_positions[index + 1] - arabic_positions[index]
-    y = block_top + arabic_block_height + separator_gap
-    for line in english_lines:
+
+    second_start = block_top + arabic_block_height + separator_gap
+    if second_kind == "ur":
+        urdu_color = styled_color(styles, "urdu", (255, 255, 255, 255))
+        for line, offset in zip(second_lines, positions):
+            put(
+                draw, (W // 2, second_start - second_top + offset), line, second_font,
+                urdu_color, stroke=stroke2, direction="rtl", language="ur",
+            )
+        if credit:
+            put(
+                draw, (W // 2, second_start + (second_bottom - second_top) + attribution_gap),
+                credit, credit_font, (210, 220, 230, 235),
+                stroke=0, direction="rtl", language="ur",
+            )
+    else:
+        english_color = styled_color(styles, "english", (245, 247, 250, 255))
+        y = second_start
+        for line in second_lines:
+            put(
+                draw, (W // 2, y), line, second_font, english_color,
+                stroke=int(round(2 * scale)), direction="ltr", language="en",
+            )
+            y += english_line_height
+        y += attribution_gap
         put(
-            draw, (W // 2, y), line, english_font, english_color,
-            stroke=int(round(2 * scale)), direction="ltr", language="en",
+            draw, (W // 2, y), attribution, attribution_font,
+            styled_color(styles, "english", (200, 210, 220, 230)),
+            stroke=int(round(scale)), direction="ltr", language="en",
         )
-        y += english_line_height
-    y += attribution_gap
-    put(
-        draw, (W // 2, y), attribution, attribution_font,
-        styled_color(styles, "english", (200, 210, 220, 230)),
-        stroke=int(round(scale)), direction="ltr", language="en",
-    )
     im.save(path)
 
 def render_ayah_image(arabic_text, english_text, reference, background_path, output_path):
@@ -930,8 +970,10 @@ def plan_duration(
     reciter_id=None,
     urdu_voice_id=None,
 ):
-    if content_mode not in {"full", "urdu_only", "arabic_only"}:
-        raise ValueError("Content mode must be full, urdu_only, or arabic_only.")
+    if content_mode not in ALL_CONTENT_MODES:
+        raise ValueError(
+            "Content mode must be full, urdu_only, arabic_only, or arabic_urdu_text."
+        )
     if Q is None:
         Q = load_quran()
     if str(s) not in Q["surahs"]:
@@ -945,7 +987,7 @@ def plan_duration(
 
     items = []
     for ayah in range(start, end + 1):
-        audio_kind = "arabic" if content_mode == "arabic_only" else "urdu"
+        audio_kind = "arabic" if content_mode in ARABIC_AUDIO_ONLY_MODES else "urdu"
         audio_reciter_id = reciter_id if audio_kind == "arabic" else urdu_voice_id
         audio_seconds = cached_ayah_duration(s, ayah, audio_kind, audio_reciter_id)
         if audio_seconds is None:
@@ -962,7 +1004,7 @@ def plan_duration(
             "ayah": ayah,
             "ar_dur": arabic_seconds,
             "u0": urdu_start,
-            "ur_dur": audio_seconds if content_mode != "arabic_only" else 0.0,
+            "ur_dur": audio_seconds if content_mode not in ARABIC_AUDIO_ONLY_MODES else 0.0,
             "len": arabic_seconds + GAP_AFTER_ARABIC + audio_seconds
             if content_mode == "full" else audio_seconds,
         })
@@ -1105,20 +1147,53 @@ def build(
     arabic_spacing = QURAN_ARABIC_LINE_SPACING
     urdu_font = None
     wrapped_en = []
-    if content_mode == "arabic_only":
+    second_is_urdu = content_mode == "arabic_urdu_text"
+    urdu_spacing = 1.8 if "nastaliq" in urdu_font_key else 1.45
+    urdu_credit = (Q.get("urdu_translation") or URDU_TRANSLATION_CREDIT) if second_is_urdu else ""
+
+    def second_texts(item):
+        return item["text"] if second_is_urdu else item["english"]
+
+    def wrap_second(text, font):
+        if second_is_urdu:
+            return wrap(text, font, wrap_width)
+        return wrap_english(text, font, wrap_width)
+
+    def second_block_height(lines, font):
+        if second_is_urdu:
+            _, top, bottom = shaped_line_layout(
+                lines, font, language="ur", minimum_spacing=urdu_spacing,
+                stroke=int(round(2 * scale)),
+            )
+            height = bottom - top
+            if urdu_credit:
+                height += int(max(20, round(font.size * 0.72)) * 1.7) + int(round(12 * scale))
+            return height
+        return (
+            int(font.size * 1.25) * len(lines)
+            + int(max(14, round(font.size * 0.58)) * 1.3)
+            + int(round(12 * scale))
+        )
+
+    if content_mode in ARABIC_AUDIO_ONLY_MODES:
         for size in font_sizes:
             candidate_arabic_font = load_font(arabic_font_key, size, arabic_font_key)
-            candidate_english_font = load_font(
-                english_font_key,
-                max(24, int(round(size * 0.48))),
-                english_font_key,
-            )
+            if second_is_urdu:
+                candidate_second_font = load_font(
+                    urdu_font_key, max(26, int(round(size * 0.62))), urdu_font_key
+                )
+            else:
+                candidate_second_font = load_font(
+                    english_font_key,
+                    max(24, int(round(size * 0.48))),
+                    english_font_key,
+                )
             candidate_arabic = [
                 wrap(item["arabic"], candidate_arabic_font, wrap_width, language="ar")
                 for item in items
             ]
             candidate_english = [
-                wrap_english(item["english"], candidate_english_font, wrap_width)
+                wrap_second(second_texts(item), candidate_second_font)
                 for item in items
             ]
             candidate_groups = []
@@ -1145,26 +1220,23 @@ def build(
                         candidate_arabic_font,
                         int(round(3 * scale)),
                     )
-                    + int(candidate_english_font.size * 1.25) * len(english_group)
-                    + int(max(14, round(candidate_english_font.size * 0.58)) * 1.3)
+                    + second_block_height(english_group, candidate_second_font)
                     + int(round(130 * scale))
-                    + int(round(12 * scale))
                 ) // 2
                 >= minimum_chunk_top
                 for arabic_group, english_group in candidate_groups
             )
             if len(candidate_groups) <= allowed and bilingual_fits_below_label:
                 arabic_font = candidate_arabic_font
-                english_font = candidate_english_font
+                english_font = candidate_second_font
                 wrapped_ar = candidate_arabic
                 wrapped_en = candidate_english
                 break
         if arabic_font is None:
             raise SystemExit(
-                "Arabic and English text cannot fit below the ayah label at the selected render resolution."
+                "Arabic and translation text cannot fit below the ayah label at the selected render resolution."
             )
     else:
-        urdu_spacing = 1.8 if "nastaliq" in urdu_font_key else 1.45
         for size in font_sizes:
             candidate_font = load_font(urdu_font_key, size, urdu_font_key)
             candidate_wrapped = [wrap(item["text"], candidate_font, wrap_width) for item in items]
@@ -1194,7 +1266,7 @@ def build(
             raise SystemExit("Arabic text cannot fit below the ayah label at the selected render resolution.")
 
     timeline, off = [], 0.0
-    if content_mode == "arabic_only":
+    if content_mode in ARABIC_AUDIO_ONLY_MODES:
         for item, arabic_lines, english_lines in zip(items, wrapped_ar, wrapped_en):
             group_count = max(
                 1,
@@ -1252,7 +1324,10 @@ def build(
         p = tmp / f"c{k}.png"
         if english_group is not None:
             chunk_bilingual_png(
-                p, lines_group, english_group, arabic_font, english_font, base_p, styles
+                p, lines_group, english_group, arabic_font, english_font, base_p, styles,
+                second_kind="ur" if second_is_urdu else "en",
+                second_spacing=urdu_spacing,
+                credit=urdu_credit if second_is_urdu else None,
             )
         else:
             font = arabic_font if is_arabic else urdu_font
@@ -1434,6 +1509,10 @@ def main():
         "--arabic-only", action="store_true",
         help="Use Arabic recitation with Arabic text and English translation.",
     )
+    content_group.add_argument(
+        "--arabic-urdu-text", action="store_true",
+        help="Use Arabic recitation with Arabic text and Urdu translation as text only (no Urdu audio).",
+    )
     ap.add_argument("--batch-id")
     ap.add_argument("--work-dir")
     ap.add_argument("--result-json")
@@ -1447,11 +1526,15 @@ def main():
     a.max_dur = min(max(1, a.max_dur), ABS_MAX_DUR)
     a.min_dur = min(max(1, a.min_dur), a.max_dur)
     styles = load_video_styles(a.style_json)
-    CONTENT_MODE = "arabic_only" if a.arabic_only else "urdu_only" if a.urdu_only else "full"
+    CONTENT_MODE = (
+        "arabic_only" if a.arabic_only
+        else "arabic_urdu_text" if a.arabic_urdu_text
+        else "urdu_only" if a.urdu_only else "full"
+    )
     INCLUDE_ARABIC_AUDIO = CONTENT_MODE != "urdu_only"
     try:
         CURRENT_RECITER_ID = resolve_reciter_id("arabic", a.reciter)
-        if CONTENT_MODE != "arabic_only":
+        if CONTENT_MODE not in ARABIC_AUDIO_ONLY_MODES:
             CURRENT_URDU_VOICE_ID = resolve_reciter_id("urdu", a.urdu_voice)
     except ValueError as exc:
         ap.error(str(exc))
