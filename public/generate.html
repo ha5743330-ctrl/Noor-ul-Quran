@@ -54,28 +54,12 @@
                     <div class="mt-5">
                         <label for="input-content-mode" class="mb-2 block text-sm font-semibold text-slate-200">Text and audio</label>
                         <select id="input-content-mode" dir="auto" class="control">
-                            <option value="full">Arabic recitation + Urdu translation</option>
-                            <option value="urdu_only" lang="ur">Urdu text and audio only</option>
-                            <option value="arabic_only">Arabic recitation + Arabic text with translation text</option>
-                            <option value="arabic_urdu_text" lang="ur">Arabic recitation + Arabic text with Urdu text below (no Urdu audio)</option>
+                            <option value="full">Arabic + Urdu (Arabic audio, Urdu audio)</option>
+                            <option value="urdu_only">Urdu only (Urdu audio + text)</option>
+                            <option value="arabic_only">Arabic + English text</option>
+                            <option value="arabic_urdu_text">Arabic + Urdu text (no Urdu audio)</option>
                         </select>
-                        <div id="text-animation-control" class="mt-3">
-                            <label for="input-text-animation" class="mb-2 block text-sm font-semibold text-slate-200">Text animation</label>
-                            <select id="input-text-animation" dir="auto" class="control">
-                                <option value="none">None</option>
-                                <option value="fade">Fade in / out</option>
-                                <option value="fade_rise">Fade with gentle rise</option>
-                            </select>
-                            <p class="mt-2 text-xs text-slate-400">Each phrase stays on screen at least 1.2 s. Animated reels take a little longer to render.</p>
-                        </div>
-                        <div id="translation-control" class="mt-3 hidden">
-                            <label for="input-translation" class="mb-2 block text-sm font-semibold text-slate-200">Translation language</label>
-                            <select id="input-translation" dir="auto" class="control">
-                                <option value="en">English (Pickthall)</option>
-                                <option value="ur" lang="ur">اردو (Urdu text, no Urdu audio)</option>
-                            </select>
-                        </div>
-                        <p class="mt-2 text-xs text-slate-400">English translation: Mohammed Marmaduke William Pickthall (AlQuran Cloud edition en.pickthall). Urdu text: Mufti Muhammad Taqi Usmani when available, otherwise Fateh Muhammad Jalandhry.</p>
+                        <p class="mt-2 text-xs text-slate-400">English text: Mohammed Marmaduke William Pickthall (AlQuran Cloud edition en.pickthall). Urdu text: Mufti Muhammad Taqi Usmani when available, otherwise Fateh Muhammad Jalandhry.</p>
                         <p dir="rtl" lang="ur" class="mt-2 text-right text-sm text-slate-300">صرف اردو یا عربی تلاوت کے ساتھ عربی متن اور انگریزی ترجمے کے لیے اختیار منتخب کریں۔ ریلز کے انداز کے لیے "عربی تلاوت + عربی متن + نیچے اردو ترجمہ" منتخب کریں، اس میں اردو آواز نہیں ہوتی۔</p>
                     </div>
 
@@ -214,6 +198,15 @@
                                 <option value="nastaliq_bold">Nastaliq Bold</option>
                             </select>
                         </div>
+                    </div>
+                    <div id="text-animation-control" class="mt-4">
+                        <label for="input-text-animation" class="mb-2 block text-sm font-semibold text-slate-200">Text animation</label>
+                        <select id="input-text-animation" dir="auto" class="control">
+                            <option value="none">None</option>
+                            <option value="fade">Fade in / out</option>
+                            <option value="fade_rise">Fade with gentle rise</option>
+                        </select>
+                        <p class="mt-2 text-xs text-slate-400">Each phrase stays on screen at least 1.2 s. Animated reels take a little longer to render.</p>
                     </div>
                     <div class="mt-4 flex flex-wrap gap-3">
                         <button id="apply-video-style" type="button" class="min-h-11 rounded-lg bg-amber-400 px-5 py-2.5 font-bold text-slate-950 hover:bg-amber-300">Apply style</button>
@@ -451,7 +444,7 @@
     <script src="/config.js"></script>
     <script src="/auth.js?v=9"></script>
     <script src="/nav.js?v=2"></script>
-    <script src="/app.js?v=19"></script>
-    <script src="/picks.js?v=2"></script>
+    <script src="/app.js?v=20"></script>
+    <script src="/picks.js?v=3"></script>
 </body>
 </html>
