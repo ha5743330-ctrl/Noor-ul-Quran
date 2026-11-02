@@ -1057,3 +1057,11 @@ body.ui-page .ap-import { width: 100%; min-height: 120px; font-size: 16px !impor
     body.ui-generate #daily-remaining { margin: 0 0 4px; }
     body.ui-generate #generate-button { min-height: 48px; padding-top: 6px; padding-bottom: 6px; font-size: 1rem; }
 }
+
+.ad-photo-grid { max-height: 420px; overflow-y: auto; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); padding: 2px; }
+.ad-photo { display: grid; gap: 6px; padding: 8px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-soft); align-content: start; }
+.ad-photo img { width: 100%; aspect-ratio: 9 / 16; object-fit: cover; border-radius: 8px; background: #000; }
+.ad-photo.is-off img { opacity: .35; }
+.ad-photo-name { font-size: 12px; overflow-wrap: anywhere; color: var(--muted); }
+.ad-photo-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+@media (max-width: 480px) { .ad-photo-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: 360px; } }

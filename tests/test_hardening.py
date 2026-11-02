@@ -730,8 +730,8 @@ def test_ffmpeg_low_memory_profile_keeps_low_memory_encoder_settings(
     make.encode_video(["ffmpeg", "-i", "input.mp4"], tmp_path / "output.mp4")
 
     command = captured["command"]
-    assert command[command.index("-preset") + 1] == "ultrafast"
-    assert command[command.index("-crf") + 1] == "24"
+    assert command[command.index("-preset") + 1] == "superfast"
+    assert command[command.index("-crf") + 1] == "22"
     assert "-tune" not in command
 
 

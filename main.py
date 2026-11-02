@@ -65,6 +65,7 @@ BACKGROUND_DIR = Path(os.getenv("BACKGROUNDS_DIR", BASE_DIR / "backgrounds"))
 CACHE_DIR = Path(os.getenv("CACHE_DIR", BASE_DIR / "cache"))
 CLIP_CACHE_DIR = CACHE_DIR / "backgrounds"
 MUSIC_CACHE_DIR = CACHE_DIR / "music"
+PHOTO_CACHE_DIR = CACHE_DIR / "photos"
 MEDIA_NAME_PATTERN = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,99}\Z")
 VIDEO_URL_SECRET = os.getenv("VIDEO_URL_SECRET") or secrets.token_urlsafe(32)
 VIDEO_URL_TTL_SECONDS = 10 * 60
@@ -81,6 +82,13 @@ CLEANUP_INTERVAL_SECONDS = 6 * 60 * 60
 DAILY_LIMIT = int(os.getenv("DAILY_LIMIT", "5"))
 PREMIUM_DAILY_LIMIT = int(os.getenv("PREMIUM_DAILY_LIMIT") or 0) or None  # None = same as DAILY_LIMIT
 MAX_VIDEO_SECONDS = int(os.getenv("MAX_VIDEO_SECONDS", "35"))
+# Photo reels render ~5x faster but a 60 s photo reel still peaked ~490 MiB on 512 MB (README), so the default equals the video cap.
+MAX_VIDEO_SECONDS_PHOTO = int(os.getenv("MAX_VIDEO_SECONDS_PHOTO", str(MAX_VIDEO_SECONDS)))
+BACKGROUND_TYPES = {"video", "photos"}
+PHOTO_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
+PHOTO_MAX_BYTES = 400 * 1024
+PHOTO_PREFIX = "images"
+PHOTO_DISABLED_OBJECT = f"{PHOTO_PREFIX}/_disabled.json"
 DEFAULT_QUALITY = os.getenv("DEFAULT_QUALITY", "fast")
 MAX_ACTIVE_JOBS_PER_USER = int(os.getenv("MAX_ACTIVE_JOBS_PER_USER", "1"))
 DEFAULT_RENDER_SECONDS = 90.0
@@ -107,17 +115,27 @@ RENDER_MB_PER_SECOND = {
     "low": {"fast": 0.4, "balanced": 0.4, "high": 0.6},
     "full": {"fast": 10.4, "balanced": 10.4, "high": 19.4},
 }
+# Photo reels: no clip decoding, so far less memory per second (measured, see README).
+RENDER_MB_PER_SECOND_PHOTO = {
+    "low": {"fast": 1.0, "balanced": 1.0, "high": 2.8},  # measured 512m/0.5 CPU: 30 s 401 MiB, 60 s ~490 MiB
+    "full": {"fast": 5.0, "balanced": 5.0, "high": 9.0},
+}
 
 
-def _estimate_render_mb(seconds, quality):
+def _cap_for(background_type):
+    return MAX_VIDEO_SECONDS_PHOTO if background_type == "photos" else MAX_VIDEO_SECONDS
+
+
+def _estimate_render_mb(seconds, quality, background_type="video"):
     profile = "low" if os.getenv("RENDER_MEMORY_PROFILE", "").lower() == "low" else "full"
-    return SERVER_BASE_MB + RENDER_BASE_MB + RENDER_MB_PER_SECOND[profile][quality] * seconds
+    table = RENDER_MB_PER_SECOND_PHOTO if background_type == "photos" else RENDER_MB_PER_SECOND
+    return SERVER_BASE_MB + RENDER_BASE_MB + table[profile][quality] * seconds
 
 
-def _check_render_memory(seconds, quality):
+def _check_render_memory(seconds, quality, background_type="video"):
     if not RENDER_MEMORY_LIMIT_MB:
         return
-    needed = _estimate_render_mb(seconds, quality)
+    needed = _estimate_render_mb(seconds, quality, background_type)
     if needed > RENDER_MEMORY_LIMIT_MB:
         raise HTTPException(
             status_code=400,
@@ -204,6 +222,7 @@ class GenerateRequest(BaseModel):
     quality: str = DEFAULT_QUALITY
     content_mode: str = "full"
     text_animation: str = "none"  # none | fade | fade_rise (per-phrase text transition)
+    background_type: str = "video"  # video | photos (one cover-cropped photo per ~8 s, no clips decoded)
     text_layout: str = "one_line"  # one_line | two_lines | block (words per screen)
     video_style: str = "classic"  # classic | pro (pro is local-only; the Render profile ignores it)
     translation: str = "en"  # only for content_mode "arabic_only": "en" (Pickthall) or "ur" (Urdu text)
@@ -381,12 +400,12 @@ def _list_bucket_files(prefix: str, bucket: str, extensions):
     ]
 
 
-def _sync_render_media(music: Optional[str]):
+def _sync_render_media(music: Optional[str], clips: bool = True):
     """Fetch backgrounds and the chosen music into cache/ on demand; failures degrade to local/still fallbacks."""
     if not SUPABASE_SERVICE_KEY:
         return
     try:
-        for name, size in _list_bucket_files("", BACKGROUNDS_BUCKET, {".mp4"}):
+        for name, size in (_list_bucket_files("", BACKGROUNDS_BUCKET, {".mp4"}) if clips else []):
             _sync_cached_object(BACKGROUNDS_BUCKET, name, CLIP_CACHE_DIR / name, size)
     except Exception as exc:
         LOGGER.warning("Background clips unavailable, using still image: %s", _redact_secrets(str(exc)))
@@ -627,11 +646,7 @@ def generate_ayah_image(req: GenerateImageRequest, user=Depends(get_current_user
         LOGGER.exception("Curated ayah %s is missing from Quran data.", reference)
         raise HTTPException(status_code=500, detail="Selected ayah is unavailable.") from exc
 
-    images_dir = BACKGROUND_DIR / "images"
-    background_paths = sorted(
-        path for path in images_dir.iterdir()
-        if path.is_file() and path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"}
-    ) if images_dir.is_dir() else []
+    background_paths = _photo_pool(sync=True) or _fallback_photos()
     if not background_paths:
         raise HTTPException(status_code=503, detail="No image backgrounds are available.")
     background_path = random.choice(background_paths)
@@ -1127,6 +1142,7 @@ def _record_video_history(user_id, videos, content_mode, quality, styles):
                 "downloaded_at": None,
                 "download_count": 0,
                 "styled": bool(styles),
+                "background": video.get("background", "video"),
                 "object_path": video.get("object_path"),
             }
             for video in reversed(videos)
@@ -1566,6 +1582,7 @@ def get_access(user=Depends(get_current_user)):
         "daily_remaining": _daily_remaining(user),
         # The render cap applies to everyone, admins included (they skip only the daily count).
         "max_video_seconds": MAX_VIDEO_SECONDS,
+        "max_video_seconds_photo": MAX_VIDEO_SECONDS_PHOTO,
         "low_memory_profile": os.getenv("RENDER_MEMORY_PROFILE", "").lower() == "low",
     }
 
@@ -1579,6 +1596,7 @@ def estimate_reel(
     length_limit: Optional[str] = "60",
     reciter_id: Optional[str] = None,
     urdu_voice_id: Optional[str] = None,
+    background: Optional[str] = None,
     user=Depends(get_current_user),
 ):
     try:
@@ -1599,8 +1617,9 @@ def estimate_reel(
         urdu_voice_id = _validate_reciter_id(
             urdu_voice_id, "ur", DEFAULT_URDU_VOICE_ID
         )
-    if not 30 <= selected_length <= max(30, MAX_VIDEO_SECONDS):
-        raise HTTPException(status_code=400, detail=f"Length must be between 30 and {max(30, MAX_VIDEO_SECONDS)} seconds.")
+    est_cap = _cap_for(background)
+    if not 30 <= selected_length <= max(30, est_cap):
+        raise HTTPException(status_code=400, detail=f"Length must be between 30 and {max(30, est_cap)} seconds.")
     _validate_ayah_range(surah_number, start_ayah, end_ayah)
 
     import make as renderer
@@ -1787,6 +1806,181 @@ def set_premium_access(user_id: UUID, req: PremiumAccessRequest, user=Depends(re
     return {"user_id": str(user_id), "premium_access": req.enabled}
 
 
+def _photo_disabled() -> set:
+    local = PHOTO_CACHE_DIR / "_disabled.json"
+    if SUPABASE_SERVICE_KEY:
+        try:
+            _download_media_file(PHOTO_DISABLED_OBJECT, local, BACKGROUNDS_BUCKET)
+        except Exception:
+            pass  # no state object yet (or storage down): use the cached copy, if any
+    try:
+        return {n for n in json.loads(local.read_text(encoding="utf-8")) if isinstance(n, str)}
+    except (OSError, ValueError, TypeError):
+        return set()
+
+
+def _write_photo_disabled(names):
+    PHOTO_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    local = PHOTO_CACHE_DIR / "_disabled.json"
+    local.write_text(json.dumps(sorted(names)), encoding="utf-8")
+    if SUPABASE_SERVICE_KEY:
+        _upload_media_file(local, PHOTO_DISABLED_OBJECT, "application/json", BACKGROUNDS_BUCKET)
+
+
+def _photo_files():
+    """All pool photos as [(name, size)]: the bucket's images/ folder, or the local cache without Supabase."""
+    if SUPABASE_SERVICE_KEY:
+        try:
+            return sorted(_list_bucket_files(PHOTO_PREFIX, BACKGROUNDS_BUCKET, PHOTO_EXTENSIONS), key=lambda x: x[0].lower())
+        except Exception as exc:
+            LOGGER.warning("Photo list unavailable, using cache: %s", _redact_secrets(str(exc)))
+    if not PHOTO_CACHE_DIR.is_dir():
+        return []
+    return sorted(
+        ((p.name, p.stat().st_size) for p in PHOTO_CACHE_DIR.iterdir() if p.is_file() and p.suffix.lower() in PHOTO_EXTENSIONS),
+        key=lambda x: x[0].lower(),
+    )
+
+
+def _photo_pool(sync=False):
+    """Enabled pool photos as local paths. sync=True downloads missing ones; failures just shrink the pool."""
+    disabled = _photo_disabled()
+    paths = []
+    for name, size in _photo_files():
+        if name in disabled:
+            continue
+        local = PHOTO_CACHE_DIR / name
+        if sync and SUPABASE_SERVICE_KEY:
+            try:
+                _sync_cached_object(BACKGROUNDS_BUCKET, f"{PHOTO_PREFIX}/{name}", local, size)
+            except Exception as exc:
+                LOGGER.warning("Photo %s unavailable: %s", name, _redact_secrets(str(exc)))
+        if local.is_file():
+            paths.append(local)
+    return paths
+
+
+def _fallback_photos():
+    images_dir = BACKGROUND_DIR / "images"
+    return sorted(
+        p for p in images_dir.iterdir() if p.is_file() and p.suffix.lower() in PHOTO_EXTENSIONS
+    ) if images_dir.is_dir() else []
+
+
+def _normalize_photo(source: Path, target: Path):
+    """Validate an uploaded image and write a 1080x1920 cover-cropped JPEG of at most PHOTO_MAX_BYTES."""
+    from PIL import Image, ImageOps, UnidentifiedImageError
+    try:
+        with Image.open(source) as probe:
+            if probe.format not in {"JPEG", "PNG", "WEBP"}:
+                raise HTTPException(status_code=400, detail="Photos must be JPG, PNG, or WebP.")
+            width, height = probe.size
+            if min(width, height) < 400 or width * height > 80_000_000:
+                raise HTTPException(status_code=400, detail="Photo must be at least 400 px on its short side and under 80 megapixels.")
+            image = ImageOps.exif_transpose(probe).convert("RGB")
+    except (UnidentifiedImageError, OSError, Image.DecompressionBombError) as exc:
+        raise HTTPException(status_code=400, detail="The file is not a valid image.") from exc
+    image = ImageOps.fit(image, (1080, 1920), method=Image.Resampling.LANCZOS)
+    for quality in (88, 82, 76, 70, 64, 58, 52, 46, 40, 32, 25):
+        image.save(target, format="JPEG", quality=quality, optimize=True, progressive=True)
+        if target.stat().st_size <= PHOTO_MAX_BYTES:
+            return
+    raise HTTPException(status_code=400, detail="Photo could not be compressed under 400 KB.")
+
+
+def _photo_signature_name(filename):
+    return f"photo:{filename}"
+
+
+@app.get("/api/photo/{filename}")
+def serve_signed_photo(filename: str, exp: Optional[str] = None, sig: Optional[str] = None):
+    if not (isinstance(exp, str) and re.fullmatch(r"[0-9]{1,12}", exp) and isinstance(sig, str) and re.fullmatch(r"[0-9a-f]{64}", sig)):
+        raise HTTPException(status_code=403, detail="Invalid or expired photo link.")
+    if int(exp) <= int(time.time()) or not hmac.compare_digest(sig, _video_signature(_photo_signature_name(filename), int(exp))):
+        raise HTTPException(status_code=403, detail="Invalid or expired photo link.")
+    _media_filename(filename, PHOTO_EXTENSIONS)
+    local = PHOTO_CACHE_DIR / filename
+    if not local.is_file() and SUPABASE_SERVICE_KEY:
+        try:
+            _download_media_file(f"{PHOTO_PREFIX}/{filename}", local, BACKGROUNDS_BUCKET)
+        except Exception:
+            pass
+    if not local.is_file():
+        raise HTTPException(status_code=404, detail="Photo not found.")
+    return FileResponse(local, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=300"})
+
+
+@app.get("/api/admin/photos")
+def list_photos(user=Depends(require_admin)):
+    disabled = _photo_disabled()
+    expires = int(time.time()) + VIDEO_URL_TTL_SECONDS
+    return [
+        {
+            "filename": name,
+            "size": size or 0,
+            "enabled": name not in disabled,
+            "thumb_url": f"/api/photo/{quote(name, safe='')}?" + urlencode(
+                {"exp": expires, "sig": _video_signature(_photo_signature_name(name), expires)}
+            ),
+        }
+        for name, size in _photo_files()
+    ]
+
+
+@app.post("/api/admin/photos")
+async def upload_photo(request: Request, user=Depends(require_admin)):
+    raw_name = request.query_params.get("filename", "")
+    stem = re.sub(r"[^A-Za-z0-9_-]+", "-", Path(raw_name).stem).strip("-_")[:60] or "photo"
+    PHOTO_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    temporary_path, _ = await _receive_upload(request, PHOTO_CACHE_DIR, "Photo")
+    final_path = None
+    try:
+        existing = {name for name, _ in _photo_files()}
+        filename = f"{stem}.jpg"
+        if filename in existing:
+            filename = f"{stem}-{uuid4().hex[:6]}.jpg"
+        final_path = PHOTO_CACHE_DIR / filename
+        _normalize_photo(temporary_path, final_path)
+        if SUPABASE_SERVICE_KEY:
+            _upload_media_file(final_path, f"{PHOTO_PREFIX}/{filename}", "image/jpeg", BACKGROUNDS_BUCKET)
+    except Exception:
+        if final_path is not None:
+            final_path.unlink(missing_ok=True)
+        raise
+    finally:
+        temporary_path.unlink(missing_ok=True)
+    return {"filename": filename, "size": final_path.stat().st_size}
+
+
+class PhotoToggle(BaseModel):
+    enabled: bool
+
+
+@app.patch("/api/admin/photos/{filename}")
+def toggle_photo(filename: str, body: PhotoToggle, user=Depends(require_admin)):
+    _media_filename(filename, PHOTO_EXTENSIONS)
+    disabled = _photo_disabled()
+    if body.enabled:
+        disabled.discard(filename)
+    else:
+        disabled.add(filename)
+    _write_photo_disabled(disabled)
+    return {"filename": filename, "enabled": body.enabled}
+
+
+@app.delete("/api/admin/photos/{filename}")
+def delete_photo(filename: str, user=Depends(require_admin)):
+    _media_filename(filename, PHOTO_EXTENSIONS)
+    if SUPABASE_SERVICE_KEY:
+        _remove_bucket_object(BACKGROUNDS_BUCKET, f"{PHOTO_PREFIX}/{filename}")
+    (PHOTO_CACHE_DIR / filename).unlink(missing_ok=True)
+    disabled = _photo_disabled()
+    if filename in disabled:
+        disabled.discard(filename)
+        _write_photo_disabled(disabled)
+    return {"deleted": filename}
+
+
 @app.get("/api/admin/backgrounds")
 def list_backgrounds(user=Depends(require_admin)):
     if SUPABASE_SERVICE_KEY:
@@ -1939,7 +2133,9 @@ def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
         raise HTTPException(status_code=400, detail="Invalid generation mode.")
     if req.mode != "pick" and not (user["is_admin"] or user["premium_access"]):
         raise HTTPException(status_code=403, detail="Premium access is required for custom and random generation.")
-    cap = MAX_VIDEO_SECONDS
+    if req.background_type not in BACKGROUND_TYPES:
+        raise HTTPException(status_code=400, detail="Background type must be video or photos.")
+    cap = _cap_for(req.background_type)
     content_mode = req.content_mode
     pick_rows = []
     if req.mode == "picks":
@@ -2007,7 +2203,7 @@ def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
     if req.quality not in RENDER_QUALITIES:
         raise HTTPException(status_code=400, detail="Quality must be fast, balanced, or high.")
     max_dur = cap if req.mode == "picks" else req.max_duration
-    _check_render_memory(max_dur, req.quality)
+    _check_render_memory(max_dur, req.quality, req.background_type)
     validate_video_styles(req.styles)
     _require_raqm_for_generation(content_mode)
 
@@ -2056,6 +2252,8 @@ def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
         text_animation = "fade"
     if text_animation != "none":
         cmd.extend(["--text-animation", text_animation])
+    if req.background_type == "photos":
+        cmd.extend(["--background", "photos", "--photo-list", str(work_dir / "photos.txt")])
     if req.text_layout != "one_line":
         cmd.extend(["--text-layout", req.text_layout])
     if req.video_style != "classic":
@@ -2106,6 +2304,7 @@ def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
             "status": "queued",
             "mode": req.mode,
             "quality": req.quality,
+            "background": req.background_type,
             "batch_id": batch_id,
             "error": None,
             "videos": [],
@@ -2215,7 +2414,7 @@ def _run_render(cmd, timeout, job_id=None, on_tick=None):
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
-        env={**os.environ, "MAX_VIDEO_SECONDS": str(MAX_VIDEO_SECONDS)},
+        env={**os.environ, "MAX_VIDEO_SECONDS": str(max(MAX_VIDEO_SECONDS, MAX_VIDEO_SECONDS_PHOTO))},
         **group_args,
     )
     if job_id:
@@ -2342,7 +2541,12 @@ def _run_generation_job(
             if not EPHEMERAL_MEDIA_READY:
                 _prepare_ephemeral_media()
                 EPHEMERAL_MEDIA_READY = True
-            _sync_render_media(cmd[cmd.index("--music") + 1] if "--music" in cmd else None)
+            photo_mode = "--photo-list" in cmd
+            _sync_render_media(cmd[cmd.index("--music") + 1] if "--music" in cmd else None, clips=not photo_mode)
+            if photo_mode:
+                work_dir.mkdir(parents=True, exist_ok=True)
+                pool = _photo_pool(sync=True)
+                (work_dir / "photos.txt").write_text("\n".join(str(p) for p in pool), encoding="utf-8")
             _cleanup_orphaned_output_files()
             with GENERATION_JOBS_LOCK:
                 job = GENERATION_JOBS.get(job_id)
@@ -2716,8 +2920,8 @@ def _pick_audit(user, pick_id, action, detail):
 
 
 @app.get("/api/picks")
-def list_picks(bucket: Optional[int] = None, mode: Optional[str] = None, user=Depends(get_current_user)):
-    quran, cap = _quran_data(), MAX_VIDEO_SECONDS
+def list_picks(bucket: Optional[int] = None, mode: Optional[str] = None, background: Optional[str] = None, user=Depends(get_current_user)):
+    quran, cap = _quran_data(), _cap_for(background)
     rows = [
         _pick_view(p, quran, cap) for p in _load_picks()
         if (bucket is None or p["bucket"] == bucket) and (mode is None or p["mode"] == mode)

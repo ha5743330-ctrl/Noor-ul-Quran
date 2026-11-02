@@ -7,6 +7,7 @@ import argparse, contextlib, csv, json, os, random, re, shutil, subprocess, sys,
 import ctypes
 import functools
 import hashlib
+import shlex
 import math
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -25,7 +26,7 @@ if os.name == "nt":
             except OSError:
                 continue
 
-from PIL import Image, ImageDraw, ImageFont, ImageOps, features
+from PIL import Image, ImageChops, ImageDraw, ImageFont, ImageOps, features
 import requests
 
 RAQM_AVAILABLE = features.check("raqm")
@@ -277,10 +278,17 @@ def detect_hardware_encoder():
     _hardware_encoder = ""
     return _hardware_encoder
 
+# CPU fallback on the low-memory profile. ultrafast disables deblocking/AQ (blocky clouds and text edges);
+# measured on 512m/0.5 CPU: superfast crf22 + aq3 = same time, SSIM min 0.983 -> 0.988.
+LOW_X264_ARGS = "-preset superfast -crf 22 -x264-params aq-mode=3"
 X264_PRESETS = {"fast": "veryfast", "balanced": "fast", "high": "medium"}
 QUALITY = "high"
 
 def encode_video(cmd, outfile):
+    if os.getenv("NOOR_LOSSLESS") == "1":  # debug: lossless reference for SSIM/PSNR comparisons
+        run(cmd + ["-c:v", "libx264", "-preset", "ultrafast", "-crf", "0", *FFMPEG_CODEC_THREADS,
+                   "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k", str(outfile)])
+        return
     low_memory = os.getenv("RENDER_MEMORY_PROFILE", "").lower() == "low"
     if not low_memory:
         run(
@@ -290,6 +298,7 @@ def encode_video(cmd, outfile):
                 "-preset", X264_PRESETS[QUALITY],
                 "-crf", "18",
                 "-tune", "film",
+                "-x264-params", "aq-mode=3",
                 *list(FFMPEG_CODEC_THREADS),
                 "-pix_fmt", "yuv420p",
                 "-color_range", "tv",
@@ -324,7 +333,7 @@ def encode_video(cmd, outfile):
 
     run(
         cmd
-        + ["-c:v", "libx264", "-preset", "ultrafast", "-crf", "24"]
+        + ["-c:v", "libx264", *shlex.split(os.getenv("NOOR_LOW_X264", LOW_X264_ARGS))]
         + list(FFMPEG_CODEC_THREADS)
         + ["-pix_fmt", "yuv420p"]
         + audio_args
@@ -356,6 +365,61 @@ def set_video_quality(quality):
         W, H, FPS = 1080, 1920, 30
     else:
         W, H, FPS = 720, 1280, 24
+
+PHOTO_SEGMENT_SEC = 8.0
+PHOTO_EXTS = (".jpg", ".jpeg", ".png", ".webp")
+
+
+def photo_playlist(photos, total, rng):
+    """[(photo, 0.0, seconds)] about PHOTO_SEGMENT_SEC each, random without an immediate repeat.
+
+    """
+    if total <= 0:
+        return []
+    if not photos:
+        raise RuntimeError("No background photos are available.")
+    count = max(1, round(total / PHOTO_SEGMENT_SEC))
+    share = total / count  # seconds each photo owns; crossfades are centred on the boundaries
+    playlist, bag, previous = [], [], None
+    while len(playlist) < count:
+        if not bag:
+            bag = list(photos)
+            rng.shuffle(bag)
+            if len(bag) > 1 and bag[0] == previous:
+                bag[0], bag[1] = bag[1], bag[0]
+        path = bag.pop(0)
+        playlist.append((path, 0.0, share))
+        previous = path
+    return playlist
+
+
+def photo_background_list(photos, total, rng, tmp):
+    """ffconcat list that plays the photos as ONE low-memory video input.
+
+    Photos are cover-cropped to WxH once with PIL; the 0.5 s crossfades are baked as a few blended frames
+    around each boundary. No video decoding and no parallel ffmpeg inputs, so ffmpeg never queues frames ahead.
+    """
+    playlist = photo_playlist(photos, total, rng)
+    n_fade = max(2, round(0.5 * FPS))
+    rows, last, prev = [], None, None
+    for index, (path, _, share) in enumerate(playlist):
+        with Image.open(path) as source:
+            image = ImageOps.fit(source.convert("RGB"), (W, H), method=Image.Resampling.LANCZOS)
+        if prev is not None:
+            for j in range(n_fade):
+                frame_path = tmp / f"ph{index}_x{j}.jpg"
+                Image.blend(prev, image, (j + 1) / (n_fade + 1)).save(frame_path, quality=92)
+                rows.append(f"file '{frame_path.resolve().as_posix()}'\nduration {1 / FPS:.5f}")
+        hold = share - (0.25 if prev is not None else 0.0) - (0.25 if index + 1 < len(playlist) else 0.0)
+        hold -= (n_fade / FPS - 0.5) if prev is not None else 0.0  # fade frames replace 0.5 s around the cut
+        hold_path = tmp / f"ph{index}.jpg"
+        image.save(hold_path, quality=92)
+        rows.append(f"file '{hold_path.resolve().as_posix()}'\nduration {max(hold, 0.05):.5f}")
+        last, prev = hold_path, image
+    rows.append(f"file '{last.resolve().as_posix()}'")
+    list_path = tmp / "photos.ffconcat.txt"
+    list_path.write_text("\n".join(rows))
+    return list_path
 
 def background_playlist(bgs, total, rng):
     unique, sizes = [], {}
@@ -753,7 +817,10 @@ def base_overlay(path, surah, label, show_bismillah, styles=None):
         for y in range(256)
     ])
     shade = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    shade.putalpha(ramp.resize((W, H), Image.Resampling.BILINEAR))
+    alpha = ramp.resize((W, H), Image.Resampling.BILINEAR)
+    # +-1 level of noise dithers the 8-bit alpha ramp so the dark gradient does not band after encoding.
+    alpha = ImageChops.add(alpha, Image.effect_noise((W, H), 1.5), 1, -128)
+    shade.putalpha(alpha)
     im.alpha_composite(shade)
     if show_bismillah:
         bismillah_color = styled_color(styles, "bismillah", (255, 255, 255, 255))
@@ -1304,7 +1371,7 @@ def build(
     Q, s, a0, a1, outfile, bgs, rng, tmp, styles=None,
     max_duration=MAX_DUR, content_mode="full", music_filename=None,
     reciter_id=None, urdu_voice_id=None, text_animation="none",
-    text_layout="one_line", video_style="classic",
+    text_layout="one_line", video_style="classic", photos=None,
 ):
     if text_animation not in TEXT_ANIMATIONS:
         raise ValueError("Text animation must be none, fade, or fade_rise.")
@@ -1576,12 +1643,18 @@ def build(
     rows.append(f"file '{last_frame.resolve().as_posix()}'")
     lst.write_text("\n".join(rows))
     
-    playlist = background_playlist(bgs, total, rng)
+    if photos:
+        playlist = [(photo_background_list(photos, total, rng, tmp), 0.0, total)]
+    else:
+        playlist = background_playlist(bgs, total, rng)
     cmd = [
         "ffmpeg", "-nostdin", "-y", "-v", "error",
         *FFMPEG_FILTER_THREADS,
     ]
     for path, seek, segment_duration in playlist:
+        if photos:  # one concat input of pre-sized stills; no video decoding at all
+            cmd += [*FFMPEG_CODEC_THREADS, "-f", "concat", "-safe", "0", "-i", str(path)]
+            continue
         cmd += [
             *FFMPEG_CODEC_THREADS,
             "-stream_loop", "-1", "-ss", f"{seek:.3f}",
@@ -1595,10 +1668,10 @@ def build(
     for idx, (_, _, segment_duration) in enumerate(playlist):
         background_label = f"bg{idx}"
         fc.append(
-            f"[{idx}:v]fps={FPS},scale={W}:{H}:force_original_aspect_ratio=increase,"
+            f"[{idx}:v]fps={FPS},scale={W}:{H}:force_original_aspect_ratio=increase:flags=lanczos,"
             f"crop={W}:{H},eq=brightness={BRIGHTNESS},setsar=1,format=yuv420p,settb=AVTB,"
             f"tpad=stop_mode=clone:stop_duration=1,trim=duration={segment_duration:.3f},"
-            f"setpts=PTS-STARTPTS[{background_label}]"
+            f"setpts=PTS-STARTPTS,fps={FPS}[{background_label}]"
         )
         background_labels.append(f"[{background_label}]")
     if len(playlist) == 1:
@@ -1611,7 +1684,8 @@ def build(
             offset = elapsed - 0.5
             fc.append(
                 f"{previous_label}{background_labels[idx]}"
-                f"xfade=transition=fade:duration=0.5:offset={max(0, offset):.3f}[{mixed_label}]"
+                f"xfade=transition=fade:duration=0.5:offset={max(0, offset):.3f},"
+                f"setpts=PTS-STARTPTS,fps={FPS}[{mixed_label}]"  # chained xfade needs a constant frame rate
             )
             previous_label = f"[{mixed_label}]"
             elapsed += playlist[idx][2] - 0.5
@@ -1827,6 +1901,8 @@ def main():
     ap.add_argument("--text-layout", choices=TEXT_LAYOUTS, default="one_line")
     ap.add_argument("--video-style", choices=VIDEO_STYLES, default="classic",
                     help="pro = local-only extras (colour grade, ducking, title card, watermark); ignored on Render.")
+    ap.add_argument("--background", choices=("video", "photos"), default="video")
+    ap.add_argument("--photo-list", help="Text file with one photo path per line (photos mode).")
     ap.add_argument("--batch-id")
     ap.add_argument("--work-dir")
     ap.add_argument("--result-json")
@@ -1891,7 +1967,15 @@ def main():
             + ", ".join(path.name for path in generated_reels),
             file=sys.stderr,
         )
-    if not bgs:
+    photos = None
+    if a.background == "photos":
+        listed = Path(a.photo_list).read_text(encoding="utf-8").splitlines() if a.photo_list and Path(a.photo_list).is_file() else []
+        photos = [Path(x) for x in listed if x.strip() and Path(x).is_file()]
+        if not photos:  # empty pool: the bundled calm background
+            photos = sorted(p for p in (BACKGROUND_DIR / "images").glob("*") if p.suffix.lower() in PHOTO_EXTS)[:1]
+        if not photos:
+            sys.exit("No background photos available (pool empty and backgrounds/images/ has none).")
+    if not bgs and not photos:
         still = still_background()
         if not still: sys.exit("No background clips (backgrounds/ or Supabase) and no backgrounds/images/ still.")
         bgs = [still]
@@ -1935,7 +2019,7 @@ def main():
                     a.max_dur, content_mode, a.music,
                     CURRENT_RECITER_ID, CURRENT_URDU_VOICE_ID,
                     text_animation=a.text_animation,
-                    text_layout=a.text_layout, video_style=a.video_style,
+                    text_layout=a.text_layout, video_style=a.video_style, photos=photos,
                 )
             except Exception as exc:  # one bad reel must not stop the batch
                 res, why = None, str(exc)
@@ -1959,6 +2043,7 @@ def main():
                 "duration": round(total, 2),
                 "warnings": warnings,
                 "text_animation": effective_animation(a.text_animation),
+                "background": "photos" if photos else "video",
                 "index": i,
             })
             write_result(generated + failed)

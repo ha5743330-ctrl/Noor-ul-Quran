@@ -43,8 +43,10 @@
         return session.access_token;
     }
 
+    const bgType = () => document.getElementById("input-background-type")?.value === "photos" ? "photos" : "video";
+
     async function getPicks() {
-        const response = await fetch(`${API}/picks?bucket=${state.bucket}&mode=${state.mode}`, {
+        const response = await fetch(`${API}/picks?bucket=${state.bucket}&mode=${state.mode}&background=${bgType()}`, {
             headers: { Authorization: `Bearer ${await token()}` },
         });
         const body = await response.json().catch(() => ({}));
@@ -52,7 +54,7 @@
         return body;
     }
 
-    const key = () => `${state.bucket}:${state.mode}`;
+    const key = () => `${state.bucket}:${state.mode}:${bgType()}`;
     const rows = () => state.data[key()]?.picks || [];
     const fits = (row) => row.selectable && !row.over_bucket;
     const mmss = (seconds) => `${Math.floor(seconds / 60)}:${String(Math.round(seconds % 60)).padStart(2, "0")}`;
@@ -359,4 +361,7 @@
     }
 
     window.NoorPicks = { show, batchRequest, onJob };
+    document.getElementById("input-background-type")?.addEventListener("change", () => {
+        if (document.querySelector(".pk-chips")) { build(); refresh(); }
+    });
 })();
