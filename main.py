@@ -204,6 +204,8 @@ class GenerateRequest(BaseModel):
     quality: str = DEFAULT_QUALITY
     content_mode: str = "full"
     text_animation: str = "none"  # none | fade | fade_rise (per-phrase text transition)
+    text_layout: str = "one_line"  # one_line | two_lines | block (words per screen)
+    video_style: str = "classic"  # classic | pro (pro is local-only; the Render profile ignores it)
     translation: str = "en"  # only for content_mode "arabic_only": "en" (Pickthall) or "ur" (Urdu text)
     reciter_id: Optional[str] = None
     urdu_voice_id: Optional[str] = None
@@ -1044,6 +1046,7 @@ def cleanup_old_media(now=None):
                 video_path = _safe_history_video_path(entry.get("filename"))
                 if video_path is not None and video_path.is_file():
                     try:
+                        video_path.with_name(video_path.stem + "_cover.png").unlink(missing_ok=True)
                         video_path.unlink()
                         counts["local"] += 1
                     except OSError:
@@ -1086,6 +1089,8 @@ def cleanup_output_on_startup():
 CONTENT_MODES = {"full", "urdu_only", "arabic_only", "arabic_urdu_text"}
 TRANSLATIONS = {"en", "ur"}
 TEXT_ANIMATIONS = {"none", "fade", "fade_rise"}
+TEXT_LAYOUTS = {"one_line", "two_lines", "block"}
+VIDEO_STYLES = {"classic", "pro"}
 # Modes whose audio is Arabic recitation only (no Urdu voice is fetched or mixed).
 ARABIC_AUDIO_MODES = {"arabic_only", "arabic_urdu_text"}
 CONTENT_MODE_ERROR = "Mode must be full, urdu_only, arabic_only, or arabic_urdu_text."
@@ -1301,6 +1306,10 @@ def get_video_history(user=Depends(get_current_user)):
             )
             if item["type"] == "image" and item["has_file"]:
                 item["thumb_url"] = _signed_media_path(item["filename"])
+            elif item["type"] == "video" and video_path and video_path.is_file():
+                cover = video_path.with_name(video_path.stem + "_cover.png")
+                if cover.is_file():
+                    item["thumb_url"] = _signed_media_path(cover.name)
             response.append(item)
     return {"videos": response}
 
@@ -1396,6 +1405,7 @@ def _delete_history_entries(user_id, ids):
         video_path = _safe_history_video_path(entry.get("filename"))
         if video_path is not None:
             try:
+                video_path.with_name(video_path.stem + "_cover.png").unlink(missing_ok=True)
                 video_path.unlink(missing_ok=True)
             except OSError:
                 LOGGER.exception("Could not delete history file %s", entry.get("filename"))
@@ -1946,6 +1956,10 @@ def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
         )
     if req.text_animation not in TEXT_ANIMATIONS:
         raise HTTPException(status_code=400, detail="Text animation must be none, fade, or fade_rise.")
+    if req.text_layout not in TEXT_LAYOUTS:
+        raise HTTPException(status_code=400, detail="Text layout must be one_line, two_lines, or block.")
+    if req.video_style not in VIDEO_STYLES:
+        raise HTTPException(status_code=400, detail="Video style must be classic or pro.")
     if req.translation not in TRANSLATIONS:
         raise HTTPException(status_code=400, detail="Translation must be en or ur.")
     if req.translation == "ur" and content_mode != "arabic_only":
@@ -2037,6 +2051,10 @@ def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
         cmd.append("--arabic-urdu-text")
     if req.text_animation != "none":
         cmd.extend(["--text-animation", req.text_animation])
+    if req.text_layout != "one_line":
+        cmd.extend(["--text-layout", req.text_layout])
+    if req.video_style != "classic":
+        cmd.extend(["--video-style", req.video_style])
     cmd.extend(["--reciter", reciter_id])
     if content_mode not in ARABIC_AUDIO_MODES:
         cmd.extend(["--urdu-voice", urdu_voice_id])
