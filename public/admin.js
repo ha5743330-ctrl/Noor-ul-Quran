@@ -60,6 +60,7 @@ async function initializeAdmin() {
         await loadUsers();
         await loadAudit();
         await loadBackgrounds();
+        await loadPhotos();
         await loadMusic();
         await loadDiagnostics();
     } catch (error) {
@@ -363,6 +364,91 @@ function deleteButton(path, filename, reload) {
     return button;
 }
 
+async function loadPhotos() {
+    const list = document.getElementById("photo-list");
+    try {
+        const photos = await adminRequest("/admin/photos");
+        const active = photos.filter((photo) => photo.enabled).length;
+        document.getElementById("photos-badge").textContent = `${active} of ${photos.length} on`;
+        list.replaceChildren();
+        if (!photos.length) list.append(emptyRow("No photos uploaded. Ayah Images use the built-in background."));
+        for (const photo of photos) {
+            const card = document.createElement("li");
+            card.className = "ad-photo" + (photo.enabled ? "" : " is-off");
+            const img = document.createElement("img");
+            img.loading = "lazy";
+            img.alt = photo.filename;
+            img.src = new URL(photo.thumb_url, new URL(API_BASE_URL, window.location.origin).origin).href;
+            const name = document.createElement("span");
+            name.className = "ad-photo-name";
+            name.textContent = `${photo.filename} · ${formatSize(photo.size)}`;
+            const actions = document.createElement("div");
+            actions.className = "ad-photo-actions";
+            const toggle = document.createElement("button");
+            toggle.type = "button";
+            toggle.className = "btn btn-sm btn-outline";
+            toggle.textContent = photo.enabled ? "Disable" : "Enable";
+            toggle.addEventListener("click", async () => {
+                toggle.disabled = true;
+                try {
+                    await adminRequest(`/admin/photos/${encodeURIComponent(photo.filename)}`, {
+                        method: "PATCH", headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ enabled: !photo.enabled }),
+                    });
+                    await loadPhotos();
+                } catch (error) {
+                    showAdminMessage(error.message, true);
+                    toggle.disabled = false;
+                }
+            });
+            actions.append(toggle, deleteButton("/admin/photos", photo.filename, loadPhotos));
+            card.append(img, name, actions);
+            list.append(card);
+        }
+    } catch (error) {
+        showAdminMessage(error.message, true);
+    }
+}
+
+function setupPhotoUpload() {
+    const form = document.getElementById("photo-upload-form");
+    const input = document.getElementById("photo-file");
+    const info = document.getElementById("photo-file-info");
+    const bar = document.getElementById("photo-progress");
+    const error = document.getElementById("photo-error");
+    const button = document.getElementById("photo-upload-button");
+    input.addEventListener("change", () => {
+        error.textContent = "";
+        info.textContent = input.files.length ? `${input.files.length} file(s) chosen` : "No file chosen";
+    });
+    form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        if (!input.files.length) { error.textContent = "Pehle photos chunein."; return; }
+        error.textContent = "";
+        button.disabled = true;
+        bar.hidden = false;
+        const failed = [];
+        let done = 0;
+        for (const file of input.files) {
+            try {
+                if (file.size > UPLOAD_LIMIT) throw new Error("must be 50 MB or smaller");
+                await sendWithProgress(`/admin/photos?filename=${encodeURIComponent(file.name)}`, file, file.type || "image/jpeg", () => {});
+            } catch (uploadError) {
+                failed.push(`${file.name}: ${uploadError.message}`);
+            }
+            done += 1;
+            bar.value = Math.round((done / input.files.length) * 100);
+        }
+        input.value = "";
+        info.textContent = "No file chosen";
+        bar.hidden = true;
+        button.disabled = false;
+        if (failed.length) error.textContent = failed.join(" | ");
+        else showAdminMessage("Photos uploaded.");
+        await loadPhotos();
+    });
+}
+
 async function loadBackgrounds() {
     const list = document.getElementById("background-list");
     const countEl = document.getElementById("stat-backgrounds");
@@ -531,6 +617,7 @@ function initializeSections() {
 }
 
 initializeSections();
+setupPhotoUpload();
 setupUpload({
     prefix: "background", endpoint: "/admin/backgrounds", fallbackType: "video/mp4", successText: "Background clip uploaded.",
     buttonHtml: '<i class="fa-solid fa-upload" aria-hidden="true"></i>Upload clip', reload: loadBackgrounds, maxLabel: "Background clip"

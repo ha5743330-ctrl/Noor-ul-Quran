@@ -156,7 +156,8 @@ function applyFreeTierLimits() {
         rise.hidden = true;
         if (rise.parentElement.value === "fade_rise") rise.parentElement.value = "fade";
     }
-    const cap = access.max_video_seconds;
+    const photos = document.getElementById("input-background-type")?.value === "photos";
+    const cap = photos && access.max_video_seconds_photo ? access.max_video_seconds_photo : access.max_video_seconds;
     const select = document.getElementById("input-max-dur");
     if (select && cap && ![...select.options].some((option) => Number(option.value) === cap)) {
         // The server cap is the longest free length; offer exactly that instead of a hard-coded value.
@@ -665,6 +666,7 @@ async function generateVideo(event) {
                 quality: document.getElementById("input-quality")?.value || "fast",
                 content_mode: contentMode,
                 text_animation: document.getElementById("input-text-animation")?.value || "none",
+                background_type: document.getElementById("input-background-type")?.value || "video",
                 text_layout: document.getElementById("input-text-layout")?.value || "one_line",
                 video_style: document.getElementById("input-video-style")?.value || "classic",
                 reciter_id: document.getElementById("input-reciter")?.value || null,
@@ -975,6 +977,7 @@ function renderRecentVideos(videos) {
         if (video.content_mode === "arabic_urdu_text") badges.appendChild(createHistoryBadge("Arabic + Urdu text (no Urdu audio)", "amber"));
         if (video.content_mode === "full") badges.appendChild(createHistoryBadge("Arabic + Urdu (Arabic audio, Urdu audio)", "amber"));
         if (video.styled) badges.appendChild(createHistoryBadge("Styled", "amber"));
+        if (!isImage && video.background === "photos") badges.appendChild(createHistoryBadge("Photo background", "slate"));
         if (video.downloaded_at || Number(video.download_count) > 0) {
             badges.appendChild(createHistoryBadge("Downloaded", "green"));
         }

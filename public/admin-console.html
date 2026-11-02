@@ -18,6 +18,7 @@
         <nav class="ad-jump" aria-label="Sections">
             <a href="#users-section">Users</a>
             <a href="#clips-section">Clips</a>
+            <a href="#photos-section">Photos</a>
             <a href="#music-section">Music</a>
             <a href="#picks-section">Picks</a>
             <a href="#audit-section">Audit</a>
@@ -75,6 +76,24 @@
                             <button id="background-upload-button" type="submit" class="btn btn-primary"><i class="fa-solid fa-upload" aria-hidden="true"></i>Upload clip</button>
                         </form>
                         <ul id="background-list" class="ad-rows"></ul>
+                    </div>
+                </details>
+            </section>
+
+            <section id="photos-section" class="ad-sec ad-photos">
+                <details data-sec="photos">
+                    <summary><span class="ad-sec-title">Background photos</span><span id="photos-badge" class="pf-badge">0 photos</span></summary>
+                    <div class="ad-sec-body">
+                        <p class="hint">Shared by Ayah Images and photo-background videos. JPG, PNG or WebP; each photo is cover-cropped to 1080x1920 and compressed to 400 KB or less. Disabled photos stay stored but are not used.</p>
+                        <form id="photo-upload-form" class="ad-upload" novalidate>
+                            <input id="photo-file" class="ad-file-input" type="file" multiple accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp">
+                            <label for="photo-file" class="btn btn-outline"><i class="fa-solid fa-image" aria-hidden="true"></i>Choose photos</label>
+                            <p id="photo-file-info" class="ad-file-info">No file chosen</p>
+                            <progress id="photo-progress" max="100" value="0" hidden></progress>
+                            <p id="photo-error" class="pf-msg err" role="alert"></p>
+                            <button id="photo-upload-button" type="submit" class="btn btn-primary"><i class="fa-solid fa-upload" aria-hidden="true"></i>Upload photos</button>
+                        </form>
+                        <ul id="photo-list" class="ad-rows ad-photo-grid"></ul>
                     </div>
                 </details>
             </section>
