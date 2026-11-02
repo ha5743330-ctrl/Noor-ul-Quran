@@ -109,7 +109,7 @@ def test_safe_zones(tmp_path, monkeypatch):
     base = Image.open(tmp_path / "base.png").convert("RGBA")
     for path in seen["png"]:
         left, top, right, bottom = ImageChops.difference(Image.open(path).convert("RGBA"), base).getbbox()
-        assert left >= make.CARD_MARGIN - 10 and right <= make.W - make.CARD_MARGIN + 10  # bead ring margin
+        assert left >= make.CARD_MARGIN - 10 and right <= make.CARD_X1 + 10  # bead ring margin
         assert bottom <= make.SAFE_BOTTOM
 
 
@@ -131,3 +131,11 @@ def test_pro_features_on_locally(tmp_path, monkeypatch):
     monkeypatch.setenv("BRAND_HANDLE", "")
     _, _, cmds = _run_build(tmp_path, monkeypatch, "arabic_urdu_text", "one_line", "pro", stop_at_playlist=False)
     assert cmds[0].count("-loop") == 1  # title only, watermark off when BRAND_HANDLE is empty
+
+
+def test_fade_rise_falls_back_to_fade_on_low_profile(monkeypatch):
+    monkeypatch.setenv("RENDER_MEMORY_PROFILE", "low")
+    assert make.effective_animation("fade_rise") == "fade"
+    assert make.effective_animation("none") == "none"
+    monkeypatch.delenv("RENDER_MEMORY_PROFILE")
+    assert make.effective_animation("fade_rise") == "fade_rise"

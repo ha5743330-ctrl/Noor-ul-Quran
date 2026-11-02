@@ -150,6 +150,12 @@ async function initializeLandingAuth() {
 
 function applyFreeTierLimits() {
     const access = window.userAccess || {};
+    const rise = document.querySelector('#input-text-animation option[value="fade_rise"]');
+    if (rise && access.low_memory_profile) {
+        rise.disabled = true;
+        rise.hidden = true;
+        if (rise.parentElement.value === "fade_rise") rise.parentElement.value = "fade";
+    }
     const cap = access.max_video_seconds;
     const select = document.getElementById("input-max-dur");
     if (select && cap && ![...select.options].some((option) => Number(option.value) === cap)) {
