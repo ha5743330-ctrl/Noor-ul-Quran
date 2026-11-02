@@ -28,5 +28,7 @@ services:
         sync: false
       - key: FRONTEND_ORIGINS
         sync: false
+      - key: CONTACT_EMAIL
+        sync: false
       - key: VIDEO_URL_SECRET
         generateValue: true

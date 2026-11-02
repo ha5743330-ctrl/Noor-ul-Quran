@@ -149,6 +149,15 @@ try:
         check("1280px: Advanced and Background still collapsed", not page.locator("#video-style-color").is_visible() and not page.locator("#input-music").is_visible())
         check("1280px: no summary values shown", not page.locator("#sum-reciter").is_visible())
         check("1280px: bar not fixed", page.evaluate("getComputedStyle(document.querySelector('.generate-submit-wrap')).position") != "fixed")
+        check("1280px: translation hidden unless Arabic-only", not page.locator("#input-translation").is_visible())
+        page.select_option("#input-content-mode", "arabic_only")
+        page.select_option("#input-translation", "ur")
+        page.select_option("#input-text-animation", "fade_rise")
+        posted.clear()
+        page.click("#generate-button")
+        page.wait_for_timeout(400)
+        body = posted[-1] if posted else {}
+        check("1280px: translation + text_animation are sent", page.locator("#input-translation").is_visible() and body.get("translation") == "ur" and body.get("text_animation") == "fade_rise", str(body))
         if "--shots" in sys.argv:
             page.screenshot(path=str(SHOTS / "generate-mobile-1280.png"), full_page=True)
         page.context.close()
