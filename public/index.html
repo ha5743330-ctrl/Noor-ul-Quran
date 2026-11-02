@@ -4,7 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#f2f6f3">
-    <meta name="description" content="Create Quran reels with Arabic recitation, Urdu or English translation, custom video styles and instant previews.">
+    <meta name="description" content="Free Quran reel maker: pick ayat, choose Arabic with Urdu or English text, and download a ready-to-share portrait video. Live site: 35 s reels, 5 per day.">
+    <link rel="canonical" href="/">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Noor ul Quran | Quran Reel Studio">
+    <meta property="og:description" content="Make Quran reels with Arabic recitation and Urdu or English text. Free, no ads.">
+    <meta property="og:image" content="/assets/shot-reel.webp">
+    <meta name="twitter:card" content="summary_large_image">
     <title>Noor ul Quran | Quran Reel Studio</title>
     <script src="https://cdn.tailwindcss.com/3.4.16"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -27,14 +33,14 @@
                 <img src="/assets/logo.png" alt="" class="mx-auto mb-6 h-16 w-16 rounded-full bg-white object-contain shadow-xl shadow-amber-900/20 sm:h-20 sm:w-20">
                 <p class="mb-5 inline-flex items-center gap-2 rounded-full border border-amber-400/30 bg-amber-400/10 px-4 py-2 text-xs font-semibold text-amber-200 sm:text-sm">
                     <i class="fa-solid fa-circle-play" aria-hidden="true"></i>
-                    Arabic recitation · Urdu or English translation · Portrait video
+                    Free · Arabic recitation · Urdu or English text
                 </p>
                 <h1 class="text-4xl font-extrabold leading-tight tracking-tight text-white sm:text-6xl">
                     Quran reels, made
                     <span class="bg-gradient-to-r from-amber-300 to-yellow-100 bg-clip-text text-transparent">with care.</span>
                 </h1>
                 <p class="mx-auto mt-5 max-w-2xl text-base leading-7 text-slate-300 sm:text-lg">
-                    Choose ayat, customize the video style, then preview and download a ready-to-share reel with synchronized Arabic recitation and Urdu or English translation.
+                    Pick an ayah, choose how the text appears, and download a portrait reel in minutes.
                 </p>
                 <div class="mt-8 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center">
                     <a href="/generate.html" class="inline-flex min-h-14 items-center justify-center gap-3 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-300 px-8 py-4 text-base font-extrabold text-slate-950 shadow-xl shadow-amber-500/10 transition hover:-translate-y-0.5 hover:brightness-110 sm:text-lg">
@@ -49,111 +55,66 @@
             </div>
         </section>
 
-        <section id="features" class="mx-auto max-w-7xl px-4 py-14 sm:px-6 sm:py-20">
-            <div class="mx-auto mb-9 max-w-2xl text-center">
-                <p class="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-amber-300">Made for thoughtful sharing</p>
-                <h2 class="text-3xl font-bold text-white sm:text-4xl">Everything you need for a Quran reel</h2>
-                <p class="mt-3 text-sm leading-6 text-slate-300 sm:text-base">A simple workflow, with controls that keep the content and presentation in your hands.</p>
-            </div>
-            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <article class="glass-card rounded-2xl p-5 sm:p-6">
-                    <span class="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-amber-400/10 text-lg text-amber-200"><i class="fa-solid fa-book-open" aria-hidden="true"></i></span>
-                    <h3 class="font-bold text-white">Select your ayat</h3>
-                    <p class="mt-2 text-sm leading-6 text-slate-300">Pick a Surah and verse range, or use the premium custom-list and random modes.</p>
-                </article>
-                <article class="glass-card rounded-2xl p-5 sm:p-6">
-                    <span class="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-amber-400/10 text-lg text-amber-200"><i class="fa-solid fa-language" aria-hidden="true"></i></span>
-                    <h3 class="font-bold text-white">Arabic + Urdu</h3>
-                    <p class="mt-2 text-sm leading-6 text-slate-300">Choose synchronized Arabic recitation with Urdu translation, Urdu-only audio and text, or Arabic recitation with Arabic text and English translation.</p>
-                </article>
-                <article class="glass-card rounded-2xl p-5 sm:p-6">
-                    <span class="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-amber-400/10 text-lg text-amber-200"><i class="fa-solid fa-sliders" aria-hidden="true"></i></span>
-                    <h3 class="font-bold text-white">Make it yours</h3>
-                    <p class="mt-2 text-sm leading-6 text-slate-300">Set text colors and fonts, select duration and render quality, and optionally add music.</p>
-                </article>
-                <article class="glass-card rounded-2xl p-5 sm:p-6">
-                    <span class="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-amber-400/10 text-lg text-amber-200"><i class="fa-solid fa-circle-play" aria-hidden="true"></i></span>
-                    <h3 class="font-bold text-white">Preview and share</h3>
-                    <p class="mt-2 text-sm leading-6 text-slate-300">Preview each reel, move through your gallery, download videos and copy captions.</p>
-                </article>
-            </div>
+        <section id="how-it-works" class="mx-auto max-w-5xl px-4 py-12 sm:px-6 sm:py-16">
+            <h2 class="mb-6 text-center text-3xl font-bold text-white">How it works</h2>
+            <ol class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <li class="glass-card rounded-2xl p-5"><span class="mb-3 flex h-9 w-9 items-center justify-center rounded-full bg-amber-400 font-extrabold text-slate-950">1</span><h3 class="font-bold text-white">Pick ayat</h3><p class="mt-1 text-sm leading-6 text-slate-300">Choose a Surah and ayah range, or a ready-made pick.</p></li>
+                <li class="glass-card rounded-2xl p-5"><span class="mb-3 flex h-9 w-9 items-center justify-center rounded-full bg-amber-400 font-extrabold text-slate-950">2</span><h3 class="font-bold text-white">Choose a mode</h3><p class="mt-1 text-sm leading-6 text-slate-300">Set the reciter, text style and optional fade animation.</p></li>
+                <li class="glass-card rounded-2xl p-5"><span class="mb-3 flex h-9 w-9 items-center justify-center rounded-full bg-amber-400 font-extrabold text-slate-950">3</span><h3 class="font-bold text-white">Download</h3><p class="mt-1 text-sm leading-6 text-slate-300">Preview the reel, download it and copy the caption.</p></li>
+            </ol>
         </section>
 
-        <section id="how-it-works" class="border-y border-slate-800 bg-slate-900/40 px-4 py-14 sm:px-6 sm:py-20">
-            <div class="mx-auto max-w-7xl">
-                <div class="mx-auto mb-9 max-w-2xl text-center">
-                    <p class="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-amber-300">Three simple steps</p>
-                    <h2 class="text-3xl font-bold text-white sm:text-4xl">How it works</h2>
+        <section id="modes" class="border-y border-slate-800 bg-slate-900/40 px-4 py-12 sm:px-6 sm:py-16">
+            <div class="mx-auto max-w-5xl">
+                <h2 class="mb-6 text-center text-3xl font-bold text-white">Four modes</h2>
+                <ul class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <li class="glass-card rounded-2xl p-4 text-sm font-semibold text-slate-100"><i class="fa-solid fa-microphone-lines mr-2 text-amber-300" aria-hidden="true"></i>Urdu only (Urdu audio + text)</li>
+                    <li class="glass-card rounded-2xl p-4 text-sm font-semibold text-slate-100"><i class="fa-solid fa-language mr-2 text-amber-300" aria-hidden="true"></i>Arabic + Urdu (Arabic audio, Urdu audio)</li>
+                    <li class="glass-card rounded-2xl p-4 text-sm font-semibold text-slate-100"><i class="fa-solid fa-font mr-2 text-amber-300" aria-hidden="true"></i>Arabic + English text</li>
+                    <li class="glass-card rounded-2xl p-4 text-sm font-semibold text-slate-100"><i class="fa-solid fa-closed-captioning mr-2 text-amber-300" aria-hidden="true"></i>Arabic + Urdu text (no Urdu audio)</li>
+                </ul>
+                <div class="mx-auto mt-8 grid max-w-xl grid-cols-2 items-start gap-4">
+                    <img src="/assets/shot-reel.webp" width="480" height="854" loading="lazy" alt="A generated reel: Arabic ayah above, Urdu translation below, over a dark sunset background" class="w-full rounded-2xl border border-slate-700">
+                    <img src="/assets/shot-generate.webp" width="390" height="844" loading="lazy" alt="The generate page on a phone with ayah, mode and reciter settings" class="w-full rounded-2xl border border-slate-700">
                 </div>
-                <ol class="grid grid-cols-1 gap-4 md:grid-cols-3">
-                    <li class="glass-card rounded-2xl p-6">
-                        <span class="mb-4 flex h-10 w-10 items-center justify-center rounded-full bg-amber-400 font-extrabold text-slate-950">1</span>
-                        <h3 class="font-bold text-white">Choose the content</h3>
-                        <p class="mt-2 text-sm leading-6 text-slate-300">Select a Surah and ayat range. The live estimate helps you choose a suitable reel length.</p>
-                    </li>
-                    <li class="glass-card rounded-2xl p-6">
-                        <span class="mb-4 flex h-10 w-10 items-center justify-center rounded-full bg-amber-400 font-extrabold text-slate-950">2</span>
-                        <h3 class="font-bold text-white">Set the style</h3>
-                        <p class="mt-2 text-sm leading-6 text-slate-300">Choose Arabic and Urdu presentation, tune text styles and set output quality.</p>
-                    </li>
-                    <li class="glass-card rounded-2xl p-6">
-                        <span class="mb-4 flex h-10 w-10 items-center justify-center rounded-full bg-amber-400 font-extrabold text-slate-950">3</span>
-                        <h3 class="font-bold text-white">Render and review</h3>
-                        <p class="mt-2 text-sm leading-6 text-slate-300">Follow progress, preview finished reels, then download the video and copy its caption.</p>
-                    </li>
-                </ol>
             </div>
         </section>
 
-        <section id="plans" class="mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-20">
-            <div class="mx-auto mb-9 max-w-2xl text-center">
-                <p class="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-amber-300">Access at a glance</p>
-                <h2 class="text-3xl font-bold text-white sm:text-4xl">Start free, unlock more with Premium</h2>
-                <p class="mt-3 text-sm leading-6 text-slate-300">Premium access is granted by an administrator; no payment flow is implied here.</p>
-            </div>
-            <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <article class="glass-card rounded-2xl p-6 sm:p-8">
-                    <h3 class="text-xl font-bold text-white">Free</h3>
-                    <p class="mt-2 text-sm text-slate-300">Everything needed to create a single-verse reel.</p>
-                    <ul class="mt-5 space-y-3 text-sm text-slate-200">
-                        <li><i class="fa-solid fa-check mr-2 text-emerald-300" aria-hidden="true"></i>Single-pick generation</li>
-                        <li><i class="fa-solid fa-check mr-2 text-emerald-300" aria-hidden="true"></i>Up to 60 seconds</li>
-                        <li><i class="fa-solid fa-check mr-2 text-emerald-300" aria-hidden="true"></i>Arabic + Urdu, Urdu-only, or Arabic + English mode</li>
-                    </ul>
-                </article>
-                <article class="glass-card rounded-2xl border-amber-400/40 p-6 sm:p-8">
-                    <h3 class="flex items-center gap-2 text-xl font-bold text-amber-200"><i class="fa-solid fa-crown" aria-hidden="true"></i>Premium</h3>
-                    <p class="mt-2 text-sm text-slate-300">For users who need batch and longer-form generation.</p>
-                    <ul class="mt-5 space-y-3 text-sm text-slate-200">
-                        <li><i class="fa-solid fa-check mr-2 text-amber-200" aria-hidden="true"></i>Custom picks and random batches</li>
-                        <li><i class="fa-solid fa-check mr-2 text-amber-200" aria-hidden="true"></i>Durations up to 180 seconds</li>
-                        <li><i class="fa-solid fa-check mr-2 text-amber-200" aria-hidden="true"></i>Access enabled by an administrator</li>
-                    </ul>
-                </article>
+        <section id="limits" class="mx-auto max-w-3xl px-4 py-12 sm:px-6 sm:py-16">
+            <h2 class="mb-4 text-center text-3xl font-bold text-white">Honest limits</h2>
+            <ul class="space-y-2 text-sm leading-6 text-slate-200">
+                <li><i class="fa-solid fa-check mr-2 text-emerald-300" aria-hidden="true"></i>The free live site makes reels up to <strong>35 seconds</strong>, <strong>5 per day</strong> per account, one at a time.</li>
+                <li><i class="fa-solid fa-check mr-2 text-emerald-300" aria-hidden="true"></i>Longer reels (up to 180 s) need the local app.</li>
+                <li><i class="fa-solid fa-check mr-2 text-emerald-300" aria-hidden="true"></i>Generated files are deleted after 3 days. Download what you want to keep.</li>
+            </ul>
+        </section>
+
+        <section id="faq" class="border-t border-slate-800 bg-slate-900/40 px-4 py-12 sm:px-6 sm:py-16">
+            <div class="mx-auto max-w-3xl">
+                <h2 class="mb-6 text-center text-3xl font-bold text-white">FAQ</h2>
+                <div class="space-y-3 text-sm leading-6 text-slate-300">
+                    <details class="glass-card rounded-2xl p-4"><summary class="cursor-pointer font-semibold text-white">Is it free?</summary><p class="mt-2">Yes, within the daily limit. There are no ads.</p></details>
+                    <details class="glass-card rounded-2xl p-4"><summary class="cursor-pointer font-semibold text-white">Can I post the reels on social media?</summary><p class="mt-2">Yes, keep the on-video credit and do not change the text. Selling them or commercial use is not allowed. See the <a class="text-amber-300 underline" href="/terms.html">Terms</a>.</p></details>
+                    <details class="glass-card rounded-2xl p-4"><summary class="cursor-pointer font-semibold text-white">Do I need an account?</summary><p class="mt-2">Yes. Sign in with email to create reels and keep a 3-day history.</p></details>
+                    <details class="glass-card rounded-2xl p-4"><summary class="cursor-pointer font-semibold text-white">Where does the Urdu text come from?</summary><p class="mt-2">Fateh Muhammad Jalandhry (via AlQuran Cloud), or Mufti Taqi Usmani when the site owner has installed that text.</p></details>
+                </div>
             </div>
         </section>
 
-        <section class="px-4 pb-16 sm:px-6 sm:pb-20">
-            <div class="mx-auto max-w-5xl rounded-3xl border border-amber-300/25 bg-gradient-to-br from-amber-400/10 via-slate-900 to-slate-900 p-7 text-center sm:p-12">
-                <h2 class="text-3xl font-extrabold text-white sm:text-4xl">Ready to create your first reel?</h2>
-                <p class="mx-auto mt-3 max-w-xl text-sm leading-6 text-slate-300 sm:text-base">Open the studio to choose your ayat and build a video that is ready to review and share.</p>
-                <a href="/generate.html" class="mt-7 inline-flex min-h-14 items-center justify-center gap-3 rounded-xl bg-amber-400 px-8 py-4 text-base font-extrabold text-slate-950 hover:bg-amber-300 sm:text-lg">
-                    <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i>Video banayein
-                </a>
-            </div>
+        <section class="px-4 py-12 text-center sm:px-6">
+            <a href="/generate.html" class="inline-flex min-h-14 items-center justify-center gap-3 rounded-xl bg-amber-400 px-8 py-4 text-base font-extrabold text-slate-950 hover:bg-amber-300"><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i>Video banayein</a>
         </section>
     </main>
 
-    <footer class="border-t border-slate-800 px-4 py-6 text-center text-xs text-slate-400">
-        <a href="/" class="font-semibold text-slate-200 hover:text-amber-200">Noor ul Quran</a>
-        <span class="mx-2" aria-hidden="true">·</span>
-        <a href="/generate.html" class="hover:text-amber-200">Generate a reel</a>
-        <span class="mx-2" aria-hidden="true">·</span>
-        <a href="/auth.html" class="hover:text-amber-200">Sign in</a>
-        <span class="mx-2" aria-hidden="true">·</span>
-        <a href="/privacy.html" class="hover:text-amber-200">Privacy</a>
-        <span class="mx-2" aria-hidden="true">·</span>
-        <a href="/terms.html" class="hover:text-amber-200">Terms</a>
+    <footer class="border-t border-slate-800 px-4 py-6 text-center text-xs leading-6 text-slate-400">
+        <p class="mx-auto max-w-2xl">This tool is an aid for sharing ayat and does not replace the mushaf, authentic tafseer or a scholar. Please check the text against a printed mushaf.</p>
+        <p class="mx-auto mt-2 max-w-2xl">Credits: Arabic text from Quran.com data in the KFGQPC Uthmanic Hafs font; recitation audio from EveryAyah; English translation by Pickthall via AlQuran Cloud.</p>
+        <p class="mt-3">
+            <a href="/" class="font-semibold text-slate-200 hover:text-amber-200">Noor ul Quran</a>
+            <span class="mx-2" aria-hidden="true">·</span><a href="/privacy.html" class="hover:text-amber-200">Privacy</a>
+            <span class="mx-2" aria-hidden="true">·</span><a href="/terms.html" class="hover:text-amber-200">Terms</a>
+            <span class="contact-line" hidden><span class="mx-2" aria-hidden="true">·</span><a class="contact-email hover:text-amber-200" href="#"></a></span>
+        </p>
     </footer>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js" integrity="sha384-0w2KAL2YHP6wKOkUDzkCDGgVvfmHnj02DHeQ6XcHOgTfFsGyonKOpShMH1x6nk9o" crossorigin="anonymous"></script>
@@ -161,5 +122,6 @@
     <script src="/auth.js?v=9"></script>
     <script src="/nav.js?v=2"></script>
     <script src="/app.js?v=18"></script>
+    <script src="/legal.js?v=1" defer></script>
 </body>
 </html>

@@ -282,7 +282,6 @@ function updateMusicAvailability() {
     if (musicSelect) musicSelect.disabled = noMusic;
     if (note) note.classList.toggle("hidden", !noMusic);
     document.getElementById("urdu-voice-control")?.classList.toggle("hidden", noUrduVoice);
-    document.getElementById("translation-control")?.classList.toggle("hidden", mode !== "arabic_only");
 }
 
 async function initializeReciterChoices() {
@@ -660,9 +659,6 @@ async function generateVideo(event) {
                 quality: document.getElementById("input-quality")?.value || "fast",
                 content_mode: contentMode,
                 text_animation: document.getElementById("input-text-animation")?.value || "none",
-                translation: contentMode === "arabic_only"
-                    ? document.getElementById("input-translation")?.value || "en"
-                    : "en",
                 reciter_id: document.getElementById("input-reciter")?.value || null,
                 urdu_voice_id: isArabicAudioMode(contentMode)
                     ? null
@@ -966,9 +962,10 @@ function renderRecentVideos(videos) {
         const badges = document.createElement("div");
         badges.className = "flex flex-wrap gap-1.5";
         badges.appendChild(createHistoryBadge(isImage ? "Image" : "Video", "slate"));
-        if (video.content_mode === "urdu_only") badges.appendChild(createHistoryBadge("Urdu-only", "amber"));
-        if (video.content_mode === "arabic_only") badges.appendChild(createHistoryBadge("Arabic + English", "amber"));
-        if (video.content_mode === "arabic_urdu_text") badges.appendChild(createHistoryBadge("Arabic + Urdu text", "amber"));
+        if (video.content_mode === "urdu_only") badges.appendChild(createHistoryBadge("Urdu only (Urdu audio + text)", "amber"));
+        if (video.content_mode === "arabic_only") badges.appendChild(createHistoryBadge("Arabic + English text", "amber"));
+        if (video.content_mode === "arabic_urdu_text") badges.appendChild(createHistoryBadge("Arabic + Urdu text (no Urdu audio)", "amber"));
+        if (video.content_mode === "full") badges.appendChild(createHistoryBadge("Arabic + Urdu (Arabic audio, Urdu audio)", "amber"));
         if (video.styled) badges.appendChild(createHistoryBadge("Styled", "amber"));
         if (video.downloaded_at || Number(video.download_count) > 0) {
             badges.appendChild(createHistoryBadge("Downloaded", "green"));

@@ -5,7 +5,7 @@
     "use strict";
     const API = (window.NOOR_API_BASE_URL || window.NOOR_SUPABASE_CONFIG?.apiBaseUrl || "/api").replace(/\/$/, "");
     const BUCKETS = [[30, "30 sec"], [60, "1 min"], [120, "2 min"]];
-    const MODES = [["urdu", "Urdu-only"], ["arabic", "Arabic-only"]];
+    const MODES = [["urdu", "Urdu only (Urdu audio + text)"], ["arabic", "Arabic + English text"]];
     const STORE_KEY = "noor.picks.selection.v1";
     const MAX_BATCH = 25;
     const RENDER_RATE = 3; // rough render seconds per video second, for the estimate only

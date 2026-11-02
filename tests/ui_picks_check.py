@@ -121,7 +121,7 @@ try:
                 .filter(e => e.offsetParent).filter(e => e.getBoundingClientRect().height < 43.5).map(e => e.className.toString().slice(0, 30))""")
             check(f"{tag}: tap targets >= 44px", not small, str(small[:4]))
 
-            page.click("text=Arabic-only")
+            page.click(".pk-chip:has-text('Arabic + English text')")
             page.wait_for_selector(".pk-row")
             row = page.locator(".pk-row", has_text="2:255").first
             check(f"{tag}: over-cap pick is not selectable and says use the local app",
@@ -140,7 +140,7 @@ try:
             check(f"{tag}: 2 min tab starts empty", summary(page).startswith("Selected 0 "))
             page.click("text=30 sec")
             page.wait_for_selector(".pk-row")
-            page.click("text=Urdu-only")
+            page.click(".pk-chip:has-text('Urdu only')")
             page.wait_for_selector(".pk-row")
             page.click("text=Clear")
             page.locator(".pk-row input:not(:disabled)").nth(0).check()

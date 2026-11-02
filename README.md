@@ -1,164 +1,89 @@
- # 🌙 Noor ul Quran – Auto Reel Maker
+# Noor ul Quran: Quran Reel Maker
 
-Automated tool jo Quran Majeed ki Ayaat aur Urdu tarjuma ki high-quality Instagram Reels / TikTok / YouTube Shorts videos banata hai.
+Pick ayat, choose a mode, and download a portrait reel (Arabic recitation plus Urdu or English text). Audio comes from EveryAyah, text is rendered with Pillow + RAQM, video is built with FFmpeg.
 
-Har ayat ki audio (**Arabic Tilawat + Urdu Tarjuma**) EveryAyah.com se khud-ba-khud download hoti hai. Alag se audio download ya cut karne ki zaroorat nahi hai.
+**Urdu quick start / اردو مختصر رہنمائی**
+1. `.env.example` کو `.env` میں کاپی کریں اور Supabase کی چابیاں بھریں۔
+2. Docker Desktop چلائیں، پھر `docker build -t noor .` اور نیچے دیا گیا `docker run` چلائیں۔
+3. براؤزر میں `http://127.0.0.1:10000/` کھولیں، سائن اِن کریں اور ویڈیو بنائیں۔
+4. لائیو سائٹ پر ویڈیو زیادہ سے زیادہ 35 سیکنڈ اور روزانہ 5 ہے؛ لمبی ویڈیو کے لیے لوکل ایپ استعمال کریں۔
 
----
+## Features
+- Four modes: **Urdu only (Urdu audio + text)**, **Arabic + Urdu (Arabic audio, Urdu audio)**, **Arabic + English text**, **Arabic + Urdu text (no Urdu audio)**.
+- Arabic above, translation below, in the two Arabic-text modes. Optional text animation (`none`, `fade`, `fade_rise`): each phrase stays at least 1.2 s and renders take somewhat longer.
+- Reciters and Urdu voices from `data/reciters.json`; per-element colour and font styles; optional background music (not in Arabic + English text mode).
+- Ready-made Picks, random batches (Premium), ayah images, captions CSV, 3-day history, profile, admin console.
+- Urdu text is Fateh Muhammad Jalandhry (AlQuran Cloud). If `data/urdu_usmani.json` exists (`{"93": {"1": "..."}}`), Mufti Taqi Usmani is used instead and must cover every ayah requested.
 
-## 📋 Features
-- **Auto Audio Fetching:** Arabic aur Urdu audio automatic download hoti hain.
-- **Auto Text Sync:** Tilawat ke waqt Arabic text (Zair/Zabar ke sath) aur Tarjuma ke waqt Urdu text screen par show hota hai.
-- **Custom Durations:** Standard (20-60 sec) aur Long Waqia/Story videos (up to 90 sec ya us se zyada).
-- **No-Repeat System:** Random mode mein koi bhi ayat repeat nahi hoti (`cache/used.json` track rakhta hai).
-- **Auto Captions:** Har video ke sath CSV file mein tayar caption aur hashtags milte hain.
-- **Ayah Images:** Generate a 1080×1350 still with Arabic, Pickthall's English translation, and a random image background; optionally enter a curated `Surah:Ayah`.
-- **Arabic + Urdu text reel mode (`arabic_urdu_text`):** Arabic tilawat (Alafasy, Yasser Ad-Dussary, etc.) with Arabic text on screen and the Urdu translation as *text* below it. No Urdu audio; background music is allowed. CLI: `python make.py --pick 2:255 --arabic-urdu-text --reciter yasser_ad_dussary`. Optional translator credit line: set `URDU_TRANSLATION_CREDIT` (or an `urdu_translation` key in `data/quran.json`).
+## Architecture
+| Part | Where | Role |
+|---|---|---|
+| Static site (`public/`, `api/config.js`) | Vercel (`vercel.json`) | Landing, generate, library, admin pages; serves `/config.js` |
+| API + renderer (`main.py`, `make.py`) | Render, Docker (`Dockerfile`, `render.yaml`) | FastAPI job queue, runs `make.py` with FFmpeg |
+| Auth, database, storage (`schema.sql`) | Supabase | Accounts, history, private media bucket |
 
----
+The browser calls the API at `API_BASE_URL` (default `/api`; set it to the Render URL when the site is on Vercel).
 
-## 🛠️ Step 1: Initial Setup (Sirf Ek Baar)
-
-### Local Docker app
-
-After Docker Desktop is running and `.env` is configured, use these PowerShell scripts
-from the project root:
-
-```powershell
-.\start.ps1
-.\rebuild.ps1
-```
-
-`start.ps1` starts the existing `noor-raqm-app` container or creates it, then opens
-`http://127.0.0.1:8001/`. `rebuild.ps1` rebuilds the RAQM-enabled image, replaces the
-container, and verifies its API health endpoint.
-For setup on another Windows PC, follow [SETUP-NEW-PC.md](SETUP-NEW-PC.md).
-
-### 1. Requirements Install Karein
-Python aur FFmpeg install karne ke baad terminal mein chalaein:
+## Docker quick start
 ```bash
-pip install -r requirements.txt
+cp .env.example .env            # fill SUPABASE_* and VIDEO_URL_SECRET
+docker build -t noor .
+docker run --rm -p 10000:10000 --env-file .env -m 512m -e RENDER_MEMORY_PROFILE=low noor
 ```
+Windows helper scripts: `start.ps1` (serves on http://127.0.0.1:8001/) and `rebuild.ps1`. See `SETUP-NEW-PC.md`.
+Without Docker you need Python 3.11, FFmpeg/ffprobe on PATH and a Pillow build with RAQM (`pip install -r requirements.txt`).
 
-### 2. Install FFmpeg
+## Environment variables
+| Variable | Default | Purpose |
+|---|---|---|
+| `SUPABASE_URL`, `SUPABASE_ANON_KEY` | none | Supabase project (public values) |
+| `SUPABASE_SERVICE_ROLE_KEY` | none | Server-side key; never expose to the browser |
+| `VIDEO_URL_SECRET` | random per start | Signs video links; set a fixed value or links break on restart |
+| `CONTACT_EMAIL` | empty | Shown on Privacy, Terms and landing; hidden if unset |
+| `API_BASE_URL` | `/api` | Where the browser finds the API |
+| `FRONTEND_ORIGINS` | `http://127.0.0.1:8000,http://localhost:8000` | Allowed CORS origins when the site is on another domain |
+| `DAILY_LIMIT` / `PREMIUM_DAILY_LIMIT` | 5 / same as `DAILY_LIMIT` | Reels per account per day |
+| `MAX_VIDEO_SECONDS` | 35 | Server cap on reel length |
+| `MAX_ACTIVE_JOBS_PER_USER` | 1 | Concurrent jobs per user |
+| `DEFAULT_QUALITY` | `fast` | `fast`, `balanced` or `high` |
+| `CLEANUP_DAYS` | 3 | Age after which generated files are deleted |
+| `RENDER_TIMEOUT_SECONDS` | 900 | Per-render timeout |
+| `RENDER_MEMORY_PROFILE` | unset (`low` on Render) | `low` = smaller render for 512 MB hosts |
+| `RENDER_MEMORY_LIMIT_MB` | 512 on Render, else off | Rejects requests whose estimate exceeds it |
+| `SUPABASE_MEDIA_BUCKET`, `SUPABASE_BACKGROUNDS_BUCKET` | `noor-media`, `noor-backgrounds` | Storage buckets |
+| `URDU_TRANSLATION_CREDIT` | source credit | Override the credit line under the Urdu text |
 
-FFmpeg and ffprobe must be available on PATH.
+## Deploy
+1. **Supabase:** create a project, put your admin user UUID into `schema.sql` (`<YOUR_ADMIN_USER_ID>`), run it in the SQL Editor (idempotent), and upload background clips to the backgrounds bucket.
+2. **Render:** create a Web Service from this repo (Docker, `render.yaml`); set the secret env vars above; health check is `/api/health`.
+3. **Vercel (optional):** import the repo, set `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `API_BASE_URL` (Render URL + `/api`) and `CONTACT_EMAIL`.
+4. Details and the memory guard: `DEPLOYING.md`, `DEPLOY-RENDER.md`, `docs/STAGING_CHECKLIST.md`.
 
-Windows (winget):
-```powershell
-winget install Gyan.Dev.FFmpeg
-```
+## Limits
+- Live site: 35 s per reel, 5 per day, one active job per user, files deleted after 3 days.
+- Longer reels (up to 180 s) are for the local app, with limits raised in `.env` (`MAX_VIDEO_SECONDS`).
+- Measured on a 512 MB container with `RENDER_MEMORY_PROFILE=low`: a 30 s reel peaked near 324 MiB, and 359 MiB with `fade_rise`; `fade_rise` took roughly 28% longer. Without the low profile, 512 MB renders can be OOM-killed.
 
-Ubuntu/Debian:
+## Tests
 ```bash
-sudo apt update
-sudo apt install ffmpeg
+pip install -r requirements-dev.txt
+python -m pytest                       # run inside the Docker image (needs RAQM and FFmpeg)
+python tests/ui_generate_mobile_check.py   # also ui_check.py, ui_scroll_check.py, ui_legal_check.py, ...
 ```
+The `ui_*check.py` scripts use Playwright (`pip install playwright && playwright install chromium`) with the API stubbed, and check 360/390/768/1280 px widths.
 
-Open a new terminal after installation, then verify with `ffmpeg -version` and `ffprobe -version`.
+## Credits and licenses
+- Arabic text: Quran.com data, shown in the KFGQPC Uthmanic Hafs font (`fonts/KFGQPC-Uthmanic-Hafs-LICENSE.txt`).
+- Recitation audio: [EveryAyah.com](https://everyayah.com) (rights belong to the reciters).
+- English: Pickthall; Urdu: Fateh Muhammad Jalandhry, both via AlQuran Cloud. Optional Urdu: Mufti Taqi Usmani (supplied by the site owner).
+- Fonts: Amiri, Noto Naskh Arabic, Noto Nastaliq Urdu (SIL OFL, see `fonts/`).
+- This repo has no LICENSE file yet; add one before accepting outside contributions. This tool does not replace the mushaf or a scholar.
 
-### 3. Create the local environment
-
-From the project root on Windows:
-```powershell
-py -3 -m venv venv
-.\venv\Scripts\python -m pip install --upgrade pip
-.\venv\Scripts\python -m pip install -r requirements.txt
-Copy-Item .env.example .env
-```
-
-Edit `.env` and set `SUPABASE_URL` and `SUPABASE_ANON_KEY` from your Supabase project. Keep `SUPABASE_SERVICE_ROLE_KEY` blank for local-only media/output, or set a matching server-only key when using private Supabase Storage. Never put a service key in frontend code or commit `.env`.
-
-### 4. Enable Arabic shaping on Windows
-
-The pip-installed Pillow 12.3.0 wheel in this workspace reports `RAQM=False`; copying a
-FriBiDi DLL beside Python cannot enable support if Pillow was built without RAQM. Use
-Miniforge/conda-forge to get a Pillow build linked with libraqm and its dependencies:
-
-```powershell
-winget install --id CondaForge.Miniforge3 --exact --scope user
-# Open a new PowerShell window after installation.
-conda create -y -n noor-ul-quran-raqm -c conda-forge python=3.14 pillow libraqm fribidi harfbuzz freetype
-conda activate noor-ul-quran-raqm
-python -m pip install -r requirements-dev.txt
-python -c "from PIL import features; print(features.check('raqm')); assert features.check('raqm')"
-```
-
-Run the app and renderer from this activated conda environment, not `venv\Scripts\python.exe`.
-All three modes contain Arabic-derived scripts and are blocked by the API when Pillow reports
-RAQM unavailable. The startup log and API response explain how to resolve it; broken shaping
-is never rendered.
-
-### 5. Download Quran text
-
-Run this once, whenever `data/quran.json` is missing, or to add the English translation to an existing data file:
-```powershell
-.\venv\Scripts\python fetch_assets.py
-```
-
-This downloads Uthmani Arabic text, the Urdu translation, and Marmaduke William Pickthall's
-English translation into `data/quran.json`. The Arabic-only option shows the translator
-attribution in the generator UI and generated ayah images. The image feature's curated
-references in `data/featured_ayahs.json` are explicitly marked **Needs human review**.
-
-The English text comes from the AlQuran Cloud API endpoint
-`https://api.alquran.cloud/v1/quran/en.pickthall` (edition ID `en.pickthall`). AlQuran Cloud's
-edition metadata identifies the translator as Mohammed Marmaduke William Pickthall but does
-not state a text license. Project Gutenberg's record for its 2005 compilation containing
-Pickthall's translation marks that compilation “Public domain in the USA”
-([eBook 16955](https://www.gutenberg.org/ebooks/16955)). The translation was published in
-1930; check applicable local copyright rules and AlQuran Cloud's current service terms before
-redistributing the API data outside the United States.
-
-In the video generator, choose **Arabic recitation + Arabic text with English translation** for Arabic-only recitation videos. The Arabic ayah is shown above its English translation, with no Urdu audio or background music.
-
-### 6. Add background clips
-
-Place portrait `.mp4` or `.mov` clips in `backgrounds/`. Use clips with enough resolution for a 9:16 reel. Background video files are local assets and are not included in Git.
-
-### 7. Configure Supabase access
-
-In the Supabase Dashboard, open **SQL Editor**. Before running `schema.sql`, replace `<YOUR_ADMIN_USER_ID>` with your user UUID from **Authentication > Users**. Run the complete SQL once. Add the project URL and anon/public key to local `.env`, then restart the server. Sign in at `/auth.html`; the configured user receives admin access.
-
-### 8. Start the local website
-
-From the project root:
-```powershell
-.\venv\Scripts\python -m uvicorn main:app --reload
-```
-
-Open [http://127.0.0.1:8000](http://127.0.0.1:8000). Stop the server with `Ctrl+C`.
-
-The root URL is the public landing page. Sign in at `/auth.html`, then open the generator with **Video banayein**, `/generate.html`, or the `/generate` shortcut. If you open the generator while signed out, it sends you to sign in and returns you to the generator afterward.
-
-Free accounts can create single-pick reels up to 60 seconds. Custom picks, random batches, and durations above 60 seconds require Premium access granted by an administrator.
-
-You can check the reel plan without rendering with:
-```powershell
-.\venv\Scripts\python make.py --pick 112:1-4 --dry
-```
-
-### Deployment
-
-The app is deployed on Render's free Docker plan. Its `/tmp` disk is ephemeral: videos and the local Recent Videos history can disappear when the service restarts or redeploys. Download videos you need to keep outside the app.
-
-Generated videos remain in Recent Videos until you manually delete them; the app does not limit the list or automatically remove MP4 files. When configured, Supabase Storage keeps uploaded media objects beyond a Render restart. The Recent Videos history index is currently stored locally on Render, however, so persistent history metadata requires storing that index in Supabase as well; it is not currently persisted there.
-
-See [DEPLOYING.md](DEPLOYING.md) for the Docker RAQM build check, required Supabase variables,
-and signed-in production smoke-test steps.
-
-## Credits & licenses
-
-Quranic Arabic text in images and videos uses Amiri Quran (Google Fonts, Amiri Project
-authors), bundled under the SIL Open Font License 1.1; see `fonts/AmiriQuran-OFL.txt`.
-Urdu typography remains unchanged.
-
-Record the source and applicable license for each media category before release:
-
-- EveryAyah audio — Source: ____________________ · License: ____________________
-- Background clips — Source: ____________________ · License: ____________________
-- Nasheed music — Source: ____________________ · License: ____________________
-
-## Release flow
-
-Create a branch, open a pull request, wait for the CI checks to pass, then merge the pull request.
+## Troubleshooting
+- **Reel killed or "memory" error on a small host:** set `RENDER_MEMORY_PROFILE=low`, choose `fast` quality and 30 s.
+- **Arabic letters look disconnected:** Pillow was built without RAQM; use the Docker image.
+- **Links stop working after a restart:** set a fixed `VIDEO_URL_SECRET`.
+- **Contact line missing on Privacy/Terms:** set `CONTACT_EMAIL` (shown only when it is a valid address).
+- **"Urdu text file has no text for ayah":** complete `data/urdu_usmani.json` or delete it to use Jalandhry.
+- **Login or API calls fail from Vercel:** check `API_BASE_URL` and add the site origin to `FRONTEND_ORIGINS`.
+- **Docker not running:** start Docker Desktop, then `.\start.ps1`.
