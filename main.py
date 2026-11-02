@@ -1566,6 +1566,7 @@ def get_access(user=Depends(get_current_user)):
         "daily_remaining": _daily_remaining(user),
         # The render cap applies to everyone, admins included (they skip only the daily count).
         "max_video_seconds": MAX_VIDEO_SECONDS,
+        "low_memory_profile": os.getenv("RENDER_MEMORY_PROFILE", "").lower() == "low",
     }
 
 
@@ -2049,8 +2050,12 @@ def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
             cmd.extend(["--translation", "ur"])
     elif content_mode == "arabic_urdu_text":
         cmd.append("--arabic-urdu-text")
-    if req.text_animation != "none":
-        cmd.extend(["--text-animation", req.text_animation])
+    text_animation = req.text_animation
+    if text_animation == "fade_rise" and os.getenv("RENDER_MEMORY_PROFILE", "").lower() == "low":
+        LOGGER.info("text_animation fade_rise -> fade on the low-memory profile")
+        text_animation = "fade"
+    if text_animation != "none":
+        cmd.extend(["--text-animation", text_animation])
     if req.text_layout != "one_line":
         cmd.extend(["--text-layout", req.text_layout])
     if req.video_style != "classic":

@@ -74,7 +74,7 @@ VIDEO_STYLES = ("classic", "pro")
 SIZE_TAIL = [44, 40, 36, 32, 28, 24]   # smaller fallback sizes so long text still gets word-boundary lines
 # Safe zones on the 1080x1920 reference canvas.
 SAFE_TOP, SAFE_BOTTOM = 260, 1580      # header texts start below SAFE_TOP, channel name ends above SAFE_BOTTOM
-CARD_MARGIN, TEXT_WIDTH = 80, 860      # text card x = 80..1000, text lines at most 860 wide
+CARD_MARGIN, CARD_X1, TEXT_WIDTH = 80, 960, 800  # text card x = 80..960 (text centred in it), lines at most 800 wide
 BISMILLAH_Y, SURAH_Y, LABEL_Y, CHANNEL_Y = 270, 380, 520, 1510
 ORNAMENT_R = 34
 DURATION_TOLERANCE = 0.15
@@ -329,6 +329,13 @@ def encode_video(cmd, outfile):
         + ["-pix_fmt", "yuv420p"]
         + audio_args
     )
+
+def effective_animation(animation):
+    """fade_rise peaks ~511 MiB on 512 MB hosts, so the low/Render profile uses fade."""
+    if animation == "fade_rise" and is_low_profile():
+        print("Note: fade_rise is not available on the low-memory profile; using fade.", file=sys.stderr)
+        return "fade"
+    return animation
 
 def is_low_profile():
     return os.getenv("RENDER_MEMORY_PROFILE", "").lower() == "low"
@@ -805,10 +812,11 @@ def chunk_png(path, lines, font, spacing, base, is_arabic=False, color=None, orn
     box_h = text_height + int(round(90 * scale)) + 2
     cy = H // 2 + int(round(60 * scale))
     margin = int(round(CARD_MARGIN * scale))
+    cx = int(round((CARD_MARGIN + CARD_X1) / 2 * scale))
     radius = int(round(40 * scale))
     padding = int(round(45 * scale))
     
-    d.rounded_rectangle((margin, cy - box_h // 2, W - margin, cy + box_h // 2), radius, fill=(0, 0, 0, 115))
+    d.rounded_rectangle((margin, cy - box_h // 2, int(round(CARD_X1 * scale)), cy + box_h // 2), radius, fill=(0, 0, 0, 115))
     card_top = cy - box_h // 2
     card_bottom = card_top + box_h
     block_top = cy - text_height // 2
@@ -829,7 +837,7 @@ def chunk_png(path, lines, font, spacing, base, is_arabic=False, color=None, orn
         )
         text_boxes.append((position_y + bounds[1], position_y + bounds[3]))
         put(
-            d, (W // 2, position_y), ln, font, fill=fill_color,
+            d, (cx, position_y), ln, font, fill=fill_color,
             stroke=int(round(3 * scale)), language="ar" if is_arabic else "ur",
         )
     if any(
@@ -838,7 +846,7 @@ def chunk_png(path, lines, font, spacing, base, is_arabic=False, color=None, orn
     ):
         raise ValueError("Rendered text exceeds its card bounds.")
     if ornament:
-        draw_ornament(d, W // 2, card_top, ornament, scale)
+        draw_ornament(d, cx, card_top, ornament, scale)
     im.save(path)
     return {
         "card_bounds": (card_top, card_bottom),
@@ -895,8 +903,9 @@ def chunk_bilingual_png(
     box_height = text_height + 2 * padding
     center_y = H // 2 + int(round(60 * scale))
     margin = int(round(CARD_MARGIN * scale))
+    cx = int(round((CARD_MARGIN + CARD_X1) / 2 * scale))
     draw.rounded_rectangle(
-        (margin, center_y - box_height // 2, W - margin, center_y + box_height // 2),
+        (margin, center_y - box_height // 2, int(round(CARD_X1 * scale)), center_y + box_height // 2),
         int(round(40 * scale)),
         fill=(0, 0, 0, 125),
     )
@@ -904,7 +913,7 @@ def chunk_bilingual_png(
     y = block_top - arabic_top
     for index, line in enumerate(arabic_lines):
         put(
-            draw, (W // 2, y), line, arabic_font, arabic_color,
+            draw, (cx, y), line, arabic_font, arabic_color,
             stroke=int(round(3 * scale)), language="ar",
         )
         if index + 1 < len(arabic_lines):
@@ -915,12 +924,12 @@ def chunk_bilingual_png(
         urdu_color = styled_color(styles, "urdu", (255, 255, 255, 255))
         for line, offset in zip(second_lines, positions):
             put(
-                draw, (W // 2, second_start - second_top + offset), line, second_font,
+                draw, (cx, second_start - second_top + offset), line, second_font,
                 urdu_color, stroke=stroke2, direction="rtl", language="ur",
             )
         if credit:
             put(
-                draw, (W // 2, second_start + (second_bottom - second_top) + attribution_gap),
+                draw, (cx, second_start + (second_bottom - second_top) + attribution_gap),
                 credit, credit_font, (210, 220, 230, 235),
                 stroke=0, direction="rtl", language="ur",
             )
@@ -929,18 +938,18 @@ def chunk_bilingual_png(
         y = second_start
         for line in second_lines:
             put(
-                draw, (W // 2, y), line, second_font, english_color,
+                draw, (cx, y), line, second_font, english_color,
                 stroke=int(round(2 * scale)), direction="ltr", language="en",
             )
             y += english_line_height
         y += attribution_gap
         put(
-            draw, (W // 2, y), attribution, attribution_font,
+            draw, (cx, y), attribution, attribution_font,
             styled_color(styles, "english", (200, 210, 220, 230)),
             stroke=int(round(scale)), direction="ltr", language="en",
         )
     if ornament:
-        draw_ornament(draw, W // 2, center_y - box_height // 2, ornament, scale)
+        draw_ornament(draw, cx, center_y - box_height // 2, ornament, scale)
     im.save(path)
 
 def render_ayah_image(arabic_text, english_text, reference, background_path, output_path):
@@ -1299,6 +1308,7 @@ def build(
 ):
     if text_animation not in TEXT_ANIMATIONS:
         raise ValueError("Text animation must be none, fade, or fade_rise.")
+    text_animation = effective_animation(text_animation)
     if text_layout not in TEXT_LAYOUTS:
         raise ValueError("Text layout must be one_line, two_lines, or block.")
     per_screen = layout_per(text_layout)
@@ -1948,6 +1958,7 @@ def main():
                 "end_ayah": used_a1,
                 "duration": round(total, 2),
                 "warnings": warnings,
+                "text_animation": effective_animation(a.text_animation),
                 "index": i,
             })
             write_result(generated + failed)
