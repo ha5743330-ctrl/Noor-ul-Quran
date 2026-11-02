@@ -203,6 +203,8 @@ class GenerateRequest(BaseModel):
     max_duration: int = 60
     quality: str = DEFAULT_QUALITY
     content_mode: str = "full"
+    text_animation: str = "none"  # none | fade | fade_rise (per-phrase text transition)
+    translation: str = "en"  # only for content_mode "arabic_only": "en" (Pickthall) or "ur" (Urdu text)
     reciter_id: Optional[str] = None
     urdu_voice_id: Optional[str] = None
     styles: Any = Field(default_factory=dict)
@@ -1082,6 +1084,8 @@ def cleanup_output_on_startup():
 
 
 CONTENT_MODES = {"full", "urdu_only", "arabic_only", "arabic_urdu_text"}
+TRANSLATIONS = {"en", "ur"}
+TEXT_ANIMATIONS = {"none", "fade", "fade_rise"}
 # Modes whose audio is Arabic recitation only (no Urdu voice is fetched or mixed).
 ARABIC_AUDIO_MODES = {"arabic_only", "arabic_urdu_text"}
 CONTENT_MODE_ERROR = "Mode must be full, urdu_only, arabic_only, or arabic_urdu_text."
@@ -1838,7 +1842,7 @@ def frontend_config():
         f"window.NOOR_SUPABASE_CONFIG = {json.dumps({k: config[k] for k in ('url', 'anonKey')})};"
         f"window.NOOR_SUPABASE_CONFIG.apiBaseUrl = {json.dumps(config['apiBaseUrl'])};"
         f"window.NOOR_API_BASE_URL = {json.dumps(config['apiBaseUrl'])};"
-        f"window.NOOR_CONTACT_EMAIL = {json.dumps(os.getenv('CONTACT_EMAIL', 'contact@example.com'))};"
+        f"window.NOOR_CONTACT_EMAIL = {json.dumps(os.getenv('CONTACT_EMAIL', '').strip())};"
     )
     return Response(
         content=script,
@@ -1940,11 +1944,24 @@ def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
             status_code=400,
             detail="Content mode must be full, urdu_only, arabic_only, or arabic_urdu_text.",
         )
+    if req.text_animation not in TEXT_ANIMATIONS:
+        raise HTTPException(status_code=400, detail="Text animation must be none, fade, or fade_rise.")
+    if req.translation not in TRANSLATIONS:
+        raise HTTPException(status_code=400, detail="Translation must be en or ur.")
+    if req.translation == "ur" and content_mode != "arabic_only":
+        raise HTTPException(
+            status_code=400,
+            detail="Urdu translation text is only available with the Arabic-only content mode.",
+        )
     if content_mode == "arabic_only" and req.music:
         raise HTTPException(
             status_code=400,
             detail="Background music is not available in Arabic-only mode.",
         )
+    requested_content_mode = content_mode
+    if content_mode == "arabic_only" and req.translation == "ur":
+        # Same render path as the Arabic + Urdu text reel; history is labeled accordingly.
+        content_mode = "arabic_urdu_text"
     reciter_id = _validate_reciter_id(
         req.reciter_id, "ar", DEFAULT_ARABIC_RECITER_ID
     )
@@ -2012,10 +2029,14 @@ def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
         cmd.extend(["--random", str(req.random_count)])
     if content_mode == "urdu_only":
         cmd.append("--urdu-only")
-    elif content_mode == "arabic_only":
+    elif requested_content_mode == "arabic_only":
         cmd.append("--arabic-only")
+        if req.translation == "ur":
+            cmd.extend(["--translation", "ur"])
     elif content_mode == "arabic_urdu_text":
         cmd.append("--arabic-urdu-text")
+    if req.text_animation != "none":
+        cmd.extend(["--text-animation", req.text_animation])
     cmd.extend(["--reciter", reciter_id])
     if content_mode not in ARABIC_AUDIO_MODES:
         cmd.extend(["--urdu-voice", urdu_voice_id])

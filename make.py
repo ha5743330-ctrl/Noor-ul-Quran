@@ -34,8 +34,18 @@ W, H, FPS = 1080, 1920, 30
 MIN_DUR, MAX_DUR = 20, 60          # Default reel length (20s to 60s / 1 min)
 CHANNEL = "Noor ul Quran"
 SECONDS_PER_CHUNK = 3.0
-LINES_PER_CHUNK = 3
+LINES_PER_CHUNK = 3   # legacy default, ab neeche LAYOUT_PROFILES use hote hain
 FONT_SIZES = [72, 64, 56, 48, 42]
+# Har mode ki apni setting. lines = ek screen par kitni lines, sizes = bade se chhota font try hota hai,
+# second_ratio = Urdu/English font = Arabic font ka kitna hissa, min_sec = ek screen kam az kam kitni der rahe.
+LAYOUT_PROFILES = {
+    # Arabic (upar, 1 line) + Urdu/English (neeche, 1 line) ek saath
+    "bilingual": {"lines": 1, "sizes": [80, 72, 64, 56, 48], "second_ratio": 0.66, "min_sec": 1.6},
+    # Sirf Arabic screen (full mode ka Arabic hissa)
+    "arabic": {"lines": 2, "sizes": [84, 76, 68, 60, 52], "min_sec": 2.2},
+    # Sirf Urdu screen (urdu_only aur full mode ka Urdu hissa)
+    "urdu": {"lines": 2, "sizes": [64, 58, 52, 46, 40], "min_sec": 2.2},
+}
 QURAN_ARABIC_FONT = "quran_arabic"
 QURAN_ARABIC_LINE_SPACING = 2.1
 BRIGHTNESS = -0.18
@@ -45,9 +55,18 @@ CONTENT_MODE = "full"
 # Arabic text + English; arabic_urdu_text = Arabic audio + Arabic text + Urdu TEXT (no Urdu audio).
 ALL_CONTENT_MODES = {"full", "urdu_only", "arabic_only", "arabic_urdu_text"}
 ARABIC_AUDIO_ONLY_MODES = {"arabic_only", "arabic_urdu_text"}
-# Optional credit line under the Urdu text, e.g. "ترجمہ: ..." (or "urdu_translation" in quran.json).
+# Optional override for the credit line under the Urdu text (default: credit of the source actually used).
 URDU_TRANSLATION_CREDIT = os.getenv("URDU_TRANSLATION_CREDIT", "").strip()
+# Urdu translation TEXT sources (sirf arabic + Urdu-text reels mein; Urdu audio wale modes apni audio ka text rakhte hain).
+URDU_USMANI_PATH = Path(__file__).parent / "data" / "urdu_usmani.json"
+URDU_CREDITS = {
+    "usmani": "ترجمہ: مفتی محمد تقی عثمانی",
+    "jalandhry": "ترجمہ: فتح محمد جالندھری",
+}
 GAP_AFTER_ARABIC = 0.35
+# Text transitions: none (default) | fade | fade_rise. Har phrase kam az kam MIN_PHRASE_SEC rehta hai.
+TEXT_ANIMATIONS = ("none", "fade", "fade_rise")
+FADE_IN_SEC, FADE_OUT_SEC, RISE_PX, MIN_PHRASE_SEC = 0.25, 0.2, 16, 1.2
 DURATION_TOLERANCE = 0.15
 NORMALIZE_AUDIO = True
 FFMPEG_CODEC_THREADS = ("-threads", "1")
@@ -603,6 +622,39 @@ def wrap(text, font, maxw, language="ur"):
                 changed = True
     return lines
 
+def split_into_lines(text, font, language, k):
+    """Text ko theek k balanced lines mein todta hai (words nahi tootte). language: ar / ur / en."""
+    rtl = language in ("ar", "ur")
+    direction = "rtl" if rtl else "ltr"
+
+    def width(t):
+        return font.getlength(t, direction=direction, language=language)
+
+    def wrap_at(maxw):
+        return wrap(text, font, maxw, language=language) if rtl else wrap_english(text, font, maxw)
+
+    k = max(1, min(k, len(text.split())))
+    lo, hi = 1, int(width(text)) + 1
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if len(wrap_at(mid)) <= k:
+            hi = mid
+        else:
+            lo = mid + 1
+    lines = wrap_at(lo)
+    while len(lines) < k:
+        candidates = [i for i, ln in enumerate(lines) if len(ln.split()) > 1]
+        if not candidates:
+            break
+        widest = max(candidates, key=lambda i: width(lines[i]))
+        parts = lines[widest].split()
+        cut = min(
+            range(1, len(parts)),
+            key=lambda c: abs(width(" ".join(parts[:c])) - width(" ".join(parts[c:]))),
+        )
+        lines[widest:widest + 1] = [" ".join(parts[:cut]), " ".join(parts[cut:])]
+    return lines
+
 def wrap_english(text, font, maxw):
     lines, cur = [], ""
     for word in text.split():
@@ -1042,6 +1094,31 @@ def plan_duration(
         "total_count": len(items),
     }
 
+def load_urdu_usmani(path=None):
+    """data/urdu_usmani.json ({"93": {"1": "..."}}) ya None agar file maujood nahi. Text kabhi generate/scrape nahi hota."""
+    path = Path(path) if path else URDU_USMANI_PATH
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise RuntimeError(f"{path.name} could not be read as JSON: {exc}") from exc
+    if not isinstance(data, dict):
+        raise RuntimeError(f"{path.name} must be a JSON object like {{\"93\": {{\"1\": \"...\"}}}}.")
+    return data
+
+def urdu_translation_text(Q, surah, ayah, usmani):
+    """Ek reel ke liye ONE source: Usmani (file hai to) warna Jalandhry. Usmani mein ayah na ho to saaf error."""
+    if usmani is not None:
+        text = (usmani.get(str(surah)) or {}).get(str(ayah))
+        if not isinstance(text, str) or not text.strip():
+            raise RuntimeError(
+                f"data/urdu_usmani.json exists but has no text for ayah {surah}:{ayah}. "
+                "Add the missing ayah to that file, or remove the file to use the Jalandhry translation."
+            )
+        return text.strip(), "usmani"
+    return Q["surahs"][str(surah)]["ayahs"][str(ayah)], "jalandhry"
+
 def plan_reel(
     Q, s, a0, a1, length_limit, content_mode, reciter_id=None, urdu_voice_id=None
 ):
@@ -1050,6 +1127,10 @@ def plan_reel(
     )
     items = []
     surah_data = Q["surahs"][str(s)]
+    usmani = load_urdu_usmani() if content_mode == "arabic_urdu_text" else None
+    urdu_source = "usmani" if usmani is not None else "jalandhry"
+    plan["urdu_source"] = urdu_source
+    plan["urdu_credit"] = URDU_CREDITS[urdu_source]
     for item in plan["fit_items"]:
         a = item["ayah"]
         english_text = None
@@ -1069,6 +1150,9 @@ def plan_reel(
             ar_text = ayah_text_without_bismillah(ar_text, s)
         if content_mode == "arabic_only":
             item.update(text="", english=english_text, arabic=ar_text)
+        elif content_mode == "arabic_urdu_text":
+            ur_text, _ = urdu_translation_text(Q, s, a, usmani)
+            item.update(text=ur_text, arabic=ar_text)
         else:
             ur_text = surah_data["ayahs"][str(a)]
             item.update(text=ur_text, arabic=ar_text)
@@ -1076,11 +1160,102 @@ def plan_reel(
     plan["items"] = items
     return plan
 
+def enforce_min_phrase(durations, minimum):
+    """Durations ka total same rakhte hue har phrase ko kam az kam `minimum` seconds deta hai."""
+    n = len(durations)
+    if n == 0:
+        return []
+    total = sum(durations)
+    minimum = min(minimum, total / n)
+    fixed = set()
+    result = list(durations)
+    while True:
+        low = {i for i, value in enumerate(result) if value < minimum - 1e-9}
+        if not low:
+            return result
+        fixed |= low
+        free = [i for i in range(n) if i not in fixed]
+        if not free:
+            return [total / n] * n
+        scale = (total - minimum * len(fixed)) / sum(durations[i] for i in free)
+        result = [minimum if i in fixed else durations[i] * scale for i in range(n)]
+
+def chunk_spans(weights, start, span, animate=False):
+    """[(start, end), ...] weights ke hisaab se; animate ho to har phrase >= MIN_PHRASE_SEC."""
+    total_weight = sum(weights) or 1
+    durations = [span * weight / total_weight for weight in weights]
+    if animate:
+        durations = enforce_min_phrase(durations, MIN_PHRASE_SEC)
+    spans, cursor = [], start
+    for duration in durations:
+        spans.append((cursor, cursor + duration))
+        cursor += duration
+    return spans
+
+def animation_frames(base_path, steady_path, layer_path, tmp, index, duration, animation, scale=1.0):
+    """ffconcat rows + last path: fade-in frames, steady frame, fade-out frames (text layer par alpha/drift)."""
+    n_in = max(1, round(FADE_IN_SEC * FPS))
+    n_out = max(1, round(FADE_OUT_SEC * FPS))
+    if (n_in + n_out) > duration * FPS * 0.8:  # bohat chhota phrase: fades ko chhota karo
+        shrink = duration * FPS * 0.8 / (n_in + n_out)
+        n_in, n_out = max(1, int(n_in * shrink)), max(1, int(n_out * shrink))
+    base = Image.open(base_path).convert("RGBA")
+    layer = Image.open(layer_path).convert("RGBA")
+    rise = int(round(RISE_PX * scale)) if animation == "fade_rise" else 0
+    # Sirf text wale hisse (+ rise ke liye margin) par kaam: poori 1080x1920 image par composite mehnga hai.
+    box = layer.getbbox() or (0, 0, 1, 1)
+    left, right = max(0, box[0]), min(layer.width, box[2])
+    top, bottom = max(0, box[1] - 1), min(layer.height, box[3] + rise + 1)
+    region_base = base.crop((left, top, right, bottom))
+    region_layer = layer.crop((left, top, right, bottom))
+    region_alpha = region_layer.getchannel("A")
+
+    def frame(alpha, dy):
+        faded = region_layer.copy()
+        faded.putalpha(region_alpha.point([int(v * alpha) for v in range(256)]))
+        if dy:
+            shifted = Image.new("RGBA", faded.size, (0, 0, 0, 0))
+            shifted.paste(faded, (0, dy))
+            faded = shifted
+        patch = region_base.copy()
+        patch.alpha_composite(faded)
+        out = base.copy()
+        out.paste(patch, (left, top))
+        return out
+
+    rows, last = [], None
+    def add(path, seconds):
+        nonlocal last
+        rows.append(f"file '{path.resolve().as_posix()}'\nduration {seconds:.5f}")
+        last = path
+
+    def save(image, path):
+        image.save(path, compression="tga_rle")  # RLE TGA: PNG se ~3x tez likhta hai, alpha barqarar
+
+    for j in range(n_in):
+        alpha = (j + 1) / (n_in + 1)
+        eased = 1 - (1 - alpha) ** 3  # ease-out
+        path = tmp / f"f{index}_in{j}.tga"
+        save(frame(alpha, int(round(rise * (1 - eased)))), path)
+        add(path, 1 / FPS)
+    # ffmpeg ek hi codec poori list par lagata hai: steady frame bhi TGA hona chahiye (PNG ke saath mix nahi hota).
+    steady_tga = tmp / f"f{index}_steady.tga"
+    save(Image.open(steady_path).convert("RGBA"), steady_tga)
+    add(steady_tga, duration - (n_in + n_out) / FPS)
+    for j in range(n_out):
+        path = tmp / f"f{index}_out{j}.tga"
+        save(frame(1 - (j + 1) / (n_out + 1), 0), path)
+        add(path, 1 / FPS)
+    return rows, last
+
 def build(
     Q, s, a0, a1, outfile, bgs, rng, tmp, styles=None,
     max_duration=MAX_DUR, content_mode="full", music_filename=None,
-    reciter_id=None, urdu_voice_id=None,
+    reciter_id=None, urdu_voice_id=None, text_animation="none",
 ):
+    if text_animation not in TEXT_ANIMATIONS:
+        raise ValueError("Text animation must be none, fade, or fade_rise.")
+    animate = text_animation != "none"
     require_raqm()
     styles = styles or {}
     plan = plan_reel(
@@ -1126,10 +1301,10 @@ def build(
     chunk_center = H // 2 + int(round(60 * scale))
     chunk_padding = int(round(90 * scale))
 
-    def chunks_clear_label(wrapped_items, font, spacing, is_arabic=False):
+    def chunks_clear_label(wrapped_items, font, spacing, is_arabic=False, per=LINES_PER_CHUNK):
         for lines in wrapped_items:
-            for start in range(0, len(lines), LINES_PER_CHUNK):
-                group = lines[start:start + LINES_PER_CHUNK]
+            for start in range(0, len(lines), per):
+                group = lines[start:start + per]
                 _, text_top, text_bottom = shaped_line_layout(
                     group,
                     font,
@@ -1149,7 +1324,7 @@ def build(
     wrapped_en = []
     second_is_urdu = content_mode == "arabic_urdu_text"
     urdu_spacing = 1.8 if "nastaliq" in urdu_font_key else 1.45
-    urdu_credit = (Q.get("urdu_translation") or URDU_TRANSLATION_CREDIT) if second_is_urdu else ""
+    urdu_credit = (URDU_TRANSLATION_CREDIT or plan.get("urdu_credit", "")) if second_is_urdu else ""
 
     def second_texts(item):
         return item["text"] if second_is_urdu else item["english"]
@@ -1175,89 +1350,89 @@ def build(
             + int(round(12 * scale))
         )
 
+    wrapped_pairs = []
     if content_mode in ARABIC_AUDIO_ONLY_MODES:
-        for size in font_sizes:
+        # Har screen par 1 line Arabic (upar) + 1 line Urdu/English (neeche).
+        prof = LAYOUT_PROFILES["bilingual"]
+        bi_sizes = [max(1, int(round(sz * scale))) for sz in prof["sizes"]]
+        allowed_bi = max(len(items), int(total / prof["min_sec"]))
+        second_lang = "ur" if second_is_urdu else "en"
+        for size in bi_sizes:
             candidate_arabic_font = load_font(arabic_font_key, size, arabic_font_key)
+            second_size = max(26, int(round(size * prof["second_ratio"])))
             if second_is_urdu:
-                candidate_second_font = load_font(
-                    urdu_font_key, max(26, int(round(size * 0.62))), urdu_font_key
-                )
+                candidate_second_font = load_font(urdu_font_key, second_size, urdu_font_key)
             else:
                 candidate_second_font = load_font(
-                    english_font_key,
-                    max(24, int(round(size * 0.48))),
-                    english_font_key,
+                    english_font_key, max(24, int(round(size * 0.48))), english_font_key
                 )
-            candidate_arabic = [
-                wrap(item["arabic"], candidate_arabic_font, wrap_width, language="ar")
-                for item in items
-            ]
-            candidate_english = [
-                wrap_second(second_texts(item), candidate_second_font)
-                for item in items
-            ]
-            candidate_groups = []
-            for arabic_lines, english_lines in zip(candidate_arabic, candidate_english):
-                group_count = max(
-                    1,
-                    -(-len(arabic_lines) // LINES_PER_CHUNK),
-                    -(-len(english_lines) // LINES_PER_CHUNK),
-                )
-                for group_index in range(group_count):
-                    start_ar = group_index * len(arabic_lines) // group_count
-                    end_ar = (group_index + 1) * len(arabic_lines) // group_count
-                    start_en = group_index * len(english_lines) // group_count
-                    end_en = (group_index + 1) * len(english_lines) // group_count
-                    candidate_groups.append((
-                        arabic_lines[start_ar:end_ar],
-                        english_lines[start_en:end_en],
-                    ))
-            bilingual_fits_below_label = all(
+            candidate_pairs = []
+            for item in items:
+                ar_text = item["arabic"]
+                second_text = second_texts(item)
+                n_ar = len(wrap(ar_text, candidate_arabic_font, wrap_width, language="ar"))
+                n_se = len(wrap_second(second_text, candidate_second_font))
+                k = max(n_ar, n_se)
+                ar_lines = split_into_lines(ar_text, candidate_arabic_font, "ar", k)
+                se_lines = split_into_lines(second_text, candidate_second_font, second_lang, k)
+                k = min(len(ar_lines), len(se_lines))
+                if len(ar_lines) != k:
+                    ar_lines = split_into_lines(ar_text, candidate_arabic_font, "ar", k)
+                if len(se_lines) != k:
+                    se_lines = split_into_lines(second_text, candidate_second_font, second_lang, k)
+                candidate_pairs.append(list(zip(ar_lines, se_lines)))
+            total_screens = sum(len(pairs) for pairs in candidate_pairs)
+            fits_below_label = all(
                 chunk_center
                 - (
-                    quran_arabic_text_height(
-                        arabic_group,
-                        candidate_arabic_font,
-                        int(round(3 * scale)),
-                    )
-                    + second_block_height(english_group, candidate_second_font)
+                    quran_arabic_text_height([a], candidate_arabic_font, int(round(3 * scale)))
+                    + second_block_height([b], candidate_second_font)
                     + int(round(130 * scale))
                 ) // 2
                 >= minimum_chunk_top
-                for arabic_group, english_group in candidate_groups
+                for pairs in candidate_pairs for a, b in pairs
             )
-            if len(candidate_groups) <= allowed and bilingual_fits_below_label:
+            fits_width = all(
+                candidate_arabic_font.getlength(a, direction="rtl", language="ar") <= wrap_width
+                for pairs in candidate_pairs for a, _ in pairs
+            )
+            if total_screens <= allowed_bi and fits_below_label and fits_width:
                 arabic_font = candidate_arabic_font
                 english_font = candidate_second_font
-                wrapped_ar = candidate_arabic
-                wrapped_en = candidate_english
+                wrapped_pairs = candidate_pairs
                 break
         if arabic_font is None:
             raise SystemExit(
                 "Arabic and translation text cannot fit below the ayah label at the selected render resolution."
             )
     else:
-        for size in font_sizes:
+        ur_prof = LAYOUT_PROFILES["urdu"]
+        ur_per = ur_prof["lines"]
+        ur_allowed = max(len(items), int(total / ur_prof["min_sec"]))
+        for size in [max(1, int(round(sz * scale))) for sz in ur_prof["sizes"]]:
             candidate_font = load_font(urdu_font_key, size, urdu_font_key)
             candidate_wrapped = [wrap(item["text"], candidate_font, wrap_width) for item in items]
-            chunks = sum(-(-len(lines) // LINES_PER_CHUNK) for lines in candidate_wrapped)
-            if chunks <= allowed and chunks_clear_label(candidate_wrapped, candidate_font, urdu_spacing):
+            chunks = sum(-(-len(lines) // ur_per) for lines in candidate_wrapped)
+            if chunks <= ur_allowed and chunks_clear_label(candidate_wrapped, candidate_font, urdu_spacing, per=ur_per):
                 urdu_font = candidate_font
                 wrapped_ur = candidate_wrapped
                 break
         if urdu_font is None:
             raise SystemExit("Urdu text cannot fit below the ayah label at the selected render resolution.")
 
-        for size in font_sizes:
+        ar_prof = LAYOUT_PROFILES["arabic"]
+        ar_per = ar_prof["lines"]
+        ar_allowed = max(len(items), int(total / ar_prof["min_sec"]))
+        for size in [max(1, int(round(sz * scale))) for sz in ar_prof["sizes"]]:
             candidate_font = load_font(arabic_font_key, size, arabic_font_key)
             candidate_wrapped = [
                 wrap(item["arabic"], candidate_font, wrap_width, language="ar")
                 if item.get("arabic") else []
                 for item in items
             ]
-            chunks = sum(-(-len(lines) // LINES_PER_CHUNK) for lines in candidate_wrapped)
-            if chunks <= allowed and chunks_clear_label(
-                candidate_wrapped, candidate_font, arabic_spacing, is_arabic=True
+            chunks = sum(-(-len(lines) // ar_per) for lines in candidate_wrapped)
+            if chunks <= ar_allowed and chunks_clear_label(
+                candidate_wrapped, candidate_font, arabic_spacing, is_arabic=True, per=ar_per
             ):
                 arabic_font = candidate_font
                 wrapped_ar = candidate_wrapped
@@ -1267,51 +1442,33 @@ def build(
 
     timeline, off = [], 0.0
     if content_mode in ARABIC_AUDIO_ONLY_MODES:
-        for item, arabic_lines, english_lines in zip(items, wrapped_ar, wrapped_en):
-            group_count = max(
-                1,
-                -(-len(arabic_lines) // LINES_PER_CHUNK),
-                -(-len(english_lines) // LINES_PER_CHUNK),
-            )
-            for group_number in range(group_count):
-                start_time = off + item["len"] * group_number / group_count
-                end_time = off + item["len"] * (group_number + 1) / group_count
-                start_ar = group_number * len(arabic_lines) // group_count
-                end_ar = (group_number + 1) * len(arabic_lines) // group_count
-                start_en = group_number * len(english_lines) // group_count
-                end_en = (group_number + 1) * len(english_lines) // group_count
-                timeline.append((
-                    start_time, end_time,
-                    arabic_lines[start_ar:end_ar], True,
-                    english_lines[start_en:end_en],
-                ))
+        for item, pairs in zip(items, wrapped_pairs):
+            weights = [len(a) + len(b) for a, b in pairs]
+            for (ar_line, second_line), (t_cur, t_next) in zip(
+                pairs, chunk_spans(weights, off, item["len"], animate)
+            ):
+                timeline.append((t_cur, t_next, [ar_line], True, [second_line]))
             off += item["len"]
     else:
         for it, u_lines, ar_lines in zip(items, wrapped_ur, wrapped_ar):
             d_i = it["len"]
             if INCLUDE_ARABIC_AUDIO and ar_lines:
                 ar_groups = [
-                    ar_lines[k:k + LINES_PER_CHUNK]
-                    for k in range(0, len(ar_lines), LINES_PER_CHUNK)
+                    ar_lines[k:k + ar_per]
+                    for k in range(0, len(ar_lines), ar_per)
                 ]
                 ar_span = it["u0"]
                 weights_ar = [sum(len(x) for x in group) for group in ar_groups]
-                t_ar = off
-                for group_index, group in enumerate(ar_groups):
-                    st_t = t_ar
-                    t_ar += ar_span * weights_ar[group_index] / sum(weights_ar)
+                for group, (st_t, t_ar) in zip(ar_groups, chunk_spans(weights_ar, off, ar_span, animate)):
                     timeline.append((st_t, t_ar, group, True, None))
 
             u_groups = [
-                u_lines[k:k + LINES_PER_CHUNK]
-                for k in range(0, len(u_lines), LINES_PER_CHUNK)
+                u_lines[k:k + ur_per]
+                for k in range(0, len(u_lines), ur_per)
             ]
             u_span = d_i - it["u0"]
             weights_u = [sum(len(x) for x in group) for group in u_groups]
-            t_u = off + it["u0"]
-            for group_index, group in enumerate(u_groups):
-                st_t = t_u
-                t_u += u_span * weights_u[group_index] / sum(weights_u)
+            for group, (st_t, t_u) in zip(u_groups, chunk_spans(weights_u, off + it["u0"], u_span, animate)):
                 timeline.append((st_t, t_u, group, False, None))
             off += d_i
 
@@ -1320,11 +1477,15 @@ def build(
     base_p = tmp / "base.png"; base_overlay(base_p, normalize_surah_title("سورۃ " + strip_harakat_surah(S["name"]).replace("سورة", "").strip()), used_label, s != 9, styles)
     lst = tmp / "list.txt"; rows = []
     
-    for k, (st, en, lines_group, is_arabic, english_group) in enumerate(timeline):
-        p = tmp / f"c{k}.png"
+    clear_p = None
+    if animate:
+        clear_p = tmp / "clear.png"
+        Image.new("RGBA", (W, H), (0, 0, 0, 0)).save(clear_p)
+
+    def render_chunk(path, base_path, lines_group, is_arabic, english_group):
         if english_group is not None:
             chunk_bilingual_png(
-                p, lines_group, english_group, arabic_font, english_font, base_p, styles,
+                path, lines_group, english_group, arabic_font, english_font, base_path, styles,
                 second_kind="ur" if second_is_urdu else "en",
                 second_spacing=urdu_spacing,
                 credit=urdu_credit if second_is_urdu else None,
@@ -1335,10 +1496,22 @@ def build(
             element = "arabic" if is_arabic else "urdu"
             default_color = (255, 224, 140, 255) if is_arabic else (255, 255, 255, 255)
             color = styled_color(styles, element, default_color)
-            chunk_png(p, lines_group, font, spacing, base_p, is_arabic=is_arabic, color=color)
-        rows.append(f"file '{p.resolve().as_posix()}'\nduration {en - st:.3f}")
-        
-    rows.append(f"file '{(tmp / f'c{len(timeline)-1}.png').resolve().as_posix()}'")
+            chunk_png(path, lines_group, font, spacing, base_path, is_arabic=is_arabic, color=color)
+
+    last_frame = None
+    for k, (st, en, lines_group, is_arabic, english_group) in enumerate(timeline):
+        p = tmp / f"c{k}.png"
+        render_chunk(p, base_p, lines_group, is_arabic, english_group)
+        if not animate:
+            rows.append(f"file '{p.resolve().as_posix()}'\nduration {en - st:.3f}")
+            last_frame = p
+            continue
+        layer_p = tmp / f"l{k}.png"
+        render_chunk(layer_p, clear_p, lines_group, is_arabic, english_group)
+        phrase_rows, last_frame = animation_frames(base_p, p, layer_p, tmp, k, en - st, text_animation, scale)
+        rows.extend(phrase_rows)
+
+    rows.append(f"file '{last_frame.resolve().as_posix()}'")
     lst.write_text("\n".join(rows))
     
     playlist = background_playlist(bgs, total, rng)
@@ -1513,6 +1686,14 @@ def main():
         "--arabic-urdu-text", action="store_true",
         help="Use Arabic recitation with Arabic text and Urdu translation as text only (no Urdu audio).",
     )
+    ap.add_argument(
+        "--translation", choices=("en", "ur"), default=None,
+        help="Translation language under the Arabic text (only with --arabic-only): en = Pickthall (default), ur = Urdu text.",
+    )
+    ap.add_argument(
+        "--text-animation", choices=TEXT_ANIMATIONS, default="none",
+        help="Text transition per phrase: none (default), fade, or fade_rise.",
+    )
     ap.add_argument("--batch-id")
     ap.add_argument("--work-dir")
     ap.add_argument("--result-json")
@@ -1523,11 +1704,13 @@ def main():
     ap.add_argument("--reciter", default=DEFAULT_ARABIC_RECITER_ID)
     ap.add_argument("--urdu-voice", default=DEFAULT_URDU_VOICE_ID)
     a = ap.parse_args()
+    if a.translation and not a.arabic_only:
+        ap.error("--translation is only valid together with --arabic-only.")
     a.max_dur = min(max(1, a.max_dur), ABS_MAX_DUR)
     a.min_dur = min(max(1, a.min_dur), a.max_dur)
     styles = load_video_styles(a.style_json)
     CONTENT_MODE = (
-        "arabic_only" if a.arabic_only
+        ("arabic_urdu_text" if a.translation == "ur" else "arabic_only") if a.arabic_only
         else "arabic_urdu_text" if a.arabic_urdu_text
         else "urdu_only" if a.urdu_only else "full"
     )
@@ -1618,6 +1801,7 @@ def main():
                     Q, s, a0, a1, outfile, bgs, rng, tmp, styles,
                     a.max_dur, content_mode, a.music,
                     CURRENT_RECITER_ID, CURRENT_URDU_VOICE_ID,
+                    text_animation=a.text_animation,
                 )
             except Exception as exc:  # one bad reel must not stop the batch
                 res, why = None, str(exc)

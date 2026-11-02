@@ -56,10 +56,26 @@
                         <select id="input-content-mode" dir="auto" class="control">
                             <option value="full">Arabic recitation + Urdu translation</option>
                             <option value="urdu_only" lang="ur">Urdu text and audio only</option>
-                            <option value="arabic_only">Arabic recitation + Arabic text with English translation</option>
+                            <option value="arabic_only">Arabic recitation + Arabic text with translation text</option>
                             <option value="arabic_urdu_text" lang="ur">Arabic recitation + Arabic text with Urdu text below (no Urdu audio)</option>
                         </select>
-                        <p class="mt-2 text-xs text-slate-400">Arabic-only English translation: Mohammed Marmaduke William Pickthall (AlQuran Cloud edition en.pickthall).</p>
+                        <div id="text-animation-control" class="mt-3">
+                            <label for="input-text-animation" class="mb-2 block text-sm font-semibold text-slate-200">Text animation</label>
+                            <select id="input-text-animation" dir="auto" class="control">
+                                <option value="none">None</option>
+                                <option value="fade">Fade in / out</option>
+                                <option value="fade_rise">Fade with gentle rise</option>
+                            </select>
+                            <p class="mt-2 text-xs text-slate-400">Each phrase stays on screen at least 1.2 s. Animated reels take a little longer to render.</p>
+                        </div>
+                        <div id="translation-control" class="mt-3 hidden">
+                            <label for="input-translation" class="mb-2 block text-sm font-semibold text-slate-200">Translation language</label>
+                            <select id="input-translation" dir="auto" class="control">
+                                <option value="en">English (Pickthall)</option>
+                                <option value="ur" lang="ur">اردو (Urdu text, no Urdu audio)</option>
+                            </select>
+                        </div>
+                        <p class="mt-2 text-xs text-slate-400">English translation: Mohammed Marmaduke William Pickthall (AlQuran Cloud edition en.pickthall). Urdu text: Mufti Muhammad Taqi Usmani when available, otherwise Fateh Muhammad Jalandhry.</p>
                         <p dir="rtl" lang="ur" class="mt-2 text-right text-sm text-slate-300">صرف اردو یا عربی تلاوت کے ساتھ عربی متن اور انگریزی ترجمے کے لیے اختیار منتخب کریں۔ ریلز کے انداز کے لیے "عربی تلاوت + عربی متن + نیچے اردو ترجمہ" منتخب کریں، اس میں اردو آواز نہیں ہوتی۔</p>
                     </div>
 

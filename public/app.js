@@ -282,6 +282,7 @@ function updateMusicAvailability() {
     if (musicSelect) musicSelect.disabled = noMusic;
     if (note) note.classList.toggle("hidden", !noMusic);
     document.getElementById("urdu-voice-control")?.classList.toggle("hidden", noUrduVoice);
+    document.getElementById("translation-control")?.classList.toggle("hidden", mode !== "arabic_only");
 }
 
 async function initializeReciterChoices() {
@@ -658,6 +659,10 @@ async function generateVideo(event) {
                 random_count: parseInt(document.getElementById("input-random-count")?.value || "1", 10),
                 quality: document.getElementById("input-quality")?.value || "fast",
                 content_mode: contentMode,
+                text_animation: document.getElementById("input-text-animation")?.value || "none",
+                translation: contentMode === "arabic_only"
+                    ? document.getElementById("input-translation")?.value || "en"
+                    : "en",
                 reciter_id: document.getElementById("input-reciter")?.value || null,
                 urdu_voice_id: isArabicAudioMode(contentMode)
                     ? null

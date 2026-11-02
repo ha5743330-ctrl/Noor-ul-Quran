@@ -3,7 +3,7 @@ module.exports = function configHandler(req, res) {
         url: process.env.SUPABASE_URL || "",
         anonKey: process.env.SUPABASE_ANON_KEY || "",
         apiBaseUrl: process.env.API_BASE_URL || "/api",
-        contactEmail: process.env.CONTACT_EMAIL || "contact@example.com"
+        contactEmail: process.env.CONTACT_EMAIL || ""
     };
 
     res.setHeader("Content-Type", "application/javascript; charset=utf-8");
