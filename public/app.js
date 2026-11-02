@@ -659,6 +659,8 @@ async function generateVideo(event) {
                 quality: document.getElementById("input-quality")?.value || "fast",
                 content_mode: contentMode,
                 text_animation: document.getElementById("input-text-animation")?.value || "none",
+                text_layout: document.getElementById("input-text-layout")?.value || "one_line",
+                video_style: document.getElementById("input-video-style")?.value || "classic",
                 reciter_id: document.getElementById("input-reciter")?.value || null,
                 urdu_voice_id: isArabicAudioMode(contentMode)
                     ? null
@@ -934,10 +936,10 @@ function renderRecentVideos(videos) {
             item.appendChild(checkbox);
         }
 
-        if (isImage && video.thumb_url) {
+        if (video.thumb_url) {
             const thumb = document.createElement("img");
             thumb.src = new URL(video.thumb_url, new URL(API_BASE_URL, window.location.origin).origin).href;
-            thumb.alt = `Ayah image ${video.reference || ""}`;
+            thumb.alt = isImage ? `Ayah image ${video.reference || ""}` : "Video cover";
             thumb.loading = "lazy";
             thumb.className = "h-20 w-16 shrink-0 rounded-lg border border-slate-700 object-cover";
             item.appendChild(thumb);

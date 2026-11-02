@@ -12,6 +12,7 @@ Pick ayat, choose a mode, and download a portrait reel (Arabic recitation plus U
 - Four modes: **Urdu only (Urdu audio + text)**, **Arabic + Urdu (Arabic audio, Urdu audio)**, **Arabic + English text**, **Arabic + Urdu text (no Urdu audio)**.
 - Arabic above, translation below, in the two Arabic-text modes. Optional text animation (`none`, `fade`, `fade_rise`): each phrase stays at least 1.2 s and renders take somewhat longer.
 - Reciters and Urdu voices from `data/reciters.json`; per-element colour and font styles; optional background music (not in Arabic + English text mode).
+- Text layout (one line / two lines / whole ayah), safe-zone layout, baked gradient, slow zoom, ayah-number ornament, cover image in the Library and audio fades on every render; an optional local-only **Pro** style (colour grade, music ducking, title card, `BRAND_HANDLE` watermark, 1080x1920) that the Render profile ignores.
 - Ready-made Picks, random batches (Premium), ayah images, captions CSV, 3-day history, profile, admin console.
 - Urdu text is Fateh Muhammad Jalandhry (AlQuran Cloud). If `data/urdu_usmani.json` exists (`{"93": {"1": "..."}}`), Mufti Taqi Usmani is used instead and must cover every ayah requested.
 
@@ -62,7 +63,7 @@ Without Docker you need Python 3.11, FFmpeg/ffprobe on PATH and a Pillow build w
 ## Limits
 - Live site: 35 s per reel, 5 per day, one active job per user, files deleted after 3 days.
 - Longer reels (up to 180 s) are for the local app, with limits raised in `.env` (`MAX_VIDEO_SECONDS`).
-- Measured on a 512 MB container with `RENDER_MEMORY_PROFILE=low`: a 30 s reel peaked near 324 MiB, and 359 MiB with `fade_rise`; `fade_rise` took roughly 28% longer. Without the low profile, 512 MB renders can be OOM-killed.
+- Measured on a 512 MB / 0.5 CPU container (`RENDER_MEMORY_PROFILE=low`, real `/api/generate`, 30 s Arabic + Urdu text reel): peak about 411 MiB in about 71 s (previous release: 455 MiB, 60 s). With `fade_rise` the peak was 511 MiB in 99 s, so on a 512 MB host prefer `none` or `fade`. Without the low profile, 512 MB renders can be OOM-killed.
 
 ## Tests
 ```bash

@@ -7,6 +7,7 @@ import argparse, contextlib, csv, json, os, random, re, shutil, subprocess, sys,
 import ctypes
 import functools
 import hashlib
+import math
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from threading import Lock, get_ident
@@ -67,6 +68,15 @@ GAP_AFTER_ARABIC = 0.35
 # Text transitions: none (default) | fade | fade_rise. Har phrase kam az kam MIN_PHRASE_SEC rehta hai.
 TEXT_ANIMATIONS = ("none", "fade", "fade_rise")
 FADE_IN_SEC, FADE_OUT_SEC, RISE_PX, MIN_PHRASE_SEC = 0.25, 0.2, 16, 1.2
+# Text layout per phrase: one_line (default) | two_lines | block (whole ayah at once).
+TEXT_LAYOUTS = ("one_line", "two_lines", "block")
+VIDEO_STYLES = ("classic", "pro")
+SIZE_TAIL = [44, 40, 36, 32, 28, 24]   # smaller fallback sizes so long text still gets word-boundary lines
+# Safe zones on the 1080x1920 reference canvas.
+SAFE_TOP, SAFE_BOTTOM = 260, 1580      # header texts start below SAFE_TOP, channel name ends above SAFE_BOTTOM
+CARD_MARGIN, TEXT_WIDTH = 80, 860      # text card x = 80..1000, text lines at most 860 wide
+BISMILLAH_Y, SURAH_Y, LABEL_Y, CHANNEL_Y = 270, 380, 520, 1510
+ORNAMENT_R = 34
 DURATION_TOLERANCE = 0.15
 NORMALIZE_AUDIO = True
 FFMPEG_CODEC_THREADS = ("-threads", "1")
@@ -319,6 +329,12 @@ def encode_video(cmd, outfile):
         + ["-pix_fmt", "yuv420p"]
         + audio_args
     )
+
+def is_low_profile():
+    return os.getenv("RENDER_MEMORY_PROFILE", "").lower() == "low"
+
+def layout_per(layout):
+    return {"one_line": 1, "two_lines": 2}.get(layout, 10**6)
 
 def set_video_quality(quality):
     global W, H, FPS, QUALITY
@@ -723,34 +739,58 @@ def base_overlay(path, surah, label, show_bismillah, styles=None):
     ov = ROOT / "public" / "assets" / "overlay.png"
     if ov.exists():
         im.alpha_composite(Image.open(ov).convert("RGBA").resize((W, H)))
+    # Baked dark gradient (top + bottom) so text stays readable on any background; free at encode time.
+    ramp = Image.new("L", (1, 256))
+    ramp.putdata([
+        int(150 * max(0.0, 1 - (y / 255) / 0.35) + 170 * max(0.0, ((y / 255) - 0.62) / 0.38))
+        for y in range(256)
+    ])
+    shade = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    shade.putalpha(ramp.resize((W, H), Image.Resampling.BILINEAR))
+    im.alpha_composite(shade)
     if show_bismillah:
         bismillah_color = styled_color(styles, "bismillah", (255, 255, 255, 255))
         bismillah_font = load_font(QURAN_ARABIC_FONT, int(round(64 * scale)))
         put(
-            d, (W // 2, int(round(170 * scale))), QPC_BISMILLAH_TEXT, bismillah_font,
+            d, (W // 2, int(round(BISMILLAH_Y * scale))), QPC_BISMILLAH_TEXT, bismillah_font,
             bismillah_color, stroke=int(round(3 * scale)), language="ar",
         )
     surah_color = styled_color(styles, "surah", (255, 224, 140, 255))
     surah_font = load_font("amiri_bold", int(round(92 * scale)))
     put(
-        d, (W // 2, int(round(330 * scale))), surah, surah_font,
+        d, (W // 2, int(round(SURAH_Y * scale))), surah, surah_font,
         surah_color, int(round(3 * scale)), direction="rtl", language="ur",
     )
     label_color = styled_color(styles, "label", (255, 255, 255, 255))
     label_font = load_font("amiri_bold", int(round(54 * scale)))
     put(
-        d, (W // 2, int(round(480 * scale))), label, label_font,
+        d, (W // 2, int(round(LABEL_Y * scale))), label, label_font,
         label_color, int(round(3 * scale)), direction="rtl", language="ur",
     )
     channel_color = styled_color(styles, "channel", (255, 255, 255, 220))
     channel_font = load_font(styled_font(styles, "channel", "amiri_bold"), int(round(50 * scale)))
     put(
-        d, (W // 2, H - int(round(220 * scale))), CHANNEL, channel_font,
+        d, (W // 2, int(round(CHANNEL_Y * scale))), CHANNEL, channel_font,
         channel_color, int(round(2 * scale)), direction="ltr", language="en",
     )
     im.save(path)
 
-def chunk_png(path, lines, font, spacing, base, is_arabic=False, color=None):
+def draw_ornament(draw, cx, cy, number, scale):
+    """Round ayah-number medallion (gold double ring + 12 beads) centred on (cx, cy)."""
+    gold = (255, 224, 140, 255)
+    r = int(round(ORNAMENT_R * scale))
+    draw.ellipse((cx - r, cy - r, cx + r, cy + r), fill=(8, 14, 24, 235), outline=gold, width=max(1, int(2 * scale)))
+    ri = r - int(round(7 * scale))
+    draw.ellipse((cx - ri, cy - ri, cx + ri, cy + ri), outline=gold, width=max(1, int(scale)))
+    bead = max(2, int(round(2.5 * scale)))
+    for k in range(12):
+        ang = k * math.pi / 6
+        bx, by = cx + (r + bead) * math.cos(ang), cy + (r + bead) * math.sin(ang)
+        draw.ellipse((bx - bead, by - bead, bx + bead, by + bead), fill=gold)
+    font = load_font("amiri_bold", int(round((30 if number < 100 else 24) * scale)))
+    draw.text((cx, cy), urdu_digits(number), font=font, fill=gold, anchor="mm", direction="rtl", language="ur")
+
+def chunk_png(path, lines, font, spacing, base, is_arabic=False, color=None, ornament=None):
     scale = W / 1080
     im = Image.open(base).convert("RGBA"); d = ImageDraw.Draw(im)
     language = "ar" if is_arabic else "ur"
@@ -764,7 +804,7 @@ def chunk_png(path, lines, font, spacing, base, is_arabic=False, color=None):
     text_height = text_bottom - text_top
     box_h = text_height + int(round(90 * scale)) + 2
     cy = H // 2 + int(round(60 * scale))
-    margin = int(round(50 * scale))
+    margin = int(round(CARD_MARGIN * scale))
     radius = int(round(40 * scale))
     padding = int(round(45 * scale))
     
@@ -797,7 +837,8 @@ def chunk_png(path, lines, font, spacing, base, is_arabic=False, color=None):
         for top, bottom in text_boxes
     ):
         raise ValueError("Rendered text exceeds its card bounds.")
-        
+    if ornament:
+        draw_ornament(d, W // 2, card_top, ornament, scale)
     im.save(path)
     return {
         "card_bounds": (card_top, card_bottom),
@@ -806,7 +847,7 @@ def chunk_png(path, lines, font, spacing, base, is_arabic=False, color=None):
 
 def chunk_bilingual_png(
     path, arabic_lines, second_lines, arabic_font, second_font, base, styles,
-    second_kind="en", second_spacing=1.8, credit=None,
+    second_kind="en", second_spacing=1.8, credit=None, ornament=None,
 ):
     """Arabic block on top, translation below. second_kind: 'en' (Pickthall) or 'ur' (Urdu text)."""
     scale = W / 1080
@@ -853,7 +894,7 @@ def chunk_bilingual_png(
         )
     box_height = text_height + 2 * padding
     center_y = H // 2 + int(round(60 * scale))
-    margin = int(round(50 * scale))
+    margin = int(round(CARD_MARGIN * scale))
     draw.rounded_rectangle(
         (margin, center_y - box_height // 2, W - margin, center_y + box_height // 2),
         int(round(40 * scale)),
@@ -898,6 +939,8 @@ def chunk_bilingual_png(
             styled_color(styles, "english", (200, 210, 220, 230)),
             stroke=int(round(scale)), direction="ltr", language="en",
         )
+    if ornament:
+        draw_ornament(draw, W // 2, center_y - box_height // 2, ornament, scale)
     im.save(path)
 
 def render_ayah_image(arabic_text, english_text, reference, background_path, output_path):
@@ -1252,9 +1295,14 @@ def build(
     Q, s, a0, a1, outfile, bgs, rng, tmp, styles=None,
     max_duration=MAX_DUR, content_mode="full", music_filename=None,
     reciter_id=None, urdu_voice_id=None, text_animation="none",
+    text_layout="one_line", video_style="classic",
 ):
     if text_animation not in TEXT_ANIMATIONS:
         raise ValueError("Text animation must be none, fade, or fade_rise.")
+    if text_layout not in TEXT_LAYOUTS:
+        raise ValueError("Text layout must be one_line, two_lines, or block.")
+    per_screen = layout_per(text_layout)
+    pro = video_style == "pro" and not is_low_profile()  # Pro is local-only; ignored on Render
     animate = text_animation != "none"
     require_raqm()
     styles = styles or {}
@@ -1284,12 +1332,12 @@ def build(
     label_font_key = "amiri_bold"
     allowed = max(len(items), int(total / SECONDS_PER_CHUNK))
     font_sizes = [max(1, int(round(size * scale))) for size in FONT_SIZES]
-    wrap_width = int(round(W - 200 * scale))
+    wrap_width = int(round(TEXT_WIDTH * scale))
     ayah_label = f"آیت {urdu_digits(a0)}" if a0 == used_a1 else f"آیات {urdu_digits(a0)} تا {urdu_digits(used_a1)}"
     label_font = load_font(label_font_key, int(round(54 * scale)), "amiri_bold")
     label_draw = ImageDraw.Draw(Image.new("RGBA", (W, H)))
     label_bounds = label_draw.textbbox(
-        (W // 2, int(round(480 * scale))),
+        (W // 2, int(round(LABEL_Y * scale))),
         ayah_label,
         font=label_font,
         anchor="ma",
@@ -1297,11 +1345,11 @@ def build(
         direction="rtl",
         language="ur",
     )
-    minimum_chunk_top = label_bounds[3] + int(round(20 * scale))
+    minimum_chunk_top = label_bounds[3] + int(round((20 + ORNAMENT_R) * scale))
     chunk_center = H // 2 + int(round(60 * scale))
     chunk_padding = int(round(90 * scale))
 
-    def chunks_clear_label(wrapped_items, font, spacing, is_arabic=False, per=LINES_PER_CHUNK):
+    def chunks_clear_label(wrapped_items, font, spacing, is_arabic=False, per=1):
         for lines in wrapped_items:
             for start in range(0, len(lines), per):
                 group = lines[start:start + per]
@@ -1355,9 +1403,9 @@ def build(
         # Har screen par 1 line Arabic (upar) + 1 line Urdu/English (neeche).
         prof = LAYOUT_PROFILES["bilingual"]
         bi_sizes = [max(1, int(round(sz * scale))) for sz in prof["sizes"]]
-        allowed_bi = max(len(items), int(total / prof["min_sec"]))
+        allowed_bi = max(len(items), int(total / MIN_PHRASE_SEC))
         second_lang = "ur" if second_is_urdu else "en"
-        for size in bi_sizes:
+        for size in bi_sizes + [max(1, int(round(sz * scale))) for sz in SIZE_TAIL]:
             candidate_arabic_font = load_font(arabic_font_key, size, arabic_font_key)
             second_size = max(26, int(round(size * prof["second_ratio"])))
             if second_is_urdu:
@@ -1380,21 +1428,25 @@ def build(
                     ar_lines = split_into_lines(ar_text, candidate_arabic_font, "ar", k)
                 if len(se_lines) != k:
                     se_lines = split_into_lines(second_text, candidate_second_font, second_lang, k)
-                candidate_pairs.append(list(zip(ar_lines, se_lines)))
-            total_screens = sum(len(pairs) for pairs in candidate_pairs)
+                pairs = list(zip(ar_lines, se_lines))
+                candidate_pairs.append([
+                    ([a for a, _ in pairs[i:i + per_screen]], [b for _, b in pairs[i:i + per_screen]])
+                    for i in range(0, len(pairs), per_screen)
+                ])
+            total_screens = sum(len(groups) for groups in candidate_pairs)
             fits_below_label = all(
                 chunk_center
                 - (
-                    quran_arabic_text_height([a], candidate_arabic_font, int(round(3 * scale)))
-                    + second_block_height([b], candidate_second_font)
+                    quran_arabic_text_height(a, candidate_arabic_font, int(round(3 * scale)))
+                    + second_block_height(b, candidate_second_font)
                     + int(round(130 * scale))
                 ) // 2
                 >= minimum_chunk_top
                 for pairs in candidate_pairs for a, b in pairs
             )
             fits_width = all(
-                candidate_arabic_font.getlength(a, direction="rtl", language="ar") <= wrap_width
-                for pairs in candidate_pairs for a, _ in pairs
+                candidate_arabic_font.getlength(line, direction="rtl", language="ar") <= wrap_width
+                for pairs in candidate_pairs for a, _ in pairs for line in a
             )
             if total_screens <= allowed_bi and fits_below_label and fits_width:
                 arabic_font = candidate_arabic_font
@@ -1407,9 +1459,9 @@ def build(
             )
     else:
         ur_prof = LAYOUT_PROFILES["urdu"]
-        ur_per = ur_prof["lines"]
-        ur_allowed = max(len(items), int(total / ur_prof["min_sec"]))
-        for size in [max(1, int(round(sz * scale))) for sz in ur_prof["sizes"]]:
+        ur_per = per_screen
+        ur_allowed = max(len(items), int(total / MIN_PHRASE_SEC))
+        for size in [max(1, int(round(sz * scale))) for sz in ur_prof["sizes"] + SIZE_TAIL]:
             candidate_font = load_font(urdu_font_key, size, urdu_font_key)
             candidate_wrapped = [wrap(item["text"], candidate_font, wrap_width) for item in items]
             chunks = sum(-(-len(lines) // ur_per) for lines in candidate_wrapped)
@@ -1421,9 +1473,9 @@ def build(
             raise SystemExit("Urdu text cannot fit below the ayah label at the selected render resolution.")
 
         ar_prof = LAYOUT_PROFILES["arabic"]
-        ar_per = ar_prof["lines"]
-        ar_allowed = max(len(items), int(total / ar_prof["min_sec"]))
-        for size in [max(1, int(round(sz * scale))) for sz in ar_prof["sizes"]]:
+        ar_per = per_screen
+        ar_allowed = max(len(items), int(total / MIN_PHRASE_SEC))
+        for size in [max(1, int(round(sz * scale))) for sz in ar_prof["sizes"] + SIZE_TAIL]:
             candidate_font = load_font(arabic_font_key, size, arabic_font_key)
             candidate_wrapped = [
                 wrap(item["arabic"], candidate_font, wrap_width, language="ar")
@@ -1443,11 +1495,11 @@ def build(
     timeline, off = [], 0.0
     if content_mode in ARABIC_AUDIO_ONLY_MODES:
         for item, pairs in zip(items, wrapped_pairs):
-            weights = [len(a) + len(b) for a, b in pairs]
-            for (ar_line, second_line), (t_cur, t_next) in zip(
-                pairs, chunk_spans(weights, off, item["len"], animate)
+            weights = [sum(map(len, a)) + sum(map(len, b)) for a, b in pairs]
+            for (ar_group, second_group), (t_cur, t_next) in zip(
+                pairs, chunk_spans(weights, off, item["len"], True)
             ):
-                timeline.append((t_cur, t_next, [ar_line], True, [second_line]))
+                timeline.append((t_cur, t_next, ar_group, True, second_group, item["ayah"]))
             off += item["len"]
     else:
         for it, u_lines, ar_lines in zip(items, wrapped_ur, wrapped_ar):
@@ -1459,8 +1511,8 @@ def build(
                 ]
                 ar_span = it["u0"]
                 weights_ar = [sum(len(x) for x in group) for group in ar_groups]
-                for group, (st_t, t_ar) in zip(ar_groups, chunk_spans(weights_ar, off, ar_span, animate)):
-                    timeline.append((st_t, t_ar, group, True, None))
+                for group, (st_t, t_ar) in zip(ar_groups, chunk_spans(weights_ar, off, ar_span, True)):
+                    timeline.append((st_t, t_ar, group, True, None, it["ayah"]))
 
             u_groups = [
                 u_lines[k:k + ur_per]
@@ -1468,8 +1520,8 @@ def build(
             ]
             u_span = d_i - it["u0"]
             weights_u = [sum(len(x) for x in group) for group in u_groups]
-            for group, (st_t, t_u) in zip(u_groups, chunk_spans(weights_u, off + it["u0"], u_span, animate)):
-                timeline.append((st_t, t_u, group, False, None))
+            for group, (st_t, t_u) in zip(u_groups, chunk_spans(weights_u, off + it["u0"], u_span, True)):
+                timeline.append((st_t, t_u, group, False, None, it["ayah"]))
             off += d_i
 
     S = Q["surahs"][str(s)]
@@ -1482,13 +1534,13 @@ def build(
         clear_p = tmp / "clear.png"
         Image.new("RGBA", (W, H), (0, 0, 0, 0)).save(clear_p)
 
-    def render_chunk(path, base_path, lines_group, is_arabic, english_group):
+    def render_chunk(path, base_path, lines_group, is_arabic, english_group, ayah_no=None):
         if english_group is not None:
             chunk_bilingual_png(
                 path, lines_group, english_group, arabic_font, english_font, base_path, styles,
                 second_kind="ur" if second_is_urdu else "en",
                 second_spacing=urdu_spacing,
-                credit=urdu_credit if second_is_urdu else None,
+                credit=urdu_credit if second_is_urdu else None, ornament=ayah_no,
             )
         else:
             font = arabic_font if is_arabic else urdu_font
@@ -1496,18 +1548,18 @@ def build(
             element = "arabic" if is_arabic else "urdu"
             default_color = (255, 224, 140, 255) if is_arabic else (255, 255, 255, 255)
             color = styled_color(styles, element, default_color)
-            chunk_png(path, lines_group, font, spacing, base_path, is_arabic=is_arabic, color=color)
+            chunk_png(path, lines_group, font, spacing, base_path, is_arabic=is_arabic, color=color, ornament=ayah_no)
 
     last_frame = None
-    for k, (st, en, lines_group, is_arabic, english_group) in enumerate(timeline):
+    for k, (st, en, lines_group, is_arabic, english_group, ayah_no) in enumerate(timeline):
         p = tmp / f"c{k}.png"
-        render_chunk(p, base_p, lines_group, is_arabic, english_group)
+        render_chunk(p, base_p, lines_group, is_arabic, english_group, ayah_no)
         if not animate:
             rows.append(f"file '{p.resolve().as_posix()}'\nduration {en - st:.3f}")
             last_frame = p
             continue
         layer_p = tmp / f"l{k}.png"
-        render_chunk(layer_p, clear_p, lines_group, is_arabic, english_group)
+        render_chunk(layer_p, clear_p, lines_group, is_arabic, english_group, ayah_no)
         phrase_rows, last_frame = animation_frames(base_p, p, layer_p, tmp, k, en - st, text_animation, scale)
         rows.extend(phrase_rows)
 
@@ -1553,9 +1605,33 @@ def build(
             )
             previous_label = f"[{mixed_label}]"
             elapsed += playlist[idx][2] - 0.5
-        fc.append(f"{previous_label}null[vbg]")
-    fc += [f"[{overlay_input}:v]format=rgba[ov]", "[vbg][ov]overlay=shortest=1[v1]",
-          f"[v1]fade=t=in:d=0.6,fade=t=out:st={total-0.7:.2f}:d=0.7[vout]"]
+        # Pro: restart timestamps + constant fps after the xfade chain (avoids dropped/stuck frames).
+        tail = f"setpts=PTS-STARTPTS,fps={FPS}" if pro else "null"
+        fc.append(f"{previous_label}{tail}[vbg]")
+    # Slow zoom (always on): per-frame scale + centre crop, no zoompan.
+    zoom = (
+        f"scale=w='trunc({W}*(1+0.05*t/{total:.2f})/2)*2':h='trunc({H}*(1+0.05*t/{total:.2f})/2)*2'"
+        f":eval=frame:flags=bilinear,crop={W}:{H}"
+    )
+    grade = ",eq=contrast=1.06:saturation=1.12,colorbalance=rs=0.03:bs=-0.03:rh=0.02:bh=-0.02" if pro else ""
+    fc.append(f"[vbg]{zoom}{grade}[vz]")
+    fc += [f"[{overlay_input}:v]format=rgba[ov]", "[vz][ov]overlay=shortest=1[v1]"]
+    last_video, fade_out = "[v1]", 1.0 if pro else 0.7
+    if pro:
+        extra_png = make_title_and_watermark(tmp, S, used_label)
+        for png in extra_png:
+            cmd += [*FFMPEG_CODEC_THREADS, "-loop", "1", "-t", f"{total:.2f}", "-i", str(png)]
+        base_idx = overlay_input + 1
+        if extra_png and extra_png[0].name == "title.png":
+            fc.append(f"[{base_idx}:v]format=rgba,fade=t=out:st=0.6:d=0.4:alpha=1[ttl]")
+            fc.append(f"{last_video}[ttl]overlay=enable='lt(t,1)':shortest=1[v2]")
+            last_video, base_idx = "[v2]", base_idx + 1
+        if extra_png and extra_png[-1].name == "watermark.png":
+            fc.append(f"[{base_idx}:v]format=rgba[wm]")
+            fc.append(f"{last_video}[wm]overlay=shortest=1[v3]")
+            last_video = "[v3]"
+        overlay_input += len(extra_png)  # keep following input indices aligned
+    fc.append(f"{last_video}fade=t=in:d=0.6,fade=t=out:st={total-fade_out:.2f}:d={fade_out}[vout]")
     
     idx, labels = overlay_input + 1, []
     norm = ",loudnorm=I=-18:TP=-2:LRA=7" if NORMALIZE_AUDIO else ""
@@ -1591,12 +1667,18 @@ def build(
             f"[{music_input_index}:a]aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo,"
             f"volume=0.12,atrim=duration={total:.2f},asetpts=PTS-STARTPTS[bgm]"
         )
-        fc.append(
-            f"[rec_audio][bgm]amix=inputs=2:duration=first:dropout_transition=2,"
-            f"afade=t=in:d=0.2,afade=t=out:st={total-0.5:.2f}:d=0.5[aout]"
-        )
+        afades = f"afade=t=in:d=1,afade=t=out:st={max(0.0, total-1.5):.2f}:d=1.5"
+        rec = "[rec_audio]"
+        if pro:  # duck the music under the recitation
+            fc.append("[rec_audio]asplit=2[rec_a][rec_sc]")
+            fc.append("[bgm][rec_sc]sidechaincompress=threshold=0.03:ratio=8:attack=20:release=400[bgm_d]")
+            rec = "[rec_a]"
+            bgm = "[bgm_d]"
+        else:
+            bgm = "[bgm]"
+        fc.append(f"{rec}{bgm}amix=inputs=2:duration=first:dropout_transition=2,{afades}[aout]")
     else:
-        fc.append(f"[rec_audio]afade=t=in:d=0.2,afade=t=out:st={total-0.5:.2f}:d=0.5[aout]")
+        fc.append(f"[rec_audio]afade=t=in:d=1,afade=t=out:st={max(0.0, total-1.5):.2f}:d=1.5[aout]")
 
     cmd += ["-filter_complex", ";".join(fc), "-map", "[vout]", "-map", "[aout]", "-t", f"{total:.2f}"]
     try:
@@ -1606,12 +1688,50 @@ def build(
             raise
         print("Background xfade failed; retrying with hard cuts.", file=sys.stderr)
         fc = [entry for entry in fc if "xfade=transition=" not in entry]
-        fc = [entry for entry in fc if not re.search(r"\[bgmix\d+\]null\[vbg\]", entry)]
+        fc = [entry for entry in fc if not re.search(r"\[bgmix\d+\][^;\[]*\[vbg\]", entry)]
+        warnings.append("Background cross-fades failed; hard cuts were used instead.")
         fc.append("".join(background_labels) + f"concat=n={len(background_labels)}:v=1:a=0[vbg]")
         fallback_cmd = cmd[:cmd.index("-filter_complex")]
         fallback_cmd += ["-filter_complex", ";".join(fc)] + cmd[cmd.index("-map"):]
         encode_video(fallback_cmd, outfile)
+    save_cover(outfile)
     return S, total, used_a1, warnings
+
+def cover_path(video):
+    video = Path(video)
+    return video.with_name(video.stem + "_cover.png")
+
+def save_cover(video):
+    """Cover frame at ~0.5 s saved beside the video (best effort, one cheap ffmpeg seek)."""
+    try:
+        subprocess.run(
+            ["ffmpeg", "-nostdin", "-y", "-v", "error", "-ss", "0.5", "-i", str(video),
+             "-frames:v", "1", str(cover_path(video))],
+            check=True, timeout=60,
+        )
+    except (subprocess.SubprocessError, OSError):
+        pass
+
+def make_title_and_watermark(tmp, surah_data, label):
+    """Pro only: title.png (shown in the first second) and, if BRAND_HANDLE is set, watermark.png."""
+    scale = W / 1080
+    paths = []
+    title = Image.new("RGBA", (W, H), (0, 0, 0, 150))
+    d = ImageDraw.Draw(title)
+    name = normalize_surah_title("سورۃ " + strip_harakat_surah(surah_data["name"]).replace("سورة", "").strip())
+    put(d, (W // 2, int(round(800 * scale))), name, load_font("amiri_bold", int(round(150 * scale))),
+        (255, 224, 140, 255), int(round(4 * scale)), direction="rtl", language="ur")
+    put(d, (W // 2, int(round(1010 * scale))), label, load_font("amiri_bold", int(round(64 * scale))),
+        (255, 255, 255, 255), int(round(3 * scale)), direction="rtl", language="ur")
+    title.save(tmp / "title.png"); paths.append(tmp / "title.png")
+    handle = os.getenv("BRAND_HANDLE", "").strip()
+    if handle:
+        mark = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        put(ImageDraw.Draw(mark), (W // 2, int(round(1700 * scale))), handle,
+            load_font("amiri_bold", int(round(44 * scale))), (255, 255, 255, 150),
+            int(round(2 * scale)), direction="ltr", language="en")
+        mark.save(tmp / "watermark.png"); paths.append(tmp / "watermark.png")
+    return paths
 
 def parse_picks(f):
     out = []
@@ -1694,6 +1814,9 @@ def main():
         "--text-animation", choices=TEXT_ANIMATIONS, default="none",
         help="Text transition per phrase: none (default), fade, or fade_rise.",
     )
+    ap.add_argument("--text-layout", choices=TEXT_LAYOUTS, default="one_line")
+    ap.add_argument("--video-style", choices=VIDEO_STYLES, default="classic",
+                    help="pro = local-only extras (colour grade, ducking, title card, watermark); ignored on Render.")
     ap.add_argument("--batch-id")
     ap.add_argument("--work-dir")
     ap.add_argument("--result-json")
@@ -1721,7 +1844,7 @@ def main():
             CURRENT_URDU_VOICE_ID = resolve_reciter_id("urdu", a.urdu_voice)
     except ValueError as exc:
         ap.error(str(exc))
-    set_video_quality(a.quality)
+    set_video_quality("high" if a.video_style == "pro" and not is_low_profile() else a.quality)
     
     qf = ROOT / "data/quran.json"
     if not qf.exists(): sys.exit("Pehle chalao: python fetch_assets.py")
@@ -1802,6 +1925,7 @@ def main():
                     a.max_dur, content_mode, a.music,
                     CURRENT_RECITER_ID, CURRENT_URDU_VOICE_ID,
                     text_animation=a.text_animation,
+                    text_layout=a.text_layout, video_style=a.video_style,
                 )
             except Exception as exc:  # one bad reel must not stop the batch
                 res, why = None, str(exc)
