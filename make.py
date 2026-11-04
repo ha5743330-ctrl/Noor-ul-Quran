@@ -585,6 +585,13 @@ def require_raqm():
             "Python is not sufficient; use a Pillow build with libraqm enabled."
         )
 
+BACKOFF_BASE = 1.0
+
+# Source clips with duplicated frames (judder); skipped, files kept.
+BLOCKED_CLIP_IDS = ("12419860", "16349470")
+def is_blocked_clip(path):
+    return any(i in Path(path).name for i in BLOCKED_CLIP_IDS)
+
 def fetch_ayah(kind, s, a, reciter_id=None):
     reciter_id = resolve_reciter_id(kind, reciter_id)
     audio_path = audio_cache_path(kind, s, a, reciter_id)
@@ -592,18 +599,23 @@ def fetch_ayah(kind, s, a, reciter_id=None):
         folder = RECITERS_BY_ID[reciter_id]["folder"]
         url = f"{BASE_URL}{folder}/{s:03d}{a:03d}.mp3"
         audio_path.parent.mkdir(parents=True, exist_ok=True)
-        for _ in range(3):
+        last = "no response"
+        for attempt in range(4):
             try:
-                response = requests.get(url, timeout=60)
+                response = requests.get(url, timeout=(10, 30))
                 if response.status_code == 200 and len(response.content) > 1000:
                     audio_path.write_bytes(response.content)
                     break
                 if response.status_code == 404:
                     return None
-            except requests.RequestException:
-                time.sleep(2)
+                last = f"HTTP {response.status_code}"
+            except requests.RequestException as exc:
+                last = type(exc).__name__
+            print(f"EveryAyah {kind} {s}:{a} attempt {attempt + 1}: {last}", file=sys.stderr)
+            if attempt < 3:
+                time.sleep(BACKOFF_BASE * 2 ** attempt)
         else:
-            return None
+            raise RuntimeError(f"EveryAyah download failed for {s}:{a} ({kind}): {last}")
 
     if cached_ayah_duration(s, a, kind, reciter_id) is None:
         save_ayah_duration(s, a, kind, dur(audio_path), reciter_id)
@@ -1718,7 +1730,7 @@ def build(
     fc.append(f"{last_video}fade=t=in:d=0.6,fade=t=out:st={total-fade_out:.2f}:d={fade_out}[vout]")
     
     idx, labels = overlay_input + 1, []
-    norm = ",loudnorm=I=-18:TP=-2:LRA=7" if NORMALIZE_AUDIO else ""
+    norm = ",loudnorm=I=-18:TP=-2:LRA=7,aresample=48000" if NORMALIZE_AUDIO else ""
     # Each loudnorm instance holds ~50MB; low profile normalizes once after concat instead of per segment.
     low_mem = os.getenv("RENDER_MEMORY_PROFILE", "").lower() == "low"
     seg_norm = "" if low_mem else norm
@@ -1960,7 +1972,7 @@ def main():
         picks = parse_picks(a.picks) if a.picks else pick_random(Q, a.random, rng, a.min_dur, a.max_dur) if a.random else sys.exit("--picks, --pick ya --random do")
     background_files = [p for d in (BACKGROUND_DIR, CLIP_CACHE_DIR) for p in d.glob("*") if p.suffix.lower() in (".mp4", ".mov")]
     generated_reels = [p for p in background_files if is_generated_reel(p)]
-    bgs = [p for p in background_files if not is_generated_reel(p)]
+    bgs = [p for p in background_files if not is_generated_reel(p) and not is_blocked_clip(p)]
     if generated_reels:
         print(
             "Ignoring generated reel(s) in backgrounds/: "
@@ -2047,5 +2059,7 @@ def main():
                 "index": i,
             })
             write_result(generated + failed)
+    if failed and not generated:
+        sys.exit(1)
 
 if __name__ == "__main__": main()

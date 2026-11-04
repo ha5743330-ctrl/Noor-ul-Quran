@@ -38,6 +38,7 @@ async function adminRequest(path, options = {}) {
 }
 
 async function initializeAdmin() {
+    let apiUp = false;
     const client = window.supabaseClient;
     if (!client) {
         window.location.replace("/auth.html");
@@ -57,6 +58,8 @@ async function initializeAdmin() {
             return;
         }
         selfId = access.user_id;
+        apiUp = true;
+        setApiStatus(true);
         await loadUsers();
         await loadAudit();
         await loadBackgrounds();
@@ -64,8 +67,14 @@ async function initializeAdmin() {
         await loadMusic();
         await loadDiagnostics();
     } catch (error) {
+        if (!apiUp) setApiStatus(false);
         showAdminMessage(error.message, true);
     }
+}
+
+function setApiStatus(online) {
+    document.getElementById("ad-status").textContent = online ? "Online" : "Offline";
+    document.getElementById("ad-status-note").textContent = online ? "API and auth responding" : "API unreachable";
 }
 
 function renderSummary() {

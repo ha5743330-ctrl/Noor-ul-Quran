@@ -569,8 +569,13 @@ def _quran_data():
 def _validate_ayah_range(surah: int, start_ayah: int, end_ayah: int):
     if start_ayah > end_ayah:
         raise HTTPException(status_code=400, detail="Start ayah must not exceed end ayah.")
-    _validate_verse(surah, start_ayah)
-    _validate_verse(surah, end_ayah)
+    _validate_verse(surah, 1)
+    verse_count = int(_quran_data()["surahs"][str(surah)]["n"])
+    if start_ayah < 1 or end_ayah > verse_count:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Surah {surah} has only {verse_count} ayat (you asked {start_ayah}-{end_ayah}).",
+        )
     if end_ayah - start_ayah + 1 > MAX_AYAHS_PER_REQUEST:
         raise HTTPException(
             status_code=400,
@@ -2561,10 +2566,16 @@ def _run_generation_job(
                 for video in videos:
                     (OUTPUT_DIR / video["filename"]).unlink(missing_ok=True)
                 raise RuntimeError("Generation cancelled because the account is unavailable.")
-            if completed.returncode != 0 and not videos:
-                raise RuntimeError(completed.stderr or completed.stdout or "Video rendering failed.")
             if not videos:
-                raise RuntimeError("No video output was generated.")
+                reasons = "; ".join(dict.fromkeys(
+                    str(e["error"]) for e in entries if e.get("error")
+                ))
+                LOGGER.error("Render produced no video (rc=%s): %s", completed.returncode,
+                             _redact_secrets((completed.stdout or "")[-2000:]))
+                raise RuntimeError(
+                    reasons or (completed.returncode and (completed.stderr or completed.stdout))
+                    or "No video output was generated."
+                )
             tail = (completed.stderr or "").strip().splitlines()
             settle(entries, final=True, default_reason=tail[-1] if completed.returncode != 0 and tail else None)
 
