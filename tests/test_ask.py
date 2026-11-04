@@ -135,3 +135,12 @@ def test_endpoint_requires_login_and_works(client, monkeypatch):
     r = client.post("/api/ask", json={"question": "patience"})
     assert r.status_code == 200 and r.json()["status"] == "ok"
     assert client.post("/api/ask", json={"question": "x"}).status_code == 400
+
+
+def test_ask_rate_limit_message_says_minute(client, monkeypatch):
+    monkeypatch.setattr(main, "_retriever", lambda: ask.Retriever(search.build_index(json.loads(QURAN.read_text(encoding="utf-8")))))
+    fake_llm(monkeypatch, "x [70:5]")
+    main.ATTEMPTS.clear()
+    codes = [client.post("/api/ask", json={"question": "patience"}) for _ in range(11)]
+    assert codes[9].status_code == 200 and codes[10].status_code == 429
+    assert "a minute" in codes[10].json()["detail"] and "15" not in codes[10].json()["detail"]

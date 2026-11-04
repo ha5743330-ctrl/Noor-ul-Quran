@@ -3404,7 +3404,7 @@ def _rate_limit(key, limit=5, window=15 * 60):
         recent = [t for t in ATTEMPTS.get(key, []) if now - t < window]
         if len(recent) >= limit:
             ATTEMPTS[key] = recent
-            raise HTTPException(status_code=429, detail="Too many attempts. Try again in 15 minutes.")
+            raise HTTPException(status_code=429, detail=f"Too many attempts. Try again in {'a minute' if window <= 60 else f'{window // 60} minutes'}.")
         ATTEMPTS[key] = recent + [now]
 
 
