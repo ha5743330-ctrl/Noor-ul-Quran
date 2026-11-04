@@ -656,7 +656,7 @@ async function generateVideo(event) {
 
     if (statusBox) {
         statusBox.innerText = "⏳ Request sent! Rendering started in background...";
-        statusBox.style.color = "#d97706";
+        statusBox.style.color = "var(--status-warn)";
     }
     if (statusHeading) statusHeading.textContent = "Status: rendering";
     if (statusSpinner) statusSpinner.className = "fa-solid fa-spinner animate-spin text-xs text-amber-300";
@@ -716,7 +716,7 @@ async function generateVideo(event) {
                 statusBox.innerText = result.status === "partial"
                     ? "⚠ Some reels could not be rendered. Completed reels are available below."
                     : `✅ ${result.videos?.length || 1} reel(s) ready to preview.`;
-                statusBox.style.color = result.status === "partial" ? "#d97706" : "#059669";
+                statusBox.style.color = result.status === "partial" ? "var(--status-warn)" : "var(--status-ok)";
             }
             const videos = Array.isArray(result.videos) ? result.videos : result.filename ? [result] : [];
             setBatchDownload(result.job_id || generationJobId, videos);
@@ -735,7 +735,7 @@ async function generateVideo(event) {
             if (statusSpinner) statusSpinner.className = "fa-solid fa-circle-exclamation text-xs text-red-300";
             if (statusBox) {
                 statusBox.innerText = "❌ Error: " + errorMessage;
-                statusBox.style.color = "#dc2626";
+                statusBox.style.color = "var(--status-err)";
             }
         }
     } catch (error) {
@@ -747,7 +747,7 @@ async function generateVideo(event) {
         if (statusSpinner) statusSpinner.className = "fa-solid fa-circle-exclamation text-xs text-red-300";
         if (statusBox) {
             statusBox.innerText = "❌ " + errorMessage;
-            statusBox.style.color = "#dc2626";
+            statusBox.style.color = "var(--status-err)";
         }
     } finally {
         if (generateButton) {
@@ -763,7 +763,7 @@ async function waitForGeneration(jobId, accessToken, statusBox, logMsg, statusPe
     const showQueue = (job) => {
         if (job.status !== "queued" || job.queue_ahead == null || !statusBox) return;
         statusBox.innerText = `⏳ ${job.queue_ahead} before you · wait ${formatWait(job.estimated_wait_seconds)}`;
-        statusBox.style.color = "#d97706";
+        statusBox.style.color = "var(--status-warn)";
     };
     showQueue(initial);
     let lastVideoCount = 0;
@@ -788,7 +788,7 @@ async function waitForGeneration(jobId, accessToken, statusBox, logMsg, statusPe
             const reconnectMessage = `Temporary connection issue while checking generation status. Retrying in ${retryInSeconds}s.`;
             if (statusBox) {
                 statusBox.innerText = `⚠ ${reconnectMessage}`;
-                statusBox.style.color = "#d97706";
+                statusBox.style.color = "var(--status-warn)";
             }
             const statusHeading = document.getElementById("status-heading");
             if (statusHeading) statusHeading.textContent = "Status: reconnecting";
@@ -811,7 +811,7 @@ async function waitForGeneration(jobId, accessToken, statusBox, logMsg, statusPe
             if (logMsg) logMsg.innerText = `✓ ${lastVideoCount} reel(s) ready; remaining reels are still rendering.`;
             if (statusBox) {
                 statusBox.innerText = `✅ ${lastVideoCount} reel(s) ready. You can preview or download them while the batch continues.`;
-                statusBox.style.color = "#059669";
+                statusBox.style.color = "var(--status-ok)";
             }
         }
         if (["completed", "partial", "failed"].includes(job.status)) return job;
@@ -1307,7 +1307,7 @@ async function downloadAllGeneratedVideos() {
         const statusBox = document.getElementById("status-box");
         if (statusBox) {
             statusBox.innerText = "Download error: " + (error.message || "Could not download the reel ZIP.");
-            statusBox.style.color = "#dc2626";
+            statusBox.style.color = "var(--status-err)";
         }
     } finally {
         button.disabled = false;
