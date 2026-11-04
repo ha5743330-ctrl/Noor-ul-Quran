@@ -37,6 +37,7 @@ from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 
 import analytics
+import ask as ask_lib
 import picks as picks_lib
 import search as search_lib
 
@@ -61,6 +62,7 @@ SUPABASE_KEY = os.getenv("SUPABASE_ANON_KEY", "")
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 MEDIA_BUCKET = os.getenv("SUPABASE_MEDIA_BUCKET", "noor-media")
 analytics.configure(SUPABASE_URL, SUPABASE_SERVICE_KEY, os.getenv("ANALYTICS_SECRET", ""))
+ask_lib.configure(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 BACKGROUNDS_BUCKET = os.getenv("SUPABASE_BACKGROUNDS_BUCKET", "noor-backgrounds")
 OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", BASE_DIR / "output"))
 HISTORY_FILE = OUTPUT_DIR / "history.json"
@@ -1139,6 +1141,29 @@ def search_ayat(q: str = "", limit: int = 30):
     q = q.strip()[:100]
     total, results = search_lib.search(_search_index(), q, max(1, min(limit, 50)))
     return {"query": q, "total": total, "results": results}
+
+
+@functools.cache
+def _retriever():
+    return ask_lib.Retriever(_search_index())
+
+
+class AskRequest(BaseModel):
+    question: str
+
+
+@app.post("/api/ask")
+def ask_ai(req: AskRequest, user=Depends(get_current_user)):
+    question = req.question.strip()
+    if len(question) < 3:
+        raise HTTPException(status_code=400, detail="Please type a question.")
+    _rate_limit(f"ask:{user['id']}", limit=10, window=60)
+    return ask_lib.answer(question, _retriever(), user["id"])
+
+
+@app.get("/api/admin/ask-usage")
+def admin_ask_usage(user=Depends(require_admin)):
+    return ask_lib.usage()
 
 
 @app.get("/api/admin/analytics")
