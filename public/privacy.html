@@ -12,16 +12,17 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js" integrity="sha384-0w2KAL2YHP6wKOkUDzkCDGgVvfmHnj02DHeQ6XcHOgTfFsGyonKOpShMH1x6nk9o" crossorigin="anonymous"></script>
     <script src="/config.js" defer></script>
     <script src="/auth.js?v=9" defer></script>
-    <script src="/nav.js?v=2" defer></script>
+    <script src="/nav.js?v=3" defer></script>
     <script src="/legal.js?v=1" defer></script>
-    <link rel="stylesheet" href="/ui.css?v=8">
+    <link rel="stylesheet" href="/ui.css?v=11">
 </head>
 <body class="ui-page ui-auth min-h-screen flex flex-col justify-between selection:bg-emerald-100">
+    <a class="skip-link" href="#main">Skip to content</a>
     <header id="site-header"></header>
-    <main class="my-10 px-4 max-w-2xl mx-auto w-full">
+    <main id="main" class="my-10 px-4 max-w-2xl mx-auto w-full">
         <article class="glass-card rounded-3xl p-6 sm:p-8 border border-slate-800 shadow-2xl space-y-5 text-sm leading-6 text-slate-300">
             <h1 class="text-2xl font-bold text-slate-100">Privacy Policy</h1>
-            <p class="text-xs text-slate-400">Last updated: 2026-11-01</p>
+            <p class="text-xs text-slate-400">Last updated: 2026-11-04</p>
             <section dir="rtl" lang="ur" class="rounded-xl border border-amber-400/30 bg-amber-400/10 p-4 text-slate-200">
                 <strong>مختصر:</strong> ہم صرف آپ کا ای میل اور آپ کی بنائی ہوئی ویڈیوز/تصاویر محفوظ کرتے ہیں۔ یہ 3 دن بعد خود بخود حذف ہو جاتی ہیں۔ ہم اشتہارات نہیں دکھاتے اور آپ کا ڈیٹا فروخت نہیں کرتے۔ اکاؤنٹ حذف یا غیر فعال کرنے کے لیے پروفائل صفحہ استعمال کریں۔
             </section>
@@ -31,6 +32,7 @@
                 <li><strong>Profile:</strong> an optional display name and an optional profile photo. Photos are resized to 256&times;256 and stored privately in Supabase Storage; only you (and admins managing the service) can see them.</li>
                 <li><strong>Your creations:</strong> the videos and images you generate, and a history list of them, are stored per user in Supabase Storage.</li>
                 <li><strong>Usage counters:</strong> a daily count of videos per account (limit: 5 videos per day) is kept in server memory.</li>
+                <li><strong>Anonymous visit statistics:</strong> we count page views and unique visitors per day (bots excluded), plus daily totals of sign-ups, videos made, failures and average render time. A visitor is a one-way hash of the network address and browser type mixed with a salt that changes every day; the raw address is never stored, and the hashes are deleted after 2 days. Only the daily totals are kept.</li>
             </ul>
             <h2 class="font-bold text-slate-100">How long we keep it</h2>
             <p>Generated videos, images and their history entries are deleted automatically after <strong>3 days</strong>. You can also delete any item yourself at any time from the Recent list. Your account stays until you ask us to delete it.</p>

@@ -66,6 +66,7 @@ async function initializeAdmin() {
         await loadPhotos();
         await loadMusic();
         await loadDiagnostics();
+        await loadAnalytics();
     } catch (error) {
         if (!apiUp) setApiStatus(false);
         showAdminMessage(error.message, true);
@@ -528,6 +529,52 @@ async function loadDiagnostics() {
     } catch (error) {
         status.textContent = error.message || "Could not load diagnostics.";
         showAdminMessage(status.textContent, true);
+    }
+}
+
+async function loadAnalytics() {
+    const status = document.getElementById("analytics-status");
+    const table = document.getElementById("analytics-table");
+    const chart = document.getElementById("analytics-chart");
+    try {
+        const { days } = await adminRequest("/admin/analytics?days=30");
+        if (!days.length) {
+            status.dataset.kind = "empty";
+            status.textContent = "No analytics yet (or the analytics table is not set up).";
+            return;
+        }
+        status.hidden = table.hidden = chart.hidden = false;
+        status.hidden = true;
+        const rows = [...days].reverse();
+        const max = Math.max(1, ...rows.map((d) => d.views));
+        const step = 600 / rows.length;
+        const ns = "http://www.w3.org/2000/svg";
+        chart.replaceChildren(...rows.flatMap((d, i) => [["views", "#28745f"], ["uniques", "#c9a227"]].map(([key, fill], j) => {
+            const h = Math.max(1, (d[key] / max) * 130);
+            const bar = document.createElementNS(ns, "rect");
+            const w = step * 0.4;
+            bar.setAttribute("x", i * step + step * 0.1 + j * w);
+            bar.setAttribute("y", 140 - h);
+            bar.setAttribute("width", w);
+            bar.setAttribute("height", h);
+            bar.setAttribute("fill", fill);
+            const title = document.createElementNS(ns, "title");
+            title.textContent = `${d.day} ${key}: ${d[key]}`;
+            bar.append(title);
+            return bar;
+        })));
+        table.tBodies[0].replaceChildren(...days.map((d) => {
+            const tr = document.createElement("tr");
+            for (const v of [d.day, d.views, d.uniques, d.signups, d.videos, d.failures, d.avg_render_secs ? `${d.avg_render_secs}s` : "-"]) {
+                const td = document.createElement("td");
+                td.textContent = v;
+                tr.append(td);
+            }
+            return tr;
+        }));
+    } catch (error) {
+        status.dataset.kind = "error";
+        status.textContent = "Analytics unavailable.";
     }
 }
 
