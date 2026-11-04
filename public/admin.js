@@ -567,7 +567,7 @@ async function loadAnalytics() {
         const max = Math.max(1, ...rows.map((d) => d.views));
         const step = 600 / rows.length;
         const ns = "http://www.w3.org/2000/svg";
-        chart.replaceChildren(...rows.flatMap((d, i) => [["views", "#28745f"], ["uniques", "#c9a227"]].map(([key, fill], j) => {
+        chart.replaceChildren(...rows.flatMap((d, i) => [["views", "var(--chart-1)"], ["uniques", "var(--chart-2)"]].map(([key, fill], j) => {
             const h = Math.max(1, (d[key] / max) * 130);
             const bar = document.createElementNS(ns, "rect");
             const w = step * 0.4;
@@ -575,7 +575,7 @@ async function loadAnalytics() {
             bar.setAttribute("y", 140 - h);
             bar.setAttribute("width", w);
             bar.setAttribute("height", h);
-            bar.setAttribute("fill", fill);
+            bar.style.fill = fill;
             const title = document.createElementNS(ns, "title");
             title.textContent = `${d.day} ${key}: ${d[key]}`;
             bar.append(title);
