@@ -1485,3 +1485,12 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     scheduleRangeSuggestions();
 });
+
+// ?pick=S:A-B (from the demo / search pages) prefills the range.
+document.addEventListener("DOMContentLoaded", () => {
+    const pick = new URLSearchParams(window.location.search).get("pick");
+    const input = document.getElementById("input-pick");
+    if (!pick || !input || !/^\d+:\d+(-\d+)?$/.test(pick)) return;
+    input.value = pick;
+    if (syncRangeControls()) scheduleDurationEstimate();
+});
