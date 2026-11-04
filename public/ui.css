@@ -1086,3 +1086,14 @@ body.ui-page :is(button, .btn, a.btn, [type="submit"]):focus-visible, body.ui-pa
 .ad-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
 .ad-table th, .ad-table td { padding: 6px 10px; border-bottom: 1px solid var(--border); text-align: right; }
 .ad-table th:first-child, .ad-table td:first-child { text-align: left; }
+
+/* search page */
+.sr-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.sr-row .control { flex: 1 1 200px; min-width: 0; }
+.sr-list { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 12px; }
+.sr-item { padding: 16px; }
+.sr-ref { margin: 0 0 8px; font-weight: 700; color: var(--accent-dark); }
+.sr-ar { margin: 0 0 8px; font-family: "Amiri", "Noto Naskh Arabic", serif; font-size: 1.5rem; line-height: 2; }
+.sr-ur { margin: 0 0 8px; font-family: "Noto Nastaliq Urdu", serif; font-size: 1.05rem; line-height: 2; }
+.sr-en { margin: 0 0 12px; color: var(--muted); }
+.sr-actions { display: flex; gap: 8px; flex-wrap: wrap; }

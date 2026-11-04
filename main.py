@@ -38,6 +38,7 @@ from starlette.background import BackgroundTask
 
 import analytics
 import picks as picks_lib
+import search as search_lib
 
 # Render sets RENDER=true; its 512 MB plan OOMs on the full profile (measured 576 MiB for 30 s fast), so default to low.
 if os.getenv("RENDER") and not os.getenv("RENDER_MEMORY_PROFILE"):
@@ -1128,6 +1129,18 @@ async def _count_page_views(request: Request, call_next):
         forwarded = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
         analytics.page_view(forwarded or (request.client.host if request.client else ""), request.headers.get("user-agent", ""))
     return response
+
+
+@functools.cache
+def _search_index():
+    return search_lib.build_index(_quran_data())
+
+
+@app.get("/api/search")
+def search_ayat(q: str = "", limit: int = 30):
+    q = q.strip()[:100]
+    total, results = search_lib.search(_search_index(), q, max(1, min(limit, 50)))
+    return {"query": q, "total": total, "results": results}
 
 
 @app.get("/api/admin/analytics")
