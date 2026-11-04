@@ -3,7 +3,7 @@
     const input = document.getElementById("sr-q");
     const status = document.getElementById("sr-status");
     const list = document.getElementById("sr-list");
-    const base = (window.APP_CONFIG && window.APP_CONFIG.apiBaseUrl) || "/api";
+    const base = (window.NOOR_API_BASE_URL || window.NOOR_SUPABASE_CONFIG?.apiBaseUrl || "/api").replace(/\/$/, "");
 
     function setStatus(kind, text) {
         status.hidden = !text;
