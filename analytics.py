@@ -28,6 +28,7 @@ _secs = defaultdict(float)       # day -> total render seconds
 _visitors = defaultdict(set)     # day -> {hash}
 _seen_signups = set()
 _cfg = {"url": "", "key": "", "secret": ""}
+_state = {"last_flush": None, "last_error": None}
 
 
 def configure(url, key, secret=""):
@@ -100,13 +101,23 @@ def flush():
         }
         try:
             r = requests.post(f"{_cfg['url']}/rest/v1/rpc/noor_analytics_bump", json=body, headers=headers, timeout=10)
-            r.raise_for_status()
+            if not r.ok:
+                raise RuntimeError(f"HTTP {r.status_code}: {r.text[:200]}")
+            _state.update(last_flush=datetime.now(timezone.utc).isoformat(), last_error=None)
         except Exception as exc:
-            LOGGER.warning("analytics flush failed (will retry): %s", type(exc).__name__)
+            msg = f"{type(exc).__name__}: {str(exc)[:200]}".replace(_cfg["key"], "***")
+            _state["last_error"] = msg
+            LOGGER.warning("analytics flush failed (will retry): %s", msg)
             with _lock:
                 _counts[day].update(c)
                 _secs[day] += secs.get(day, 0.0)
                 _visitors[day] |= vis.get(day, set())
+
+
+def status():
+    with _lock:
+        buffered = sum(c["views"] for c in _counts.values())
+    return {"enabled": _enabled(), "buffered_views": buffered, **_state}
 
 
 def read_days(days=30):

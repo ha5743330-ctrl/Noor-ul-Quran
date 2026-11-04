@@ -1121,14 +1121,12 @@ def _flush_analytics():
     analytics.flush()
 
 
-@app.middleware("http")
-async def _count_page_views(request: Request, call_next):
-    response = await call_next(request)
-    path = request.url.path
-    if request.method == "GET" and response.status_code == 200 and (path == "/" or path.endswith(".html")):
-        forwarded = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
-        analytics.page_view(forwarded or (request.client.host if request.client else ""), request.headers.get("user-agent", ""))
-    return response
+# The HTML is served by Vercel, not this backend, so pages send a beacon here (nav.js).
+@app.post("/api/track", status_code=204)
+def track_page_view(request: Request):
+    forwarded = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+    analytics.page_view(forwarded or (request.client.host if request.client else ""), request.headers.get("user-agent", ""))
+    return Response(status_code=204)
 
 
 @functools.cache
@@ -1146,7 +1144,7 @@ def search_ayat(q: str = "", limit: int = 30):
 @app.get("/api/admin/analytics")
 def admin_analytics(days: int = 30, user=Depends(require_admin)):
     rows = analytics.read_days(max(1, min(days, 90)))
-    return {"days": rows}
+    return {"days": rows, "status": analytics.status()}
 
 
 CONTENT_MODES = {"full", "urdu_only", "arabic_only", "arabic_urdu_text"}
