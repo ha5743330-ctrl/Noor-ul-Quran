@@ -367,4 +367,14 @@
 
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
     else init();
+
+    // Anonymous page-view beacon (the HTML is served by Vercel, so the API never sees page loads).
+    if (!/^\/admin/.test(window.location.pathname) && !navigator.webdriver) {
+        try {
+            const url = `${API}/track`;
+            if (!(navigator.sendBeacon && navigator.sendBeacon(url, new Blob([""], { type: "text/plain" })))) {
+                fetch(url, { method: "POST", mode: "no-cors", keepalive: true });
+            }
+        } catch { /* analytics must never break the page */ }
+    }
 })();

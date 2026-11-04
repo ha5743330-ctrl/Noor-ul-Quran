@@ -537,7 +537,10 @@ async function loadAnalytics() {
     const table = document.getElementById("analytics-table");
     const chart = document.getElementById("analytics-chart");
     try {
-        const { days } = await adminRequest("/admin/analytics?days=30");
+        const { days, status: st } = await adminRequest("/admin/analytics?days=30");
+        document.getElementById("analytics-flush").textContent = st
+            ? `Last flush: ${st.last_flush || "never"} · buffered views: ${st.buffered_views} · last error: ${st.last_error || "none"}${st.enabled ? "" : " · analytics disabled (no service key)"}`
+            : "";
         if (!days.length) {
             status.dataset.kind = "empty";
             status.textContent = "No analytics yet (or the analytics table is not set up).";

@@ -24,7 +24,7 @@ def test_flush_sends_and_requeues_on_failure(monkeypatch):
     sent = []
 
     class R:
-        def raise_for_status(self): pass
+        ok = True
 
     monkeypatch.setattr(analytics.requests, "post", lambda url, json, **k: sent.append(json) or R())
     analytics.page_view("1.1.1.1", "Mozilla/5.0"); analytics.signup("u1"); analytics.signup("u1")
@@ -46,3 +46,18 @@ def test_disabled_without_supabase_is_noop():
     analytics.configure("", "")
     analytics.page_view("1.1.1.1", "Mozilla/5.0"); analytics.flush()
     assert not analytics._counts and analytics.read_days() == []
+
+
+def test_status_reports_error_without_key(monkeypatch):
+    class R:
+        ok = False
+        status_code = 401
+        text = "bad svc-key"
+
+    monkeypatch.setattr(analytics.requests, "post", lambda *a, **k: R())
+    analytics.page_view("1.1.1.1", "Mozilla/5.0")
+    st = analytics.status()
+    assert st["buffered_views"] == 1
+    analytics.flush()
+    st = analytics.status()
+    assert "401" in st["last_error"] and "svc-key" not in st["last_error"] and st["buffered_views"] == 1
