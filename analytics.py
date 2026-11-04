@@ -133,7 +133,9 @@ def read_days(days=30):
         r.raise_for_status()
         rows = r.json()
     except Exception as exc:
-        LOGGER.warning("analytics read failed: %s", type(exc).__name__)
+        msg = f"read: {type(exc).__name__}: {str(exc)[:200]}".replace(_cfg["key"], "***")
+        _state["last_error"] = msg
+        LOGGER.warning("analytics read failed: %s", msg)
         return []
     for row in rows:
         row["avg_render_secs"] = round(row["render_secs"] / row["renders"], 1) if row.get("renders") else 0

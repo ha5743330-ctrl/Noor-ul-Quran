@@ -61,3 +61,15 @@ def test_status_reports_error_without_key(monkeypatch):
     analytics.flush()
     st = analytics.status()
     assert "401" in st["last_error"] and "svc-key" not in st["last_error"] and st["buffered_views"] == 1
+
+
+def test_read_failure_is_reported_not_silent(monkeypatch):
+    import analytics
+    analytics.configure("http://x.invalid", "SECRETKEY")
+
+    def boom(*a, **k):
+        raise RuntimeError("boom SECRETKEY")
+    monkeypatch.setattr(analytics.requests, "get", boom)
+    assert analytics.read_days() == []
+    err = analytics.status()["last_error"]
+    assert "boom" in err and "SECRETKEY" not in err

@@ -45,6 +45,8 @@ Without Docker you need Python 3.11, FFmpeg/ffprobe on PATH and a Pillow build w
 | `API_BASE_URL` | `/api` | Where the browser finds the API |
 | `FRONTEND_ORIGINS` | `http://127.0.0.1:8000,http://localhost:8000` | Allowed CORS origins when the site is on another domain |
 | `DAILY_LIMIT` / `PREMIUM_DAILY_LIMIT` | 5 / same as `DAILY_LIMIT` | Reels per account per day |
+| `LLM_API_KEY` / `LLM_MODEL` | unset | Gemini key + Flash model for Ask AI. Unset = Ask AI shows search results only |
+| `ASK_ENABLED` / `ASK_DAILY_LIMIT` / `ASK_GLOBAL_DAILY` | 1 / 5 / 200 | Ask AI kill switch, questions per user per day, questions per day for everyone |
 | `MAX_VIDEO_SECONDS` | 35 | Server cap on reel length |
 | `MAX_VIDEO_SECONDS_PHOTO` | same as `MAX_VIDEO_SECONDS` | Cap for photo-background reels (kept equal: a 60 s photo reel still peaked ~490 MiB, see below) |
 | `MAX_ACTIVE_JOBS_PER_USER` | 1 | Concurrent jobs per user |
@@ -75,6 +77,10 @@ Without Docker you need Python 3.11, FFmpeg/ffprobe on PATH and a Pillow build w
   | Photos | 60 s | 35 s | 479 MiB |
 
   Photos render about 5x faster and use less memory, but 60 s is still above the 350 MiB bar for raising the cap. *The 60 s video run was capped by the container limit. `fade_rise` is downgraded to `fade` on the low profile. Without the low profile, 512 MB renders can be OOM-killed.
+
+## Ask AI
+
+`POST /api/ask` (login required) retrieves the 8 most relevant ayat (BM25 over the English translation), sends only the question and those ayat to Gemini, and returns the answer plus the ayat. Answers without a valid `[surah:ayah]` citation are discarded, citations outside the retrieved set are stripped, and fiqh/legal/medical questions get a refusal without any LLM call. Run the new SQL at the end of `schema.sql` in Supabase for the shared daily counters (without it a per-process counter is used).
 
 ## Tests
 ```bash

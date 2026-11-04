@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#f2f6f3">
+    <meta name="description" content="Ask a question and get an answer built only from Quran ayat, with every claim cited.">
+    <title>Ask AI | Noor ul Quran</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/ui.css?v=12">
+</head>
+<body class="ui-page ui-search">
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header id="site-header"></header>
+
+    <main id="main" class="page-wrap">
+        <h1 class="page-title">Ask AI</h1>
+        <p class="page-sub">Ask about a theme in the Quran. The answer uses only the ayat shown below it.</p>
+
+        <form id="ask-form" class="ui-card pf-card">
+            <label for="ask-q" class="hint">Your question</label>
+            <div class="sr-row">
+                <input id="ask-q" type="text" class="control" minlength="3" maxlength="300" autocomplete="off" required placeholder="e.g. What does the Quran say about patience?">
+                <button id="ask-go" type="submit" class="btn btn-primary">Ask</button>
+            </div>
+            <div class="ask-chips" aria-label="Example questions">
+                <button type="button" class="btn btn-outline btn-sm">What does the Quran say about patience?</button>
+                <button type="button" class="btn btn-outline btn-sm">How should we treat parents?</button>
+                <button type="button" class="btn btn-outline btn-sm">What is said about forgiveness?</button>
+            </div>
+        </form>
+
+        <p id="ask-status" class="ui-state" data-kind="empty" role="status" aria-live="polite">Type a question or tap an example.</p>
+        <section id="ask-answer" class="ui-card ask-answer" hidden></section>
+        <ul id="ask-ayat" class="sr-list"></ul>
+        <p class="hint ask-disclaimer">AI-generated from Quran text; not a fatwa. Always consult a qualified scholar.</p>
+    </main>
+
+    <footer class="page-wrap" style="padding-top:0;text-align:center">
+        <a href="/privacy.html">Privacy</a> · <a href="/terms.html">Terms</a>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js" integrity="sha384-0w2KAL2YHP6wKOkUDzkCDGgVvfmHnj02DHeQ6XcHOgTfFsGyonKOpShMH1x6nk9o" crossorigin="anonymous"></script>
+    <script src="/config.js"></script>
+    <script src="/auth.js?v=9"></script>
+    <script src="/nav.js?v=5"></script>
+    <script src="/ask.js?v=1"></script>
+</body>
+</html>

@@ -118,6 +118,7 @@
                 ["/", "Home", "fa-house", path === "/"],
                 ["/generate.html", "Generate", "fa-wand-magic-sparkles", is("/generate.html")],
                 ["/search.html", "Search", "fa-magnifying-glass", is("/search.html")],
+                ["/ask.html", "Ask AI", "fa-comments", is("/ask.html")],
                 ["/library.html", "Library", "fa-photo-film", is("/library.html")],
                 ["/profile.html", "Profile", "fa-user", is("/profile.html")],
                 ...(state.profile?.is_admin ? [["/admin-console.html", "Admin", "fa-shield-halved", is("/admin-console.html")]] : [])
@@ -125,6 +126,7 @@
             : [
                 ["/", "Home", "fa-house", path === "/"],
                 ["/search.html", "Search", "fa-magnifying-glass", is("/search.html")],
+                ["/ask.html", "Ask AI", "fa-comments", is("/ask.html")],
                 [`/auth.html?next=${encodeURIComponent(path + window.location.search)}`, "Sign In", "fa-right-to-bracket", is("/auth.html")]
             ];
 
@@ -202,7 +204,7 @@
         }
         const foot = el("div", "nav-drawer-foot");
         const legal = el("div", "nav-legal");
-        [["/privacy.html", "Privacy"], ["/terms.html", "Terms"]].forEach(([href, label]) => {
+        [["/soon.html", "Coming soon"], ["/privacy.html", "Privacy"], ["/terms.html", "Terms"]].forEach(([href, label]) => {
             const a = el("a", "", label);
             a.href = href;
             legal.append(a);

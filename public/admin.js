@@ -541,6 +541,10 @@ async function loadAnalytics() {
         document.getElementById("analytics-flush").textContent = st
             ? `Last flush: ${st.last_flush || "never"} · buffered views: ${st.buffered_views} · last error: ${st.last_error || "none"}${st.enabled ? "" : " · analytics disabled (no service key)"}`
             : "";
+        adminRequest("/admin/ask-usage").then((u) => {
+            const today = u.days.find((d) => d.day === new Date().toISOString().slice(0, 10));
+            document.getElementById("ask-usage").textContent = `Ask AI: ${u.enabled ? "on" : "OFF"} · today ${today ? today.n : 0}/${u.global_limit} · per-user limit ${u.user_limit} · key ${u.key_set ? "set" : "MISSING"} · last error: ${u.last_error || "none"}`;
+        }).catch(() => {});
         if (!days.length) {
             status.dataset.kind = "empty";
             status.textContent = "No analytics yet (or the analytics table is not set up).";

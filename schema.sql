@@ -195,3 +195,40 @@ end;
 $$;
 revoke all on function public.noor_analytics_bump(date, integer, integer, integer, integer, double precision, integer, text[]) from public, anon, authenticated;
 grant execute on function public.noor_analytics_bump(date, integer, integer, integer, integer, double precision, integer, text[]) to service_role;
+
+-- Ask AI daily counters (user_id '*' = global row). Returns 'ok' | 'user' | 'global'; p_delta -1 refunds.
+create table if not exists public.noor_ask_usage (
+    day date not null,
+    user_id text not null,
+    n integer not null default 0,
+    primary key (day, user_id)
+);
+alter table public.noor_ask_usage enable row level security;
+revoke all on public.noor_ask_usage from anon, authenticated;
+
+create or replace function public.noor_ask_take(
+    p_day date, p_user text, p_delta integer, p_user_limit integer, p_global_limit integer
+) returns text
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare g integer; u integer;
+begin
+    if p_delta < 0 then
+        update public.noor_ask_usage set n = greatest(0, n - 1) where day = p_day and user_id in (p_user, '*');
+        return 'ok';
+    end if;
+    insert into public.noor_ask_usage (day, user_id, n) values (p_day, '*', 0) on conflict do nothing;
+    insert into public.noor_ask_usage (day, user_id, n) values (p_day, p_user, 0) on conflict do nothing;
+    select n into g from public.noor_ask_usage where day = p_day and user_id = '*' for update;
+    select n into u from public.noor_ask_usage where day = p_day and user_id = p_user for update;
+    if g >= p_global_limit then return 'global'; end if;
+    if u >= p_user_limit then return 'user'; end if;
+    update public.noor_ask_usage set n = n + 1 where day = p_day and user_id in (p_user, '*');
+    delete from public.noor_ask_usage where day < p_day - 7;
+    return 'ok';
+end;
+$$;
+revoke all on function public.noor_ask_take(date, text, integer, integer, integer) from public, anon, authenticated;
+grant execute on function public.noor_ask_take(date, text, integer, integer, integer) to service_role;

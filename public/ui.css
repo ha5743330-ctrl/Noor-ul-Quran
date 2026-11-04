@@ -1096,4 +1096,9 @@ body.ui-page :is(button, .btn, a.btn, [type="submit"]):focus-visible, body.ui-pa
 .sr-ar { margin: 0 0 8px; font-family: "Amiri", "Noto Naskh Arabic", serif; font-size: 1.5rem; line-height: 2; }
 .sr-ur { margin: 0 0 8px; font-family: "Noto Nastaliq Urdu", serif; font-size: 1.05rem; line-height: 2; }
 .sr-en { margin: 0 0 12px; color: var(--muted); }
+.ask-chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.ask-answer { margin: 16px 0 0; padding: 16px; line-height: 1.7; }
+.ask-answer p { margin: 0; }
+.ask-cite { font-weight: 700; margin: 0 2px; }
+.ask-disclaimer { text-align: center; margin-top: 16px; }
 .sr-actions { display: flex; gap: 8px; flex-wrap: wrap; }
