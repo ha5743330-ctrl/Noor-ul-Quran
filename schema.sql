@@ -145,3 +145,53 @@ on conflict (id) do update
 set public = excluded.public,
     file_size_limit = excluded.file_size_limit,
     allowed_mime_types = excluded.allowed_mime_types;
+-- Admin analytics (daily counters; no raw IPs: visitors are salted hashes, purged after 2 days)
+create table if not exists public.noor_analytics_daily (
+    day date primary key,
+    views integer not null default 0,
+    uniques integer not null default 0,
+    signups integer not null default 0,
+    videos integer not null default 0,
+    failures integer not null default 0,
+    render_secs double precision not null default 0,
+    renders integer not null default 0
+);
+create table if not exists public.noor_analytics_visitors (
+    day date not null,
+    h text not null,
+    primary key (day, h)
+);
+alter table public.noor_analytics_daily enable row level security;
+alter table public.noor_analytics_visitors enable row level security;
+revoke all on public.noor_analytics_daily, public.noor_analytics_visitors from anon, authenticated;
+
+create or replace function public.noor_analytics_bump(
+    p_day date, p_views integer, p_signups integer, p_videos integer, p_failures integer,
+    p_render_secs double precision, p_renders integer, p_visitors text[]
+) returns void
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare new_visitors integer := 0;
+begin
+    if coalesce(array_length(p_visitors, 1), 0) > 0 then
+        insert into public.noor_analytics_visitors (day, h)
+        select p_day, unnest(p_visitors) on conflict do nothing;
+        get diagnostics new_visitors = row_count;
+    end if;
+    insert into public.noor_analytics_daily as d (day, views, uniques, signups, videos, failures, render_secs, renders)
+    values (p_day, p_views, new_visitors, p_signups, p_videos, p_failures, p_render_secs, p_renders)
+    on conflict (day) do update set
+        views = d.views + excluded.views,
+        uniques = d.uniques + excluded.uniques,
+        signups = d.signups + excluded.signups,
+        videos = d.videos + excluded.videos,
+        failures = d.failures + excluded.failures,
+        render_secs = d.render_secs + excluded.render_secs,
+        renders = d.renders + excluded.renders;
+    delete from public.noor_analytics_visitors where day < current_date - 2;
+end;
+$$;
+revoke all on function public.noor_analytics_bump(date, integer, integer, integer, integer, double precision, integer, text[]) from public, anon, authenticated;
+grant execute on function public.noor_analytics_bump(date, integer, integer, integer, integer, double precision, integer, text[]) to service_role;

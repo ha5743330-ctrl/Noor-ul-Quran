@@ -36,6 +36,7 @@ from PIL import Image, ImageOps, features
 from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 
+import analytics
 import picks as picks_lib
 
 # Render sets RENDER=true; its 512 MB plan OOMs on the full profile (measured 576 MiB for 30 s fast), so default to low.
@@ -58,6 +59,7 @@ SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
 SUPABASE_KEY = os.getenv("SUPABASE_ANON_KEY", "")
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 MEDIA_BUCKET = os.getenv("SUPABASE_MEDIA_BUCKET", "noor-media")
+analytics.configure(SUPABASE_URL, SUPABASE_SERVICE_KEY, os.getenv("ANALYTICS_SECRET", ""))
 BACKGROUNDS_BUCKET = os.getenv("SUPABASE_BACKGROUNDS_BUCKET", "noor-backgrounds")
 OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", BASE_DIR / "output"))
 HISTORY_FILE = OUTPUT_DIR / "history.json"
@@ -536,6 +538,12 @@ def _fetch_current_user(token: str):
     )
     _raise_supabase_error(access_response)
     access = access_response.json()
+    try:
+        created = datetime.fromisoformat(str(user.get("created_at")).replace("Z", "+00:00"))
+        if datetime.now(timezone.utc) - created < timedelta(minutes=15):
+            analytics.signup(user["id"])
+    except (ValueError, TypeError):
+        pass
     return {
         "id": user["id"],
         "email": user.get("email", ""),
@@ -1103,7 +1111,29 @@ def cleanup_output_on_startup():
     _pull_history()
     _pull_account_state()
     if os.getenv("DISABLE_CLEANUP_THREAD") != "1":
+        analytics.start()
         threading.Thread(target=_cleanup_loop, name="media-cleanup", daemon=True).start()
+
+
+@app.on_event("shutdown")
+def _flush_analytics():
+    analytics.flush()
+
+
+@app.middleware("http")
+async def _count_page_views(request: Request, call_next):
+    response = await call_next(request)
+    path = request.url.path
+    if request.method == "GET" and response.status_code == 200 and (path == "/" or path.endswith(".html")):
+        forwarded = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+        analytics.page_view(forwarded or (request.client.host if request.client else ""), request.headers.get("user-agent", ""))
+    return response
+
+
+@app.get("/api/admin/analytics")
+def admin_analytics(days: int = 30, user=Depends(require_admin)):
+    rows = analytics.read_days(max(1, min(days, 90)))
+    return {"days": rows}
 
 
 CONTENT_MODES = {"full", "urdu_only", "arabic_only", "arabic_urdu_text"}
@@ -2605,6 +2635,7 @@ def _run_generation_job(
                     if skipped else "Some reels could not be rendered; completed reels are ready."
                 )
         seconds = sum(v.get("duration") or 0 for v in videos)
+        analytics.render_done(len(videos), sum(1 for e in entries if e.get("error")), time.monotonic() - started)
         RENDER_DURATIONS.append((time.monotonic() - started) / max(1, len(videos)))
         del RENDER_DURATIONS[:-10]
         if seconds:
@@ -2612,6 +2643,7 @@ def _run_generation_job(
             del RENDER_RATES[:-10]
     except Exception as exc:
         safe_error = _redact_secrets(str(exc))
+        analytics.render_done(0, 1, 0)
         LOGGER.error(
             "Generation job failed (job_id=%s, user_id=%s): %s",
             job_id,

@@ -1083,3 +1083,6 @@ body.ui-page img, body.ui-page video { max-width: 100%; }
 body.ui-page :is(h1, h2, h3, p, li, td, a) { overflow-wrap: anywhere; }
 body.ui-page :is(button, .btn, a.btn, [type="submit"]):focus-visible, body.ui-page :is(a, input, select, textarea, summary):focus-visible { outline: 3px solid #367e68; outline-offset: 3px; }
 @media (max-width: 480px) { body.ui-page table { display: block; overflow-x: auto; } }
+.ad-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.ad-table th, .ad-table td { padding: 6px 10px; border-bottom: 1px solid var(--border); text-align: right; }
+.ad-table th:first-child, .ad-table td:first-child { text-align: left; }
