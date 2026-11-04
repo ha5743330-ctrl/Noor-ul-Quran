@@ -299,20 +299,31 @@ def _storage_request(method: str, path: str, **kwargs):
         "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
         **kwargs.pop("headers", {}),
     }
+    timeout = kwargs.pop("timeout", 60)
     try:
         response = requests.request(
             method,
             f"{SUPABASE_URL}/storage/v1{path}",
             headers=headers,
-            timeout=60,
+            timeout=timeout,
             **kwargs,
         )
     except requests.RequestException as exc:
-        raise HTTPException(status_code=503, detail="Could not reach Supabase Storage.") from exc
+        error = HTTPException(status_code=503, detail="Could not reach Supabase Storage.")
+        error.upstream = type(exc).__name__  # e.g. ReadTimeout, ConnectionError
+        raise error from exc
+    if method == "GET" and response.status_code == 400:
+        try:  # Supabase reports a missing object as HTTP 400 {"statusCode": "404"}
+            if str(response.json().get("statusCode")) == "404":
+                response.status_code = 404
+        except (ValueError, AttributeError):
+            pass
     if not response.ok and response.status_code != 404:
         if response.status_code == 413:
             raise HTTPException(status_code=413, detail="Supabase Free Storage accepts files up to 50 MB.")
-        raise HTTPException(status_code=502, detail="Supabase Storage request failed; check the media bucket and server key.")
+        error = HTTPException(status_code=502, detail=f"Supabase Storage request failed (HTTP {response.status_code}); check the media bucket and server key.")
+        error.upstream = response.status_code
+        raise error
     return response
 
 
@@ -334,6 +345,8 @@ def _media_object_exists(object_path: str) -> bool:
 
 
 def _upload_media_file(local_path: Path, object_path: str, content_type: str, bucket: str = MEDIA_BUCKET):
+    if bucket == MEDIA_BUCKET:
+        _require_state_writable(object_path)
     if local_path.stat().st_size > MAX_BACKGROUND_BYTES:
         raise HTTPException(status_code=413, detail="Supabase Free Storage accepts files up to 50 MB.")
     with local_path.open("rb") as media_file:
@@ -363,11 +376,12 @@ def _delete_media_objects(object_paths):
         )
 
 
-def _download_media_file(object_path: str, local_path: Path, bucket: str = MEDIA_BUCKET) -> bool:
+def _download_media_file(object_path: str, local_path: Path, bucket: str = MEDIA_BUCKET, timeout=60) -> bool:
     response = _storage_request(
         "GET",
         f"/object/authenticated/{quote(bucket, safe='')}/{quote(object_path, safe='/')}",
         stream=True,
+        timeout=timeout,
     )
     if response.status_code == 404:
         return False
@@ -382,6 +396,69 @@ def _download_media_file(object_path: str, local_path: Path, bucket: str = MEDIA
     finally:
         partial.unlink(missing_ok=True)
     return True
+
+
+# State restore: 404 = file truly missing (start empty). Anything else (5xx, timeout) is retried, then the
+# file enters SAFE MODE: it is never uploaded (so a blank local copy can't overwrite good remote state)
+# until a background restore succeeds.
+STATE_SAFE_MODE = {}  # object_path -> {"local": Path, "status": last HTTP status / error name}
+STATE_SAFE_LOCK = Lock()
+STATE_RESTORE_ATTEMPTS = 3
+STATE_BACKOFF_SECONDS = 1
+STATE_RETRY_SECONDS = 60
+_STATE_RETRY_THREAD = None
+
+
+def _require_state_writable(object_path):
+    if object_path in STATE_SAFE_MODE:
+        raise HTTPException(status_code=503, detail="State not restored; changes disabled. Retrying in the background.")
+
+
+def _restore_state(object_path, local_path, attempts=STATE_RESTORE_ATTEMPTS):
+    """True = restored, False = missing remotely (start empty), None = unavailable -> safe mode."""
+    status = None
+    for attempt in range(1, attempts + 1):
+        try:
+            found = _download_media_file(object_path, local_path, timeout=15)
+        except Exception as exc:
+            status = getattr(exc, "upstream", None) or getattr(exc, "status_code", None) or type(exc).__name__
+            LOGGER.error("Could not restore %s (attempt %d/%d): HTTP %s", object_path, attempt, attempts, status)
+            if attempt < attempts:
+                time.sleep(STATE_BACKOFF_SECONDS * 2 ** (attempt - 1))
+            continue
+        with STATE_SAFE_LOCK:
+            if STATE_SAFE_MODE.pop(object_path, None):
+                LOGGER.warning("Restored %s; safe mode lifted", object_path)
+        return found
+    with STATE_SAFE_LOCK:
+        STATE_SAFE_MODE[object_path] = {"local": local_path, "status": status}
+    LOGGER.error("SAFE MODE: %s not restored (HTTP %s); writes disabled, retrying every %d s",
+                 object_path, status, STATE_RETRY_SECONDS)
+    _start_state_retry()
+    return None
+
+
+def _retry_safe_mode_state():
+    with STATE_SAFE_LOCK:
+        pending = [(k, v["local"]) for k, v in STATE_SAFE_MODE.items()]
+    for object_path, local_path in pending:
+        _restore_state(object_path, local_path, attempts=1)
+
+
+def _state_retry_loop():
+    while True:
+        time.sleep(STATE_RETRY_SECONDS)
+        _retry_safe_mode_state()
+
+
+def _start_state_retry():
+    global _STATE_RETRY_THREAD
+    if os.getenv("DISABLE_CLEANUP_THREAD") == "1":
+        return
+    with STATE_SAFE_LOCK:
+        if _STATE_RETRY_THREAD is None:
+            _STATE_RETRY_THREAD = threading.Thread(target=_state_retry_loop, name="state-restore", daemon=True)
+            _STATE_RETRY_THREAD.start()
 
 
 def _remove_bucket_object(bucket: str, object_path: str):
@@ -442,12 +519,10 @@ def _prepare_ephemeral_media():
     if not SUPABASE_SERVICE_KEY:
         return
 
-    for object_path, local_path in (
-        ("metadata/captions.csv", OUTPUT_DIR / "captions.csv"),
-        ("state/used.json", CACHE_DIR / "used.json"),
-    ):
-        if _media_object_exists(object_path):
-            _download_media_file(object_path, local_path)
+    if _media_object_exists("metadata/captions.csv"):
+        _download_media_file("metadata/captions.csv", OUTPUT_DIR / "captions.csv")
+    if "state/used.json" not in STATE_SAFE_MODE:
+        _restore_state("state/used.json", CACHE_DIR / "used.json")
 
 
 def _raise_supabase_error(response: requests.Response):
@@ -906,10 +981,7 @@ def _push_history():
 def _pull_history():
     if not SUPABASE_SERVICE_KEY or HISTORY_FILE.exists():
         return
-    try:
-        _download_media_file(HISTORY_OBJECT, HISTORY_FILE)
-    except Exception as exc:
-        LOGGER.error("Could not restore history from Supabase: %s", _redact_secrets(str(exc)))
+    _restore_state(HISTORY_OBJECT, HISTORY_FILE)
 
 
 def _safe_history_video_path(filename):
@@ -1862,6 +1934,7 @@ def admin_diagnostics(user=Depends(require_admin)):
         "supabase_anon_key_set": bool(SUPABASE_KEY),
         "supabase_service_role_key_set": bool(SUPABASE_SERVICE_KEY),
         "video_url_secret_set": bool(os.getenv("VIDEO_URL_SECRET")),
+        "state_safe_mode": {k: v["status"] for k, v in dict(STATE_SAFE_MODE).items()},
     }
 
 
@@ -2885,10 +2958,7 @@ def _load_picks():
     path = _picks_file()
     if SUPABASE_SERVICE_KEY and not _PICKS_PULLED:
         _PICKS_PULLED = True
-        try:
-            _download_media_file(PICKS_OBJECT, path)  # Supabase is the source of truth when it has a copy
-        except Exception as exc:
-            LOGGER.error("Could not restore %s: %s", PICKS_OBJECT, _redact_secrets(str(exc)))
+        _restore_state(PICKS_OBJECT, path)  # Supabase is the source of truth when it has a copy
     for source in (path, PICKS_DEFAULT_FILE):
         try:
             data = json.loads(source.read_text(encoding="utf-8"))
@@ -3264,6 +3334,7 @@ def _read_state(path, default):
 
 
 def _write_state(path, object_path, data):
+    _require_state_writable(object_path)  # safe mode: reject the change instead of diverging from Supabase
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -3279,12 +3350,8 @@ def _pull_account_state():
     if not SUPABASE_SERVICE_KEY:
         return
     for object_path, path in ((USERS_OBJECT, USERS_FILE), (AUDIT_OBJECT, AUDIT_FILE)):
-        if path.exists():
-            continue
-        try:
-            _download_media_file(object_path, path)
-        except Exception as exc:
-            LOGGER.error("Could not restore %s: %s", object_path, _redact_secrets(str(exc)))
+        if not path.exists():
+            _restore_state(object_path, path)
 
 
 def _users_state():
