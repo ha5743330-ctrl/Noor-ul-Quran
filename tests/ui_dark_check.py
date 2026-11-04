@@ -39,8 +39,8 @@ def serve(public, port):
 def open_page(browser, base, name, width, scheme, storage=None):
     ctx = browser.new_context(viewport={"width": width, "height": 900}, color_scheme=scheme, reduced_motion="reduce")
     ctx.add_init_script(STUB + (f"try{{localStorage.setItem('noor-theme','{storage}')}}catch(e){{}}" if storage else ""))
-    # record the theme at the very first script run in <body> (i.e. before first paint)
-    ctx.add_init_script("document.addEventListener('readystatechange',()=>{if(!window.__t0)window.__t0=document.documentElement.dataset.theme},{once:true})")
+    # no flash: record data-theme the moment <body> is created (before anything in it can paint)
+    ctx.add_init_script("new MutationObserver((_, o) => { if (document.body) { window.__t0 = document.documentElement.dataset.theme || 'unset'; o.disconnect(); } }).observe(document, {childList: true, subtree: true})")
     page = ctx.new_page()
     errors = []
     page.on("pageerror", lambda e: errors.append(str(e)))
@@ -49,7 +49,11 @@ def open_page(browser, base, name, width, scheme, storage=None):
     page.route("**/config.js", lambda r: r.fulfill(content_type="application/javascript", body=CONFIG))
     page.route("**/api/**", lambda r: r.fulfill(status=200, content_type="application/json",
                                                body=json.dumps(BODIES.get(r.request.url.split("/api", 1)[1].split("?")[0], {}))))
-    page.goto(f"{base}/{name}.html", wait_until="load")
+    page.goto(f"{base}/{name}.html", wait_until="domcontentloaded")
+    try:
+        page.wait_for_load_state("load", timeout=10000)  # external fonts/CDN may be slow; local assets are in by now
+    except Exception:
+        pass
     page.wait_for_timeout(900)
     return ctx, page, errors
 
@@ -63,19 +67,20 @@ def main():
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch()
-            for name in PAGES:
-                for width in (375, 1280):
-                    ctx, page, errors = open_page(browser, "http://localhost:8801", name, width, "dark")
-                    theme = page.evaluate("document.documentElement.dataset.theme")
-                    first = page.evaluate("window.__t0 || document.documentElement.dataset.theme")
-                    wide = page.evaluate("document.documentElement.scrollWidth > window.innerWidth")
-                    bg = page.evaluate("getComputedStyle(document.body).backgroundColor")
-                    page.screenshot(path=str(SHOTS / f"{name}-{width}.png"), full_page=True)
-                    ok = not errors and theme == "dark" and first == "dark" and not wide
-                    print(("OK   " if ok else "FAIL ") + f"dark {name} {width} bg={bg}", errors[:2])
-                    if not ok:
-                        failures.append(f"dark {name}@{width}")
-                    ctx.close()
+            for scheme in ("dark", "light"):  # first visit (nothing saved) follows prefers-color-scheme
+                for name in PAGES:
+                    for width in (375, 1280):
+                        ctx, page, errors = open_page(browser, "http://localhost:8801", name, width, scheme)
+                        theme = page.evaluate("document.documentElement.dataset.theme")
+                        first = page.evaluate("window.__t0")
+                        wide = page.evaluate("document.documentElement.scrollWidth > window.innerWidth")
+                        if scheme == "dark":
+                            page.screenshot(path=str(SHOTS / f"{name}-{width}.png"), full_page=True)
+                        ok = not errors and theme == scheme and first == scheme and not wide
+                        print(("OK   " if ok else "FAIL ") + f"{scheme} first-visit {name} {width} (theme at <body>: {first})", errors[:2])
+                        if not ok:
+                            failures.append(f"{scheme} {name}@{width}")
+                        ctx.close()
 
             # toggle flips, persists across reload, and a saved choice beats the system preference
             ctx, page, errors = open_page(browser, "http://localhost:8801", "ask", 1280, "light")
@@ -97,6 +102,39 @@ def main():
             assert page.inner_text(".nav-drawer .theme-toggle").strip() == "Light mode"
             ctx.close()
             print("OK   toggle + persistence + drawer toggle")
+
+            # admin analytics chart in dark: bars use the dark chart tokens and stand out (>= 3:1) from the card
+            ctx, page, errors = open_page(browser, "http://localhost:8801", "admin-console", 1280, "dark")
+            chart = page.evaluate(r"""() => {
+              const lum = (c) => { const v = c.match(/\d+(\.\d+)?/g).slice(0, 3).map(Number).map(x => { x /= 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; });
+                return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]; };
+              const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+              const svg = document.getElementById('analytics-chart'); svg.closest('details') && (svg.closest('details').open = true);
+              const fills = [...new Set([...svg.querySelectorAll('rect')].map(r => getComputedStyle(r).fill))];
+              const card = getComputedStyle(document.documentElement).getPropertyValue('--surface').trim();
+              const tmp = document.createElement('i'); tmp.style.color = card; document.body.append(tmp); const cardRgb = getComputedStyle(tmp).color; tmp.remove();
+              return {fills, ratios: fills.map(f => +ratio(f, cardRgb).toFixed(2))};
+            }""")
+            assert chart["fills"] == ["rgb(45, 212, 167)", "rgb(167, 139, 250)"], chart
+            assert min(chart["ratios"]) >= 3, chart
+            assert not errors, errors
+            ctx.close()
+            # forms, selects and scrollbars render dark (generate: selects, inputs, Recent scroll box)
+            ctx, page, errors = open_page(browser, "http://localhost:8801", "generate", 375, "dark")
+            ui = page.evaluate("""() => {
+              const cs = (el) => getComputedStyle(el);
+              const input = document.querySelector('input[type=search], input:not([type=checkbox]):not([type=file])');
+              const select = document.querySelector('select');
+              return {scheme: cs(document.documentElement).colorScheme, scrollbar: cs(document.documentElement).scrollbarColor,
+                      input: cs(input).backgroundColor, select: cs(select).backgroundColor, selectInk: cs(select).color,
+                      box: cs(document.querySelector('#recent-videos-list, .scroll-box')).colorScheme};
+            }""")
+            assert ui["scheme"] == "dark" and ui["box"] == "dark", ui
+            assert ui["scrollbar"].startswith("rgb(42, 74, 82)"), ui
+            assert ui["input"] == ui["select"] == "rgb(10, 24, 34)" and ui["selectInk"] == "rgb(232, 241, 238)", ui
+            assert not errors, errors
+            ctx.close()
+            print("OK   admin chart dark", chart, "| forms/selects/scrollbars", ui)
 
             if other:  # light mode must look exactly like before
                 from PIL import Image, ImageChops

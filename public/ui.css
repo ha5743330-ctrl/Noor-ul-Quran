@@ -24,7 +24,9 @@
     --accent-border-2: #a9cdb9;
     --accent-shadow: 0 3px 8px rgb(40 116 95 / 18%);
     --input-bg: #ffffff;
-    --placeholder: #78877f;
+    --placeholder: #66756d;
+    --disabled-bg: #e3eae6;
+    --disabled-ink: #4f6258;
     --hero-bg: linear-gradient(140deg, #f8fbf8, #eaf3ed);
     --hero-veil: linear-gradient(180deg, rgb(244 248 245 / 62%), rgb(244 248 245 / 88%));
     --hero-chip-border: #c5ddd0;
@@ -94,7 +96,9 @@ html[data-theme="dark"] {
     --accent-border-2: rgb(45 212 167 / 35%);
     --accent-shadow: 0 3px 14px rgb(227 179 65 / 28%);
     --input-bg: #0a1822;
-    --placeholder: #6f8a82;
+    --placeholder: #7f978f;
+    --disabled-bg: #1a2e3a;
+    --disabled-ink: #9db5ad;
     --hero-bg: radial-gradient(800px 420px at 50% 0%, rgb(227 179 65 / 12%), transparent 70%), linear-gradient(140deg, #0b1b2b, #07130f);
     --hero-veil: linear-gradient(180deg, rgb(7 19 15 / 55%), rgb(7 19 15 / 86%));
     --hero-chip-border: rgb(227 179 65 / 35%);
@@ -362,6 +366,11 @@ body.ui-page .border-red-400\/50 {
 
 body.ui-page .text-emerald-400 {
     color: var(--secondary) !important;
+}
+
+body.ui-page .text-rose-400,
+body.ui-page .text-rose-500 {
+    color: var(--danger) !important;
 }
 
 body.ui-auth [onclick^="switchAuthTab"].text-amber-400 {
@@ -794,7 +803,8 @@ html.nav-locked body { overflow: hidden; }
     cursor: pointer;
 }
 
-.btn:disabled { cursor: not-allowed; opacity: 0.55; }
+/* disabled = muted token pair (>= 4.5:1), not a fade: opacity drops text contrast below AA */
+html body.ui-page :is(button, .btn, a.btn):disabled { cursor: not-allowed; opacity: 1 !important; border-color: var(--border) !important; background: var(--disabled-bg) !important; color: var(--disabled-ink) !important; box-shadow: none !important; }
 body.ui-page .btn-primary { background: var(--accent); color: var(--on-accent); }
 body.ui-page .btn-primary:hover:not(:disabled) { background: var(--accent-dark); color: var(--on-accent); }
 .btn-outline { border-color: var(--border); background: var(--surface); color: var(--ink); }
@@ -1259,8 +1269,6 @@ html[data-theme="dark"] body.ui-page .text-slate-950 { color: var(--on-accent) !
 html[data-theme="dark"] body.ui-page .text-emerald-300,
 html[data-theme="dark"] body.ui-page .text-emerald-200 { color: var(--secondary) !important; }
 html[data-theme="dark"] body.ui-page .bg-emerald-400 { background-color: var(--secondary) !important; }
-html[data-theme="dark"] body.ui-page .text-rose-400,
-html[data-theme="dark"] body.ui-page .text-rose-500 { color: var(--danger) !important; }
 html[data-theme="dark"] body.ui-page :is(.border-slate-500, .border-slate-800\/80, .border-slate-500\/20, .border-emerald-500\/20, .border-amber-500\/20, .border-amber-400\/30, .border-amber-400\/40, .border-amber-400\/50, .border-amber-500\/30) { border-color: var(--border) !important; }
 html[data-theme="dark"] body.ui-page :is(.border-emerald-400\/40) { border-color: var(--accent-border-2) !important; }
 html[data-theme="dark"] body.ui-page :is(.border-red-400\/40, .border-red-500\/20) { border-color: var(--danger-border) !important; }
