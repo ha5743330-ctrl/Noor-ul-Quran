@@ -60,6 +60,7 @@ async function initializeAdmin() {
         selfId = access.user_id;
         apiUp = true;
         setApiStatus(true);
+        adminRequest("/admin/diagnostics").then(showStateWarning).catch(() => {});
         await loadUsers();
         await loadAudit();
         await loadBackgrounds();
@@ -71,6 +72,15 @@ async function initializeAdmin() {
         if (!apiUp) setApiStatus(false);
         showAdminMessage(error.message, true);
     }
+}
+
+function showStateWarning(diagnostics) {
+    const files = Object.entries(diagnostics.state_safe_mode || {});
+    const box = document.getElementById("state-warning");
+    box.hidden = !files.length;
+    box.textContent = files.length
+        ? `State not restored; changes disabled (${files.map(([f, s]) => `${f}: HTTP ${s}`).join(", ")}). Retrying every 60 s.`
+        : "";
 }
 
 function setApiStatus(online) {
@@ -500,6 +510,7 @@ async function loadDiagnostics() {
     status.textContent = "Loading diagnostics...";
     try {
         const diagnostics = await adminRequest("/admin/diagnostics");
+        showStateWarning(diagnostics);
         const megabytes = (bytes) => `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
         const values = [
             ["FFmpeg", diagnostics.ffmpeg_version],
