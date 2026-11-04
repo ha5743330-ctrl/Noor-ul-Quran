@@ -25,7 +25,7 @@ def normalize(surah, start, end, quran):
     if info is None:
         raise ValueError(f"Surah {surah} does not exist (1-114).")
     if not 1 <= start <= end <= int(info["n"]):
-        raise ValueError(f"Surah {surah} has {info['n']} ayat; {start}-{end} is not a valid range.")
+        raise ValueError(f"Surah {surah} has only {info['n']} ayat (you asked {start}-{end}).")
     return f"{surah}:{start}" if start == end else f"{surah}:{start}-{end}"
 
 

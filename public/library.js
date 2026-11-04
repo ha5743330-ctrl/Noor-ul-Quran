@@ -6,6 +6,7 @@ let items = [];
 let filter = "all";
 let selecting = false;
 const selected = new Set();
+let loadFailed = false;
 
 const $ = (id) => document.getElementById(id);
 
@@ -49,7 +50,7 @@ function render() {
     const list = $("lib-list");
     const shown = visibleItems();
     list.replaceChildren();
-    $("lib-empty").hidden = shown.length > 0;
+    $("lib-empty").hidden = shown.length > 0 || loadFailed;
     $("lib-more").hidden = shown.length <= shownCount;
     for (const item of shown.slice(0, shownCount)) {
         const isImage = item.type === "image";
@@ -198,12 +199,15 @@ async function load() {
         const result = await window.noorApi("/history");
         items = (Array.isArray(result.videos) ? result.videos : [])
             .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+        loadFailed = false;
         setStatus("");
     } catch (error) {
         if (error.status === 401) {
             window.location.replace(`/auth.html?next=${encodeURIComponent("/library.html")}`);
             return;
         }
+        items = [];
+        loadFailed = true;
         setStatus(error.message);
     }
     render();
