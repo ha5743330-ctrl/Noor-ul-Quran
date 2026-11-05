@@ -62,6 +62,8 @@ async function generateAyahImage(event) {
         status.textContent = "Creating your image...";
         status.classList.remove("hidden");
     }
+    const look = imageLook();
+    window.NoorWait?.start({ kind: "image", ref: reference, lang: look.translation, style: look.style });
     try {
         const { data: { session }, error } = await window.supabaseClient.auth.getSession();
         if (error) throw error;
@@ -91,6 +93,7 @@ async function generateAyahImage(event) {
         download.href = result.image_data;
         download.download = result.filename || "noor-ul-quran-ayah.png";
         if (resultReference) resultReference.textContent = result.reference || "";
+        window.NoorWait?.stop();
         resultBox.classList.remove("hidden");
         document.getElementById("empty-results")?.classList.add("hidden");
         if (status) status.textContent = `Image ready: ${result.reference}`;
@@ -100,6 +103,7 @@ async function generateAyahImage(event) {
         console.error("Ayah image generation error:", error);
         if (status) status.textContent = error.message || "Could not generate the ayah image.";
     } finally {
+        window.NoorWait?.stop();
         if (button) {
             button.disabled = false;
             button.removeAttribute("aria-busy");
@@ -689,6 +693,11 @@ async function generateVideo(event) {
     if (statusHeading) statusHeading.textContent = "Status: rendering";
     if (statusSpinner) statusSpinner.className = "fa-solid fa-spinner animate-spin text-xs text-amber-300";
     renderGenerationWarnings([]);
+    window.NoorWait?.start({
+        kind: "video",
+        ref: mode === "pick" ? verse : null,
+        lang: contentMode === "arabic_only" ? "en" : "ur"
+    });
 
     try {
         const { data: { session } } = await window.supabaseClient.auth.getSession();
@@ -749,6 +758,7 @@ async function generateVideo(event) {
             const videos = Array.isArray(result.videos) ? result.videos : result.filename ? [result] : [];
             setBatchDownload(result.job_id || generationJobId, videos);
             renderGenerationWarnings(result.warnings || videos.flatMap((video) => video.warnings || []));
+            window.NoorWait?.stop();
             showGeneratedVideos(videos);
             window.noorUi.toast("Video tayyar hai");
             await refreshRecentVideos();
@@ -783,6 +793,7 @@ async function generateVideo(event) {
             statusBox.style.color = "var(--status-err)";
         }
     } finally {
+        window.NoorWait?.stop();
         if (generateButton) {
             generateButton.removeAttribute("aria-busy");
             const hasPremium = Boolean(window.userAccess?.is_admin || window.userAccess?.premium_access);
@@ -833,6 +844,7 @@ async function waitForGeneration(jobId, accessToken, statusBox, logMsg, statusPe
         pollDelayMs = 2000;
 
         window.NoorPicks?.onJob(job);
+        window.NoorWait?.update(job);
         const videos = Array.isArray(job.videos) ? job.videos : [];
         renderGenerationWarnings(job.warnings || videos.flatMap((video) => video.warnings || []));
         if (videos.length) showGeneratedVideos(videos);
