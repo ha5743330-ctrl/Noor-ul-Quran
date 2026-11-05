@@ -241,15 +241,16 @@ def walk_admin(browser, theme, width):
     check("safe-mode banner shown", page.is_visible("#state-warning") and "State not restored" in page.inner_text("#state-warning"))
     STATE["safe"] = False
     check("status pill Online", page.inner_text("#ad-status") == "Online", page.inner_text("#ad-status"))
-    check("tab bar has 8 sections incl. Analytics/Settings", page.locator(".ad-jump a").count() == 8)
-    page.evaluate("document.querySelectorAll('details[data-sec]').forEach(d => d.open = true)")
+    check("sidebar has 9 sections incl. Analytics/Settings", page.locator(".ad-link").count() == 9)
     page.wait_for_timeout(400)
     check("stat cards filled (videos/views/ask/disk)", all(page.inner_text(i).strip() not in ("-", "") for i in ("#stat-videos", "#stat-views", "#stat-ask", "#stat-disk")),
           str([page.inner_text(i) for i in ("#stat-videos", "#stat-views", "#stat-ask", "#stat-disk")]))
     check("analytics chart bars", page.locator("#analytics-chart rect").count() >= 4)
-    check("Ask AI usage line", "Ask AI: on" in page.inner_text("#ask-usage"), page.inner_text("#ask-usage"))
+    page.evaluate("location.hash = '#/askai'")
+    check("Ask AI usage line", "Ask AI is on" in page.inner_text("#ask-usage"), page.inner_text("#ask-usage"))
     check("analytics table rows", page.locator("#analytics-table tbody tr").count() == 4)
     # block / unblock
+    page.evaluate("location.hash = '#/users'")
     calls.clear()
     page.locator(".au-actions .btn-danger-outline", has_text="Block").first.click()
     page.wait_for_selector("dialog.confirm")
@@ -266,20 +267,25 @@ def walk_admin(browser, theme, width):
                                          ("photo-file", "photo-upload-form", "/admin/photos", "t.png", PNG.split(",")[1] and __import__("base64").b64decode(PNG.split(",")[1])),
                                          ("music-file", "music-upload-form", "/admin/music", "t.mp3", b"ID3\x03\x00\x00\x00\x00\x00\x00")):
         calls.clear()
+        page.evaluate("location.hash = '#/" + {"background": "clips", "photo": "photos", "music": "music"}[fid.split("-")[0]] + "'")
         page.set_input_files(f"#{fid}", {"name": name, "mimeType": "application/octet-stream", "buffer": data})
         page.click(f"#{form} .btn-primary")
         page.wait_for_timeout(700)
         check(f"upload {name} sent", any(c[0] == "POST" and c[1].startswith(path) for c in calls), str(calls[-3:]))
     for lst, path in (("#background-list", "/admin/backgrounds"), ("#photo-list", "/admin/photos"), ("#music-list", "/admin/music")):
         calls.clear()
+        page.evaluate("location.hash = '#/" + {"#background-list": "clips", "#photo-list": "photos", "#music-list": "music"}[lst] + "'")
         btn = page.locator(f"{lst} .btn-danger-outline").first
         btn.click()
         page.wait_for_selector("dialog.confirm")
         page.click("dialog.confirm .btn-danger")
         page.wait_for_timeout(500)
         check(f"delete via {path}", any(c[0] == "DELETE" and c[1].startswith(path) for c in calls), str(calls[-3:]))
+    page.evaluate("location.hash = '#/picks'")
     check("picks manager rows", page.locator(".ap-row").count() >= 1)
+    page.evaluate("location.hash = '#/dashboard'")
     check("audit rows", page.locator("#audit-list li").count() >= 1)
+    page.evaluate("location.hash = '#/system'")
     check("diagnostics grid", page.locator("#diagnostics-grid div").count() >= 8)
     clean(page, "admin")
     page.context.close()

@@ -114,9 +114,11 @@ try:
             page.wait_for_selector("#audit-list li", state="attached")
             page.wait_for_selector("#ap-list .ap-row", state="attached")
             check(f"{tag}: admin page under ~3 screens by default", screens(page, height) <= 3, f"{screens(page, height):.1f}")
-            page.evaluate("document.querySelectorAll('details[data-sec]').forEach(d => d.open = true)")
-            for name, selector in (("Users", "#users-section .scroll-box"), ("Audit", "#audit-list"), ("Clips", "#background-list"), ("Music", "#music-list"), ("Picks", "#ap-list")):
+            for name, view, selector in (("Users", "users", "#users-section .scroll-box"), ("Audit", "dashboard", "#audit-list"), ("Clips", "clips", "#background-list"), ("Music", "music", "#music-list"), ("Picks", "picks", "#ap-list")):
+                page.evaluate(f"location.hash = '#/{view}'")
+                page.wait_for_timeout(100)
                 check(f"{tag}: admin {name} scrolls in its own box", boxed(page, selector, height))
+            page.evaluate("location.hash = '#/users'")
             check(f"{tag}: Users search stays put", stays_sticky(page, "#users-section .scroll-box", "#user-search"))
             check(f"{tag}: no horizontal scroll (admin)", page.evaluate("document.documentElement.scrollWidth - innerWidth") <= 0)
             check(f"{tag}: Users starts at 50", page.locator(".au-item").count() == 50)
@@ -128,6 +130,7 @@ try:
             page.click("#refresh-users")
             page.wait_for_timeout(300)
             check(f"{tag}: Users refresh keeps what was loaded", page.locator(".au-item").count() == 120)
+            page.evaluate("location.hash = '#/dashboard'")
             check(f"{tag}: Audit starts at 50", page.locator("#audit-list li").count() == 50)
             page.click("#audit-more")
             page.wait_for_function("document.querySelectorAll('#audit-list li').length === 100")

@@ -259,11 +259,11 @@ def run(browser, theme, width, heavy):
            "/admin/audit": (200, {"entries": [], "total": 0}), "/admin/photos": (200, []), "/admin/backgrounds": (200, []),
            "/admin/music": (200, {"music_files": []}), "/picks": (200, {"picks": [], "cap": 35, "counts": {"total": 0}})}
     e = Env(browser, theme, width, "admin-console.html", dict(adm, **{"/admin/music": (500, {"detail": "x"})}))
-    e.page.wait_for_selector("#users-list .st-empty")
+    e.page.wait_for_selector("#users-list .st-empty", state="attached")
     e.page.wait_for_selector("#music-list .st-error", state="attached")
     check(f"{tag} admin users empty state", e.page.locator("#users-list .st-empty .st-title").count() == 1)
     check(f"{tag} admin list error + Retry", e.page.locator("#music-list .st-error button").count() == 1 and not raw_leak(e.page.inner_text("#music-list")))
-    e.page.evaluate("document.getElementById('picks-section')?.querySelector('details')?.setAttribute('open','')")
+    e.page.evaluate("location.hash = '#/picks'")
     e.page.fill("#ap-ref", "garbage")
     e.page.dispatch_event("#ap-add", "submit")
     check(f"{tag} admin picks add inline error", "Surah:Start-End" in e.page.inner_text("#ap-ref-err") and e.page.input_value("#ap-ref") == "garbage")
