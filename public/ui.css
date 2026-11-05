@@ -1234,7 +1234,12 @@ body.ui-page :is(button, .btn, a.btn, [type="submit"]):focus-visible, body.ui-pa
 .sr-list { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 12px; }
 .sr-item { padding: 16px; }
 .sr-ref { margin: 0 0 8px; font-weight: 700; color: var(--accent-dark); }
-.sr-ar { margin: 0 0 8px; font-family: "Amiri", "Noto Naskh Arabic", serif; font-size: 1.5rem; line-height: 2; }
+@font-face { font-family: "Noor Quran"; src: url("/fonts/AmiriQuran-Regular.woff2") format("woff2"); font-display: swap; unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF, U+200C-200F, U+25CC; }
+@font-face { font-family: "Noor Naskh"; src: url("/fonts/NotoNaskhArabic-Regular.woff2") format("woff2"); font-display: swap; unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF, U+200C-200F, U+25CC; }
+:root { --font-quran: "Noor Quran", "Noor Naskh", "Noto Naskh Arabic", "Amiri", serif; }
+/* One class for all Arabic ayah text (both themes). Use with lang="ar" dir="rtl". */
+.ar-text, .sr-ar { font-family: var(--font-quran); line-height: 2.1; text-rendering: optimizeLegibility; font-kerning: normal; }
+.sr-ar { margin: 0 0 8px; font-size: 1.5rem; }
 .sr-ur { margin: 0 0 8px; font-family: "Noto Nastaliq Urdu", serif; font-size: 1.05rem; line-height: 2; }
 .sr-en { margin: 0 0 12px; color: var(--muted); }
 .ask-chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
