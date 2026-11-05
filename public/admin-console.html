@@ -9,30 +9,37 @@
     <title>Noor ul Quran | Admin Access</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/ui.css?v=16">
+    <link rel="stylesheet" href="/ui.css?v=17">
 </head>
 <body class="ui-page ui-admin">
     <a class="skip-link" href="#main">Skip to content</a>
     <header id="site-header"></header>
 
-    <main id="main" class="ad-wrap">
-        <h1 class="page-title">Admin Dashboard</h1>
+    <div class="ad-shell">
+        <aside id="ad-side" class="ad-side" aria-label="Admin sections">
+            <nav><p class="ad-grp">OVERVIEW</p><a class="ad-link" href="#/dashboard" data-nav="dashboard"><i class="fa-solid fa-gauge-high" aria-hidden="true"></i>Dashboard</a><p class="ad-grp">PEOPLE</p><a class="ad-link" href="#/users" data-nav="users"><i class="fa-solid fa-users" aria-hidden="true"></i>Users</a><p class="ad-grp">MEDIA</p><a class="ad-link" href="#/clips" data-nav="clips"><i class="fa-solid fa-film" aria-hidden="true"></i>Video clips</a><a class="ad-link" href="#/photos" data-nav="photos"><i class="fa-solid fa-image" aria-hidden="true"></i>Photos</a><a class="ad-link" href="#/music" data-nav="music"><i class="fa-solid fa-music" aria-hidden="true"></i>Music</a><p class="ad-grp">CONTENT</p><a class="ad-link" href="#/picks" data-nav="picks"><i class="fa-solid fa-list-check" aria-hidden="true"></i>Picks</a><p class="ad-grp">INSIGHTS</p><a class="ad-link" href="#/analytics" data-nav="analytics"><i class="fa-solid fa-chart-column" aria-hidden="true"></i>Analytics</a><a class="ad-link" href="#/askai" data-nav="askai"><i class="fa-solid fa-comments" aria-hidden="true"></i>Ask AI usage</a><p class="ad-grp">SYSTEM</p><a class="ad-link" href="#/system" data-nav="system"><i class="fa-solid fa-gear" aria-hidden="true"></i>Settings &amp; status</a></nav>
+        </aside>
+        <div id="ad-backdrop" class="ad-backdrop" hidden></div>
 
-        <nav class="ad-jump" aria-label="Sections">
-            <a href="#users-section">Users</a>
-            <a href="#clips-section">Clips</a>
-            <a href="#photos-section">Photos</a>
-            <a href="#music-section">Music</a>
-            <a href="#picks-section">Picks</a>
-            <a href="#analytics-section">Analytics</a>
-            <a href="#audit-section">Audit</a>
-            <a href="#server-section">Settings</a>
-        </nav>
+        <main id="main" class="ad-main">
+            <div class="ad-top">
+                <button id="ad-burger" type="button" class="ad-burger" aria-controls="ad-side" aria-expanded="false" aria-label="Open sections menu"><i class="fa-solid fa-table-columns" aria-hidden="true"></i><span>Sections</span></button>
+                <div class="ad-titles">
+                    <h1 id="ad-title" class="ad-title">Dashboard</h1>
+                    <p id="ad-sub" class="ad-sub"></p>
+                </div>
+                <span id="ad-pill" class="ad-pill" role="status">Checking…</span>
+            </div>
 
-        <div id="state-warning" class="ad-msg err" role="alert" hidden></div>
-        <div id="admin-message" class="ad-msg" role="status" aria-live="polite" hidden></div>
+            <div id="state-warning" class="ad-msg err" role="alert" hidden></div>
+            <div id="admin-message" class="ad-msg" role="status" aria-live="polite" hidden></div>
 
-        <div class="ad-stats">
+            <section class="ad-view" data-view="dashboard">
+                <div id="ad-attn" class="ad-attn" hidden>
+                    <h2>Dhyan talab (<span id="attn-count">0</span>)</h2>
+                    <ul id="attn-list"></ul>
+                </div>
+                <div class="ad-stats">
             <div class="ad-stat"><p class="ad-stat-label"><i class="fa-solid fa-users" aria-hidden="true"></i> Users</p><p id="stat-total-users" class="ad-stat-num">0</p><p class="ad-stat-note">Registered accounts</p></div>
             <div class="ad-stat"><p class="ad-stat-label"><i class="fa-solid fa-crown" aria-hidden="true"></i> Premium</p><p id="stat-premium-users" class="ad-stat-num">0</p><p class="ad-stat-note">Premium access enabled</p></div>
             <div class="ad-stat"><p class="ad-stat-label"><i class="fa-solid fa-film" aria-hidden="true"></i> Clips</p><p id="stat-backgrounds" class="ad-stat-num">0</p><p class="ad-stat-note">Background MP4 files</p></div>
@@ -44,17 +51,37 @@
             <div class="ad-stat"><p class="ad-stat-label"><i class="fa-solid fa-comments" aria-hidden="true"></i> Ask AI today</p><p id="stat-ask" class="ad-stat-num">-</p><p class="ad-stat-note">Questions vs global limit</p></div>
             <div class="ad-stat"><p class="ad-stat-label"><i class="fa-solid fa-hard-drive" aria-hidden="true"></i> Disk / Supabase</p><p id="stat-disk" class="ad-stat-num">-</p><p id="stat-disk-note" class="ad-stat-note">Output disk free</p></div>
         </div>
+                <div class="ad-two">
+                    <section class="ad-card">
+                        <h2>Last 14 days</h2>
+                        <svg id="dash-chart" role="img" aria-label="Daily page views and unique visitors, last 14 days" viewBox="0 0 600 140" preserveAspectRatio="none" hidden></svg>
+                        <p id="dash-chart-empty" class="hint">No analytics yet.</p>
+                        <p class="ad-legend"><span><i class="ad-sw" style="background:var(--chart-1)"></i>Views</span><span><i class="ad-sw" style="background:var(--chart-2)"></i>Visitors</span></p>
+                    </section>
+                    <section id="audit-section" class="ad-card">
+                        <div class="ad-count-row">
+                            <h2>Recent activity <span id="audit-badge" class="pf-badge">0</span></h2>
+                            <button id="refresh-audit" type="button" class="btn btn-outline btn-sm" aria-label="Refresh audit log"><i class="fa-solid fa-rotate" aria-hidden="true"></i><span>Refresh</span></button>
+                        </div>
+                        <ul id="audit-list" class="au-audit" tabindex="0" aria-label="Audit log"></ul>
+                        <button id="audit-more" type="button" class="btn btn-outline btn-sm load-more" hidden>Load more</button>
+                    </section>
+                </div>
+                <section id="dash-failed" class="ad-card" hidden>
+                    <h2>Failed videos</h2>
+                    <ul id="dash-failed-list" class="au-audit"></ul>
+                </section>
+            </section>
 
-        <div class="ad-grid">
-            <section id="users-section" class="ad-sec ad-users">
-                <details data-sec="users">
-                    <summary><span class="ad-sec-title">Users</span><span id="users-badge" class="pf-badge">0</span></summary>
-                    <div class="ad-sec-body">
-                        <p class="hint">Premium, block, sign out everywhere, ya content delete karein.</p>
+            <section id="users-section" class="ad-view" data-view="users" hidden>
+                <div class="ad-card">
+                    <div class="ad-count-row"><h2>Users <span id="users-badge" class="pf-badge">0</span></h2></div>
+                    <p class="hint">Premium, block, sign out everywhere, ya content delete karein.</p>
                         <div class="scroll-box">
                         <div class="au-toolbar">
                             <input id="user-search" type="search" placeholder="Search email or name" aria-label="Search users" class="control">
                             <input id="user-status" type="hidden" value="all">
+                            <select id="user-sort" class="control" aria-label="Sort users"><option value="new">Newest first</option><option value="signin">Last sign-in</option><option value="name">Name A-Z</option><option value="videos">Most videos today</option></select>
                             <div class="ad-chips" role="group" aria-label="Filter by status">
                                 <button type="button" data-status="all" aria-pressed="true">All</button>
                                 <button type="button" data-status="active" aria-pressed="false">Active</button>
@@ -69,69 +96,17 @@
                         <ul id="users-list" class="au-list"></ul>
                         </div>
                         <button id="users-more" type="button" class="btn btn-outline btn-sm load-more" hidden>Load more</button>
-                    </div>
-                </details>
+                </div>
             </section>
 
-            <section id="clips-section" class="ad-sec ad-clips">
-                <details data-sec="clips">
-                    <summary><span class="ad-sec-title">Background clips</span><span id="stat-backgrounds-badge" class="pf-badge">0 files</span></summary>
-                    <div class="ad-sec-body">
-                        <p class="hint">Upload MP4 clips for generated reels. Maximum file size is 50 MB.</p>
-                        <form id="background-upload-form" class="ad-upload" novalidate>
-                            <input id="background-file" class="ad-file-input" type="file" accept="video/mp4,.mp4">
-                            <label for="background-file" class="btn btn-outline"><i class="fa-solid fa-file-video" aria-hidden="true"></i>Choose file</label>
-                            <p id="background-file-info" class="ad-file-info">No file chosen</p>
-                            <progress id="background-progress" max="100" value="0" hidden></progress>
-                            <p id="background-error" class="pf-msg err" role="alert"></p>
-                            <button id="background-upload-button" type="submit" class="btn btn-primary"><i class="fa-solid fa-upload" aria-hidden="true"></i>Upload clip</button>
-                        </form>
-                        <ul id="background-list" class="ad-rows"></ul>
-                    </div>
-                </details>
-            </section>
+            <section id="clips-section" class="ad-view" data-view="clips" hidden></section>
+            <section id="photos-section" class="ad-view" data-view="photos" hidden></section>
+            <section id="music-section" class="ad-view" data-view="music" hidden></section>
 
-            <section id="photos-section" class="ad-sec ad-photos">
-                <details data-sec="photos">
-                    <summary><span class="ad-sec-title">Background photos</span><span id="photos-badge" class="pf-badge">0 photos</span></summary>
-                    <div class="ad-sec-body">
-                        <p class="hint">Shared by Ayah Images and photo-background videos. JPG, PNG or WebP; each photo is cover-cropped to 1080x1920 and compressed to 400 KB or less. Disabled photos stay stored but are not used.</p>
-                        <form id="photo-upload-form" class="ad-upload" novalidate>
-                            <input id="photo-file" class="ad-file-input" type="file" multiple accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp">
-                            <label for="photo-file" class="btn btn-outline"><i class="fa-solid fa-image" aria-hidden="true"></i>Choose photos</label>
-                            <p id="photo-file-info" class="ad-file-info">No file chosen</p>
-                            <progress id="photo-progress" max="100" value="0" hidden></progress>
-                            <p id="photo-error" class="pf-msg err" role="alert"></p>
-                            <button id="photo-upload-button" type="submit" class="btn btn-primary"><i class="fa-solid fa-upload" aria-hidden="true"></i>Upload photos</button>
-                        </form>
-                        <ul id="photo-list" class="ad-rows ad-photo-grid"></ul>
-                    </div>
-                </details>
-            </section>
-
-            <section id="music-section" class="ad-sec ad-music">
-                <details data-sec="music">
-                    <summary><span class="ad-sec-title">Background music</span><span id="music-badge" class="pf-badge">0 files</span></summary>
-                    <div class="ad-sec-body">
-                        <p class="hint">Upload MP3, MPEG, WAV, AAC, or M4A. Maximum file size is 50 MB.</p>
-                        <form id="music-upload-form" class="ad-upload" novalidate>
-                            <input id="music-file" class="ad-file-input" type="file" accept=".mp3,.mpeg,.wav,.aac,.m4a,audio/mpeg,audio/mp4,audio/aac,audio/wav">
-                            <label for="music-file" class="btn btn-outline"><i class="fa-solid fa-file-audio" aria-hidden="true"></i>Choose file</label>
-                            <p id="music-file-info" class="ad-file-info">No file chosen</p>
-                            <progress id="music-progress" max="100" value="0" hidden></progress>
-                            <p id="music-error" class="pf-msg err" role="alert"></p>
-                            <button id="music-upload-button" type="submit" class="btn btn-primary"><i class="fa-solid fa-upload" aria-hidden="true"></i>Upload music</button>
-                        </form>
-                        <ul id="music-list" class="ad-rows"></ul>
-                    </div>
-                </details>
-            </section>
-
-            <section id="picks-section" class="ad-sec ad-picks">
-                <details data-sec="picks">
-                    <summary><span class="ad-sec-title">Picks</span><span id="picks-badge" class="pf-badge">0</span></summary>
-                    <div class="ad-sec-body">
-                        <p class="hint">Curated ayah lists users generate from. Each list is one length (30 s / 1 min / 2 min) and one mode.</p>
+            <section id="picks-section" class="ad-view" data-view="picks" hidden>
+                <div class="ad-card">
+                    <div class="ad-count-row"><h2>Picks <span id="picks-badge" class="pf-badge">0</span></h2></div>
+                    <p class="hint">Curated ayah lists users generate from. Each list is one length (30 s / 1 min / 2 min) and one mode.</p>
                         <div id="ap-buckets" class="ad-chips" role="group" aria-label="Length"></div>
                         <div id="ap-modes" class="ad-chips" role="group" aria-label="Mode" style="margin-top:8px"></div>
                         <p id="ap-counts" class="hint" style="margin-top:10px" role="status"></p>
@@ -161,65 +136,55 @@
                         </div>
                         <progress id="ap-progress" class="ap-progress" max="100" value="0" hidden></progress>
                         <p id="ap-recompute-status" class="hint" role="status" aria-live="polite"></p>
-                    </div>
-                </details>
+                </div>
             </section>
 
-            <section id="audit-section" class="ad-sec ad-audit">
-                <details data-sec="audit">
-                    <summary><span class="ad-sec-title">Audit log</span><span id="audit-badge" class="pf-badge">0</span></summary>
-                    <div class="ad-sec-body">
-                        <div class="ad-count-row">
-                            <p class="hint">Admin actions, newest first.</p>
-                            <button id="refresh-audit" type="button" class="btn btn-outline btn-sm" aria-label="Refresh audit log"><i class="fa-solid fa-rotate" aria-hidden="true"></i><span>Refresh</span></button>
-                        </div>
-                        <ul id="audit-list" class="au-audit" tabindex="0" aria-label="Audit log"></ul>
-                        <button id="audit-more" type="button" class="btn btn-outline btn-sm load-more" hidden>Load more</button>
-                    </div>
-                </details>
-            </section>
-
-            <section id="server-section" class="ad-sec ad-server">
-                <details data-sec="server">
-                    <summary><span class="ad-sec-title">Diagnostics</span></summary>
-                    <div class="ad-sec-body">
-                        <div class="ad-count-row">
-                            <p id="diagnostics-status" class="hint" role="status" aria-live="polite">Loading diagnostics...</p>
-                            <button id="refresh-diagnostics" type="button" class="btn btn-outline btn-sm" aria-label="Refresh diagnostics"><i class="fa-solid fa-rotate" aria-hidden="true"></i><span>Refresh</span></button>
-                        </div>
-                        <dl id="diagnostics-grid" class="ad-diag"></dl>
-                    </div>
-                </details>
-            </section>
-        </div>
-
-        <section id="analytics-section" class="ad-sec">
-            <details data-sec="analytics">
-                <summary><span class="ad-sec-title">Analytics (last 30 days)</span></summary>
-                <div class="ad-sec-body">
+            <section id="analytics-section" class="ad-view" data-view="analytics" hidden>
+                <div class="ad-card">
+                    <h2>Last 30 days</h2>
                     <p id="analytics-status" class="ui-state" data-kind="loading" role="status">Loading analytics…</p>
-                    <svg id="analytics-chart" role="img" aria-label="Daily page views and unique visitors" viewBox="0 0 600 140" preserveAspectRatio="none" style="width:100%;height:140px" hidden></svg>
+                    <svg id="analytics-chart" role="img" aria-label="Daily page views and unique visitors" viewBox="0 0 600 140" preserveAspectRatio="none" hidden></svg>
                     <div class="scroll-box"><table id="analytics-table" class="ad-table" hidden>
                         <thead><tr><th>Day</th><th>Views</th><th>Visitors</th><th>Signups</th><th>Videos</th><th>Failed</th><th>Avg render</th></tr></thead>
                         <tbody></tbody>
                     </table></div>
                     <p id="analytics-flush" class="hint" role="status"></p>
-                    <p id="ask-usage" class="hint" role="status"></p>
                     <p class="hint">Bots excluded. No IP addresses are stored.</p>
                 </div>
-            </details>
-        </section>
+            </section>
 
-        <footer class="ad-foot">
-            <a href="/privacy.html">Privacy</a><span aria-hidden="true">·</span><a href="/terms.html">Terms</a><span aria-hidden="true">·</span><a href="/generate.html"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Back to generator</a>
-        </footer>
-    </main>
+            <section id="askai-section" class="ad-view" data-view="askai" hidden>
+                <div class="ad-card">
+                    <h2>Ask AI usage</h2>
+                    <p id="ask-usage" class="hint" role="status">Loading…</p>
+                    <dl id="ask-cards" class="ad-diag"></dl>
+                    <ul id="ask-days" class="au-audit"></ul>
+                </div>
+            </section>
+
+            <section id="server-section" class="ad-view" data-view="system" hidden>
+                <div class="ad-card">
+                    <div class="ad-count-row">
+                        <h2>Status <span id="sys-supabase" class="pf-badge">Checking…</span></h2>
+                        <button id="refresh-diagnostics" type="button" class="btn btn-outline btn-sm" aria-label="Refresh diagnostics"><i class="fa-solid fa-rotate" aria-hidden="true"></i><span>Refresh</span></button>
+                    </div>
+                    <p id="diagnostics-status" class="hint" role="status" aria-live="polite">Loading diagnostics...</p>
+                    <p id="sys-activity" class="hint"></p>
+                    <dl id="diagnostics-grid" class="ad-diag"></dl>
+                </div>
+            </section>
+
+            <footer class="ad-foot">
+                <a href="/privacy.html">Privacy</a><span aria-hidden="true">·</span><a href="/terms.html">Terms</a><span aria-hidden="true">·</span><a href="/generate.html"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Back to generator</a>
+            </footer>
+        </main>
+    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js" integrity="sha384-0w2KAL2YHP6wKOkUDzkCDGgVvfmHnj02DHeQ6XcHOgTfFsGyonKOpShMH1x6nk9o" crossorigin="anonymous"></script>
     <script src="/config.js"></script>
     <script src="/ui-states.js?v=1"></script>
     <script src="/auth.js?v=10"></script>
     <script src="/nav.js?v=5"></script>
-    <script src="/admin.js?v=17"></script>
+    <script src="/admin.js?v=18"></script>
 </body>
 </html>

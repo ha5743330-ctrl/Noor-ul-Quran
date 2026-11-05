@@ -57,21 +57,22 @@ async function initializeAdmin() {
     let apiUp = false;
     const client = window.supabaseClient;
     const main = document.getElementById("main");
+    const gate = (show) => { document.querySelector(".ad-shell").classList.add("is-gated"); show(); };
     if (!client) {
-        window.noorUi.gates.signedOut(main, "Admin console");
+        gate(() => window.noorUi.gates.signedOut(main, "Admin console"));
         return;
     }
 
     const { data: { session } } = await client.auth.getSession();
     if (!session) {
-        window.noorUi.gates.signedOut(main, "Admin console");
+        gate(() => window.noorUi.gates.signedOut(main, "Admin console"));
         return;
     }
 
     try {
         const access = await adminRequest("/access");
         if (!access.is_admin) {
-            window.noorUi.gates.notAdmin(main);
+            gate(() => window.noorUi.gates.notAdmin(main));
             return;
         }
         selfId = access.user_id;
@@ -80,20 +81,50 @@ async function initializeAdmin() {
         adminRequest("/admin/diagnostics").then(showStateWarning).catch(() => {});
         await loadUsers();
         await loadAudit();
-        await loadBackgrounds();
-        await loadPhotos();
-        await loadMusic();
+        await Promise.all([loadMedia("clips"), loadMedia("photos"), loadMedia("music")]);
         await loadDiagnostics();
         await loadAnalytics();
+        await loadAskUsage();
     } catch (error) {
         if (!apiUp) setApiStatus(false);
-        if (error.status === 403) { window.noorUi.gates.notAdmin(main); return; }
+        if (error.status === 403) { gate(() => window.noorUi.gates.notAdmin(main)); return; }
         showAdminMessage(window.noorUi.friendly(error), true);
     }
 }
 
+// "Dhyan talab": things that need the admin's attention, computed from whatever has loaded so far.
+const attn = { failed: 0, storage: null, safe: [], ask: null };
+
+function renderAttention() {
+    const items = [];
+    if (attn.failed > 0) items.push([`${attn.failed} video${attn.failed > 1 ? "s" : ""} fail hui aaj`, "#/analytics", "Dekhein"]);
+    if (attn.storage !== null && attn.storage >= 80) items.push([`Storage ${attn.storage}% bhar chuka`, "#/system", "Status"]);
+    if (attn.safe.length) items.push([`State restore nahi hui, changes band hain (${attn.safe.join(", ")})`, "#/system", "Status"]);
+    if (attn.ask) items.push([`Ask AI limit ke qareeb: ${attn.ask.today}/${attn.ask.limit}`, "#/askai", "Usage"]);
+    const list = document.getElementById("attn-list");
+    list.replaceChildren(...(items.length ? items : [["Sab theek hai. Abhi kuch dhyan talab nahi.", "", ""]]).map(([text, href, label]) => {
+        const li = document.createElement("li");
+        li.append(Object.assign(document.createElement("span"), { textContent: text }));
+        if (href) li.append(Object.assign(document.createElement("a"), { href, className: "btn btn-outline btn-sm", textContent: label }));
+        return li;
+    }));
+    document.getElementById("attn-count").textContent = String(items.length);
+    document.getElementById("ad-attn").classList.toggle("is-clear", !items.length);
+}
+
+// Newest known activity (admin audit or analytics day); the free Supabase plan pauses after 7 idle days.
+let lastActivity = 0;
+function noteActivity(value) {
+    const time = value ? new Date(value).getTime() : NaN;
+    if (time > lastActivity) lastActivity = time;
+    document.getElementById("sys-activity").textContent =
+        `${lastActivity ? `Last activity: ${formatWhen(lastActivity)}. ` : ""}Free Supabase plan pauses the project after 7 days idle; visit the app at least once a week.`;
+}
+
 function showStateWarning(diagnostics) {
     const files = Object.entries(diagnostics.state_safe_mode || {});
+    attn.safe = files.map(([file]) => file);
+    renderAttention();
     const box = document.getElementById("state-warning");
     box.hidden = !files.length;
     box.textContent = files.length
@@ -102,6 +133,9 @@ function showStateWarning(diagnostics) {
 }
 
 function setApiStatus(online) {
+    const pill = document.getElementById("ad-pill");
+    pill.textContent = online ? "API Online" : "API Offline";
+    pill.classList.toggle("bad", !online);
     document.getElementById("ad-status").textContent = online ? "Online" : "Offline";
     document.getElementById("ad-status-note").textContent = online ? "API and auth responding" : "API unreachable";
 }
@@ -233,7 +267,14 @@ function renderUsers(users) {
         return;
     }
 
-    for (const user of users) {
+    const when = (value) => (value ? new Date(value).getTime() || 0 : 0);
+    const sorts = {
+        new: (a, b) => when(b.created_at) - when(a.created_at),
+        signin: (a, b) => when(b.last_sign_in_at) - when(a.last_sign_in_at),
+        name: (a, b) => String(a.display_name || a.email).localeCompare(String(b.display_name || b.email)),
+        videos: (a, b) => (b.videos_today || 0) - (a.videos_today || 0),
+    };
+    for (const user of [...users].sort(sorts[document.getElementById("user-sort").value] || sorts.new)) {
         const item = document.createElement("li");
         item.className = "au-item";
 
@@ -326,7 +367,7 @@ async function loadAudit(offset = 0) {
     try {
         const { entries, total } = await adminRequest(`/admin/audit?offset=${offset}`);
         document.getElementById("audit-badge").textContent = String(total ?? entries.length);
-        if (!offset) list.replaceChildren();
+        if (!offset) { list.replaceChildren(); noteActivity(entries[0]?.at); }
         document.getElementById("audit-more").hidden = offset + entries.length >= (total ?? 0);
         if (!entries.length && !offset) {
             listEmpty(list, "fa-clipboard-list", "Abhi koi admin action nahi", "Jab koi user block ya premium hoga to yahan likha jayega.");
@@ -350,29 +391,6 @@ function reloadUsersFromStart() {
 
 function formatSize(bytes) {
     return bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
-}
-
-function mediaRow(name, sizeText, button) {
-    const item = document.createElement("li");
-    item.className = "ad-row";
-    const label = document.createElement("span");
-    label.className = "ad-row-name";
-    label.textContent = name;
-    item.append(label, button);
-    if (sizeText) {
-        const size = document.createElement("span");
-        size.className = "ad-row-size";
-        size.textContent = sizeText;
-        item.insertBefore(size, button);
-    }
-    return item;
-}
-
-function emptyRow(text) {
-    const empty = document.createElement("li");
-    empty.className = "ad-row-empty";
-    empty.textContent = text;
-    return empty;
 }
 
 function deleteButton(path, filename, reload) {
@@ -400,130 +418,140 @@ function deleteButton(path, filename, reload) {
     return button;
 }
 
-async function loadPhotos() {
-    const list = document.getElementById("photo-list");
-    listLoading(list, 3);
-    try {
-        const photos = await adminRequest("/admin/photos");
-        const active = photos.filter((photo) => photo.enabled).length;
-        document.getElementById("photos-badge").textContent = `${active} of ${photos.length} on`;
-        list.replaceChildren();
-        if (!photos.length) listEmpty(list, "fa-images", "Abhi koi photo nahi", "Ayah Images built-in background istemal kar rahi hain. Upar se photo upload karein.");
-        for (const photo of photos) {
-            const card = document.createElement("li");
-            card.className = "ad-photo" + (photo.enabled ? "" : " is-off");
+// ---- media: clips, photos and music share one layout (upload card + searchable library) ----
+const MEDIA = {
+    clips: {
+        prefix: "background", list: "background-list", badge: "stat-backgrounds-badge", noun: "clip", icon: "fa-film", title: "Background clips",
+        exts: [".mp4"], accept: "video/mp4,.mp4", type: "video/mp4", endpoint: "/admin/backgrounds", ok: "Background clip uploaded.",
+        empty: ["Abhi koi background clip nahi", "Left se MP4 clip upload karein."],
+        rows: (clips) => clips.map((clip) => ({ name: clip.filename, meta: formatSize(clip.size) })),
+        badgeText: (rows) => `${rows.length} files`,
+    },
+    photos: {
+        prefix: "photo", list: "photo-list", badge: "photos-badge", noun: "photo", icon: "fa-image", title: "Photos", multiple: true,
+        exts: [".jpg", ".jpeg", ".png", ".webp"], accept: "image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp", type: "image/jpeg",
+        endpoint: "/admin/photos", ok: "Photos uploaded.", note: "cover-cropped to 1080x1920, compressed to 400 KB. Disabled photos stay stored but are not used.",
+        empty: ["Abhi koi photo nahi", "Ayah Images built-in background istemal kar rahi hain. Left se photo upload karein."],
+        rows: (photos) => photos.map((photo) => ({
+            name: photo.filename, meta: `${formatSize(photo.size)}${photo.enabled ? "" : " · off"}`, off: !photo.enabled, enabled: photo.enabled,
+            thumb: new URL(photo.thumb_url, new URL(API_BASE_URL, window.location.origin).origin).href,
+        })),
+        badgeText: (rows) => `${rows.filter((row) => row.enabled).length} of ${rows.length} on`,
+    },
+    music: {
+        prefix: "music", list: "music-list", badge: "music-badge", noun: "track", icon: "fa-music", title: "Background music",
+        exts: [".mp3", ".mpeg", ".wav", ".aac", ".m4a"], accept: ".mp3,.mpeg,.wav,.aac,.m4a,audio/mpeg,audio/mp4,audio/aac,audio/wav", type: "audio/mpeg",
+        endpoint: "/admin/music", ok: "Background music uploaded.",
+        empty: ["Abhi koi music nahi", "Left se audio file upload karein."],
+        rows: (result) => result.music_files.map((name) => ({ name, meta: "Audio" })),
+        badgeText: (rows) => `${rows.length} files`,
+    },
+};
+const mediaRows = { clips: [], photos: [], music: [] };
+
+function buildMediaView(key, c) {
+    const p = c.prefix;
+    const many = c.multiple ? "s" : "";
+    document.getElementById(`${key}-section`).innerHTML = `
+        <div class="ad-split">
+            <form id="${p}-upload-form" class="ad-card ad-upload" novalidate>
+                <h2>Upload ${c.noun}${many}</h2>
+                <input id="${p}-file" class="ad-file-input" type="file" accept="${c.accept}"${c.multiple ? " multiple" : ""}>
+                <label for="${p}-file" id="${p}-drop" class="ad-drop"><i class="fa-solid ${c.icon}" aria-hidden="true"></i><strong>Drop ${c.noun}${many} here</strong><span>or <u>choose ${c.multiple ? "files" : "a file"}</u></span></label>
+                ${c.multiple ? "" : `<label class="ad-field" for="${p}-name">Name (optional)</label><input id="${p}-name" class="control" maxlength="80" autocomplete="off" placeholder="e.g. mountain-valley">`}
+                <p class="ad-limits">${c.exts.join(" ")} · max 50 MB${c.multiple ? " each" : ""}${c.note ? ` · ${c.note}` : ""}</p>
+                <p id="${p}-file-info" class="ad-file-info" aria-live="polite">No file chosen</p>
+                <progress id="${p}-progress" max="100" value="0" hidden aria-label="Upload progress"></progress>
+                <p id="${p}-error" class="pf-msg err" role="alert"></p>
+                <button id="${p}-upload-button" type="submit" class="btn btn-primary"><i class="fa-solid fa-upload" aria-hidden="true"></i>Upload ${c.noun}${many}</button>
+            </form>
+            <section class="ad-card ad-lib">
+                <div class="ad-count-row"><h2>Library <span id="${c.badge}" class="pf-badge">0</span></h2></div>
+                <input id="${p}-search" type="search" class="control" placeholder="Search by name" aria-label="Search ${c.noun}s">
+                <ul id="${c.list}" class="ad-media-grid"></ul>
+            </section>
+        </div>`;
+    document.getElementById(`${p}-search`).addEventListener("input", () => renderMedia(key));
+}
+
+function renderMedia(key) {
+    const c = MEDIA[key];
+    const list = document.getElementById(c.list);
+    const query = document.getElementById(`${c.prefix}-search`).value.trim().toLowerCase();
+    const rows = mediaRows[key].filter((row) => row.name.toLowerCase().includes(query));
+    list.replaceChildren();
+    if (!mediaRows[key].length) return listEmpty(list, c.icon, c.empty[0], c.empty[1]);
+    if (!rows.length) return listEmpty(list, "fa-magnifying-glass", "Koi match nahi", "Doosra naam try karein.");
+    for (const row of rows) {
+        const item = document.createElement("li");
+        item.className = `ad-media${row.off ? " is-off" : ""}`;
+        const thumb = document.createElement("span");
+        thumb.className = "ad-thumb";
+        if (row.thumb) {
             const img = document.createElement("img");
             img.loading = "lazy";
-            img.alt = photo.filename;
-            img.src = new URL(photo.thumb_url, new URL(API_BASE_URL, window.location.origin).origin).href;
-            const name = document.createElement("span");
-            name.className = "ad-photo-name";
-            name.textContent = `${photo.filename} · ${formatSize(photo.size)}`;
-            const actions = document.createElement("div");
-            actions.className = "ad-photo-actions";
-            const toggle = document.createElement("button");
-            toggle.type = "button";
-            toggle.className = "btn btn-sm btn-outline";
-            toggle.textContent = photo.enabled ? "Disable" : "Enable";
-            toggle.addEventListener("click", async () => {
-                toggle.disabled = true;
-                try {
-                    await adminRequest(`/admin/photos/${encodeURIComponent(photo.filename)}`, {
-                        method: "PATCH", headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ enabled: !photo.enabled }),
-                    });
-                    await loadPhotos();
-                } catch (error) {
-                    showAdminMessage(window.noorUi.friendly(error), true);
-                    toggle.disabled = false;
-                }
-            });
-            actions.append(toggle, deleteButton("/admin/photos", photo.filename, loadPhotos));
-            card.append(img, name, actions);
-            list.append(card);
+            img.alt = "";
+            img.src = row.thumb;
+            thumb.append(img);
+        } else {
+            thumb.innerHTML = `<i class="fa-solid ${c.icon}" aria-hidden="true"></i>`;
         }
-    } catch (error) {
-        list.replaceChildren();
-        listFailed(list, "Photos", error, loadPhotos);
+        const info = document.createElement("span");
+        info.className = "ad-media-info";
+        const name = document.createElement("strong");
+        name.textContent = row.name;
+        const meta = document.createElement("small");
+        meta.textContent = row.meta;
+        info.append(name, meta);
+        const actions = document.createElement("span");
+        actions.className = "ad-media-actions";
+        if (key === "photos") actions.append(actionButton(row.enabled ? "Disable" : "Enable", "btn-outline", async () => {
+            await adminRequest(`/admin/photos/${encodeURIComponent(row.name)}`, { method: "PATCH", body: JSON.stringify({ enabled: !row.enabled }) });
+            await loadMedia("photos");
+        }));
+        actions.append(deleteButton(c.endpoint, row.name, () => loadMedia(key)));
+        item.append(thumb, info, actions);
+        list.append(item);
     }
 }
 
-function setupPhotoUpload() {
-    const form = document.getElementById("photo-upload-form");
-    const input = document.getElementById("photo-file");
-    const info = document.getElementById("photo-file-info");
-    const bar = document.getElementById("photo-progress");
-    const error = document.getElementById("photo-error");
-    const button = document.getElementById("photo-upload-button");
-    input.addEventListener("change", () => {
-        error.textContent = "";
-        info.textContent = input.files.length ? `${input.files.length} file(s) chosen` : "No file chosen";
-    });
-    form.addEventListener("submit", async (event) => {
-        event.preventDefault();
-        if (!input.files.length) { error.textContent = "Pehle photos chunein."; return; }
-        error.textContent = "";
-        button.disabled = true;
-        bar.hidden = false;
-        const failed = [];
-        let done = 0;
-        for (const file of input.files) {
-            try {
-                if (file.size > UPLOAD_LIMIT) throw new Error("must be 50 MB or smaller");
-                await sendWithProgress(`/admin/photos?filename=${encodeURIComponent(file.name)}`, file, file.type || "image/jpeg", () => {});
-            } catch (uploadError) {
-                failed.push(`${file.name}: ${uploadError.message}`);
-            }
-            done += 1;
-            bar.value = Math.round((done / input.files.length) * 100);
-        }
-        input.value = "";
-        info.textContent = "No file chosen";
-        bar.hidden = true;
-        button.disabled = false;
-        if (failed.length) error.textContent = failed.join(" | ");
-        else showAdminMessage("Photos uploaded.");
-        await loadPhotos();
-    });
-}
-
-async function loadBackgrounds() {
-    const list = document.getElementById("background-list");
-    const countEl = document.getElementById("stat-backgrounds");
-    listLoading(list, 2);
+async function loadMedia(key) {
+    const c = MEDIA[key];
+    const list = document.getElementById(c.list);
+    if (!mediaRows[key].length) listLoading(list, 3);
     try {
-        const clips = await adminRequest("/admin/backgrounds");
-        if (countEl) {
-            countEl.dataset.count = String(clips.length);
-            countEl.textContent = String(clips.length);
+        mediaRows[key] = c.rows(await adminRequest(c.endpoint));
+        document.getElementById(c.badge).textContent = c.badgeText(mediaRows[key]);
+        if (key === "clips") {
+            const count = document.getElementById("stat-backgrounds");
+            count.dataset.count = count.textContent = String(mediaRows[key].length);
         }
-        document.getElementById("stat-backgrounds-badge").textContent = `${clips.length} files`;
-        list.replaceChildren();
-        if (!clips.length) listEmpty(list, "fa-film", "Abhi koi background clip nahi", "Upar se MP4 clip upload karein.");
-        for (const clip of clips) {
-            list.append(mediaRow(clip.filename, formatSize(clip.size), deleteButton("/admin/backgrounds", clip.filename, loadBackgrounds)));
-        }
+        renderMedia(key);
     } catch (error) {
         list.replaceChildren();
-        listFailed(list, "Background clips", error, loadBackgrounds);
+        listFailed(list, c.title, error, () => loadMedia(key));
     }
 }
 
-async function loadMusic() {
-    const list = document.getElementById("music-list");
-    listLoading(list, 2);
-    try {
-        const result = await adminRequest("/admin/music");
-        document.getElementById("music-badge").textContent = `${result.music_files.length} files`;
-        list.replaceChildren();
-        if (!result.music_files.length) listEmpty(list, "fa-music", "Abhi koi music nahi", "Upar se audio file upload karein.");
-        for (const filename of result.music_files) {
-            list.append(mediaRow(filename, "", deleteButton("/admin/music", filename, loadMusic)));
-        }
-    } catch (error) {
-        list.replaceChildren();
-        listFailed(list, "Background music", error, loadMusic);
-    }
+function drawChart(chart, rows) {
+    const max = Math.max(1, ...rows.map((d) => d.views));
+    const step = 600 / rows.length;
+    const ns = "http://www.w3.org/2000/svg";
+    chart.replaceChildren(...rows.flatMap((d, i) => [["views", "var(--chart-1)"], ["uniques", "var(--chart-2)"]].map(([key, fill], j) => {
+        const h = Math.max(1, (d[key] / max) * 130);
+        const bar = document.createElementNS(ns, "rect");
+        const w = step * 0.4;
+        bar.setAttribute("x", i * step + step * 0.1 + j * w);
+        bar.setAttribute("y", 140 - h);
+        bar.setAttribute("width", w);
+        bar.setAttribute("height", h);
+        bar.style.fill = fill;
+        const title = document.createElementNS(ns, "title");
+        title.textContent = `${d.day} ${key}: ${d[key]}`;
+        bar.append(title);
+        return bar;
+    })));
+    chart.removeAttribute("hidden"); // SVG elements have no .hidden property
 }
 
 async function loadDiagnostics() {
@@ -534,6 +562,7 @@ async function loadDiagnostics() {
         const diagnostics = await adminRequest("/admin/diagnostics");
         showStateWarning(diagnostics);
         const megabytes = (bytes) => `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+        const flag = (on) => ({ pill: on ? "Set" : "Not set", bad: !on });
         const values = [
             ["FFmpeg", diagnostics.ffmpeg_version],
             ["RAQM", diagnostics.raqm ? "True" : "False"],
@@ -543,10 +572,10 @@ async function loadDiagnostics() {
             ["Output disk free", megabytes(diagnostics.output_free_bytes)],
             ["Output folder used", megabytes(diagnostics.output_used_bytes)],
             ["History entries", diagnostics.history_entry_count],
-            ["Supabase URL", diagnostics.supabase_url_set ? "Set" : "Not set"],
-            ["Supabase anon key", diagnostics.supabase_anon_key_set ? "Set" : "Not set"],
-            ["Supabase service key", diagnostics.supabase_service_role_key_set ? "Set" : "Not set"],
-            ["Video URL secret", diagnostics.video_url_secret_set ? "Set" : "Not set"]
+            ["Supabase URL", flag(diagnostics.supabase_url_set)],
+            ["Supabase anon key", flag(diagnostics.supabase_anon_key_set)],
+            ["Supabase service key", flag(diagnostics.supabase_service_role_key_set)],
+            ["Video URL secret", flag(diagnostics.video_url_secret_set)]
         ];
         grid.replaceChildren();
         for (const [label, value] of values) {
@@ -554,12 +583,26 @@ async function loadDiagnostics() {
             const name = document.createElement("dt");
             name.textContent = label;
             const detail = document.createElement("dd");
-            detail.textContent = String(value);
+            if (value && value.pill) {
+                const badge = document.createElement("span");
+                badge.className = `pf-badge${value.bad ? " bad" : ""}`;
+                badge.textContent = value.pill;
+                detail.append(badge);
+            } else {
+                detail.textContent = String(value);
+            }
             item.append(name, detail);
             grid.append(item);
         }
+        const supabaseOk = diagnostics.supabase_url_set && diagnostics.supabase_service_role_key_set;
+        const pill = document.getElementById("sys-supabase");
+        pill.textContent = supabaseOk ? "Supabase OK" : "Supabase incomplete";
+        pill.classList.toggle("bad", !supabaseOk);
+        const total = diagnostics.output_free_bytes + diagnostics.output_used_bytes;
+        attn.storage = total > 0 ? Math.round((diagnostics.output_used_bytes / total) * 100) : null;
+        renderAttention();
         document.getElementById("stat-disk").textContent = megabytes(diagnostics.output_free_bytes);
-        document.getElementById("stat-disk-note").textContent = `free · Supabase ${diagnostics.supabase_url_set && diagnostics.supabase_service_role_key_set ? "configured" : "incomplete"}`;
+        document.getElementById("stat-disk-note").textContent = `free · Supabase ${supabaseOk ? "configured" : "incomplete"}`;
         status.textContent = "Diagnostics updated.";
     } catch (error) {
         status.textContent = error.message || "Could not load diagnostics.";
@@ -567,52 +610,63 @@ async function loadDiagnostics() {
     }
 }
 
+async function loadAskUsage() {
+    try {
+        const u = await adminRequest("/admin/ask-usage");
+        const today = (u.days.find((d) => d.day === new Date().toISOString().slice(0, 10)) || { n: 0 }).n;
+        document.getElementById("stat-ask").textContent = `${today}/${u.global_limit}`;
+        document.getElementById("ask-usage").textContent = `Ask AI is ${u.enabled ? "on" : "OFF"}. Today ${today} of ${u.global_limit} questions used.`;
+        document.getElementById("ask-cards").replaceChildren(
+            userFact("Today", `${today} / ${u.global_limit}`), userFact("Per-user limit", String(u.user_limit)),
+            userFact("API key", u.key_set ? "Set" : "MISSING"), userFact("Last error", u.last_error || "none"));
+        document.getElementById("ask-days").replaceChildren(...u.days.slice(0, 7).map((d) => {
+            const li = document.createElement("li");
+            li.textContent = `${d.day}: ${d.n} questions`;
+            return li;
+        }));
+        attn.ask = u.global_limit && today / u.global_limit >= 0.8 ? { today, limit: u.global_limit } : null;
+        renderAttention();
+    } catch (error) {
+        document.getElementById("ask-usage").textContent = "Ask AI usage unavailable.";
+    }
+}
+
 async function loadAnalytics() {
     const status = document.getElementById("analytics-status");
     const table = document.getElementById("analytics-table");
-    const chart = document.getElementById("analytics-chart");
     try {
         const { days, status: st } = await adminRequest("/admin/analytics?days=30");
         document.getElementById("analytics-flush").textContent = st
             ? `Last flush: ${st.last_flush || "never"} · buffered views: ${st.buffered_views} · last error: ${st.last_error || "none"}${st.enabled ? "" : " · analytics disabled (no service key)"}`
             : "";
-        adminRequest("/admin/ask-usage").then((u) => {
-            const today = u.days.find((d) => d.day === new Date().toISOString().slice(0, 10));
-            document.getElementById("stat-ask").textContent = `${today ? today.n : 0}/${u.global_limit}`;
-            document.getElementById("ask-usage").textContent = `Ask AI: ${u.enabled ? "on" : "OFF"} · today ${today ? today.n : 0}/${u.global_limit} · per-user limit ${u.user_limit} · key ${u.key_set ? "set" : "MISSING"} · last error: ${u.last_error || "none"}`;
-        }).catch(() => {});
         const latest = days[0];
         if (latest) {
             const set = (id, v) => { document.getElementById(id).textContent = v; };
             set("stat-videos", latest.videos); set("stat-failures", latest.failures);
             set("stat-render", latest.avg_render_secs ? `${latest.avg_render_secs}s` : "-");
             set("stat-views", `${latest.views} / ${latest.uniques}`);
+            attn.failed = latest.day === new Date().toISOString().slice(0, 10) ? latest.failures : 0;
+            // ponytail: the API sends no per-video failure reasons yet; the card stays hidden until `failed_videos` ([{at, reason}]) arrives
+            const failed = latest.failed_videos || [];
+            document.getElementById("dash-failed").hidden = !failed.length;
+            document.getElementById("dash-failed-list").replaceChildren(...failed.map((f) => {
+                const li = document.createElement("li");
+                li.textContent = `${formatWhen(f.at)} · ${f.reason || "reason not saved"}`;
+                return li;
+            }));
+            noteActivity([...days].find((d) => d.views > 0)?.day);
         }
+        renderAttention();
         if (!days.length) {
             status.dataset.kind = "empty";
             status.textContent = "No analytics yet (or the analytics table is not set up).";
             return;
         }
-        status.hidden = table.hidden = chart.hidden = false;
+        status.hidden = table.hidden = false;
         status.hidden = true;
-        const rows = [...days].reverse();
-        const max = Math.max(1, ...rows.map((d) => d.views));
-        const step = 600 / rows.length;
-        const ns = "http://www.w3.org/2000/svg";
-        chart.replaceChildren(...rows.flatMap((d, i) => [["views", "var(--chart-1)"], ["uniques", "var(--chart-2)"]].map(([key, fill], j) => {
-            const h = Math.max(1, (d[key] / max) * 130);
-            const bar = document.createElementNS(ns, "rect");
-            const w = step * 0.4;
-            bar.setAttribute("x", i * step + step * 0.1 + j * w);
-            bar.setAttribute("y", 140 - h);
-            bar.setAttribute("width", w);
-            bar.setAttribute("height", h);
-            bar.style.fill = fill;
-            const title = document.createElementNS(ns, "title");
-            title.textContent = `${d.day} ${key}: ${d[key]}`;
-            bar.append(title);
-            return bar;
-        })));
+        document.getElementById("dash-chart-empty").hidden = true;
+        drawChart(document.getElementById("dash-chart"), [...days].slice(0, 14).reverse());
+        drawChart(document.getElementById("analytics-chart"), [...days].reverse());
         table.tBodies[0].replaceChildren(...days.map((d) => {
             const tr = document.createElement("tr");
             const labels = ["Day", "Views", "Visitors", "Signups", "Videos", "Failed", "Avg render"];
@@ -653,99 +707,131 @@ async function sendWithProgress(path, file, contentType, onProgress) {
     });
 }
 
-function setupUpload({ prefix, endpoint, fallbackType, successText, buttonHtml, reload, maxLabel }) {
-    const form = document.getElementById(`${prefix}-upload-form`);
-    const input = document.getElementById(`${prefix}-file`);
-    const info = document.getElementById(`${prefix}-file-info`);
-    const bar = document.getElementById(`${prefix}-progress`);
-    const error = document.getElementById(`${prefix}-error`);
-    const button = document.getElementById(`${prefix}-upload-button`);
+function setupUpload(key, c) {
+    const $ = (part) => document.getElementById(`${c.prefix}-${part}`);
+    const [form, input, info, bar, error, button, drop, nameInput] = ["upload-form", "file", "file-info", "progress", "error", "upload-button", "drop", "name"].map($);
+    const buttonHtml = button.innerHTML;
     const fail = (message) => { error.textContent = message; };
-
-    input.addEventListener("change", () => {
-        const file = input.files[0];
-        fail("");
+    const problem = (file) => {
+        const ext = (file.name.match(/\.[^.]+$/) || [""])[0].toLowerCase();
+        if (!c.exts.includes(ext)) return `${file.name}: only ${c.exts.join(" ")} files are allowed.`;
+        if (!file.size) return `${file.name}: the file is empty.`;
+        if (file.size > UPLOAD_LIMIT) return `${file.name}: ${formatSize(file.size)} is over the 50 MB limit.`;
+        return "";
+    };
+    const refresh = () => {
+        const files = [...input.files];
         bar.hidden = true;
-        info.textContent = file ? `${file.name} · ${formatSize(file.size)}` : "No file chosen";
-        if (file && file.size > UPLOAD_LIMIT) fail(`${maxLabel} must be 50 MB or smaller.`);
+        fail(files.map(problem).filter(Boolean).join(" "));
+        info.textContent = !files.length ? "No file chosen"
+            : files.length === 1 ? `${files[0].name} · ${formatSize(files[0].size)}`
+            : `${files.length} files · ${formatSize(files.reduce((sum, file) => sum + file.size, 0))}`;
+    };
+    input.addEventListener("change", refresh);
+    for (const type of ["dragenter", "dragover"]) drop.addEventListener(type, (event) => { event.preventDefault(); drop.classList.add("is-over"); });
+    for (const type of ["dragleave", "drop"]) drop.addEventListener(type, () => drop.classList.remove("is-over"));
+    drop.addEventListener("drop", (event) => {
+        event.preventDefault();
+        if (event.dataTransfer?.files.length) { input.files = event.dataTransfer.files; refresh(); }
     });
 
     form.addEventListener("submit", async (event) => {
         event.preventDefault();
-        const file = input.files[0];
-        if (!file) return fail("Pehle file chunein.");
-        if (file.size > UPLOAD_LIMIT) return fail(`${maxLabel} must be 50 MB or smaller.`);
-        fail("");
+        const files = [...input.files];
+        if (!files.length) return fail("Pehle file chunein.");
+        const valid = files.filter((file) => !problem(file));
+        const failed = files.filter(problem).map(problem);
+        if (!valid.length) return fail(failed.join(" "));
         button.disabled = true;
         button.textContent = "Uploading…";
         bar.value = 0;
         bar.hidden = false;
-        try {
-            await sendWithProgress(`${endpoint}?filename=${encodeURIComponent(file.name)}`, file, file.type || fallbackType, (percent) => {
-                bar.value = percent;
-                info.textContent = `${file.name} · ${formatSize(file.size)} · ${percent}%`;
-            });
-            input.value = "";
-            info.textContent = "No file chosen";
-            bar.hidden = true;
-            showAdminMessage(successText);
+        let uploaded = 0;
+        for (const [index, file] of valid.entries()) {
+            let filename = file.name;
+            const custom = valid.length === 1 && nameInput?.value.trim();
+            if (custom) filename = /\.[^.]+$/.test(custom) ? custom : custom + (file.name.match(/\.[^.]+$/) || [""])[0];
+            try {
+                await sendWithProgress(`${c.endpoint}?filename=${encodeURIComponent(filename)}`, file, file.type || c.type, (percent) => {
+                    bar.value = Math.round(((index + percent / 100) / valid.length) * 100);
+                    info.textContent = `${filename} · ${formatSize(file.size)} · ${percent}%`;
+                });
+                uploaded += 1;
+            } catch (uploadError) {
+                failed.push(`${file.name}: ${uploadError.message}`);
+            }
+        }
+        input.value = "";
+        if (nameInput) nameInput.value = "";
+        info.textContent = "No file chosen";
+        bar.hidden = true;
+        button.disabled = false;
+        button.innerHTML = buttonHtml;
+        fail(failed.join(" "));
+        if (uploaded) {
+            showAdminMessage(c.ok);
             window.noorUi.toast("Upload ho gaya");
-            await reload();
-        } catch (uploadError) {
-            fail(uploadError.message);
-        } finally {
-            button.disabled = false;
-            button.innerHTML = buttonHtml;
+            await loadMedia(key);
         }
     });
 }
 
-// --- accordion sections, remembered per browser ---
-const SECTION_KEY = "noorAdminSections";
+// --- hash routing (#/users, #/clips, ...) + sidebar drawer ---
+const VIEWS = {
+    dashboard: ["Dashboard", "Aaj ki halat aur jo cheezein dhyan maangti hain."],
+    users: ["Users", "Premium, block, sign out everywhere, ya content delete karein."],
+    clips: ["Video clips", "Reels ke background videos. Upload karein, dekhein, hatayein."],
+    photos: ["Photos", "Ayah Images aur photo-background videos ke liye."],
+    music: ["Music", "Background music for generated videos."],
+    picks: ["Picks", "Curated ayah lists users generate from."],
+    analytics: ["Analytics", "Views, visitors, videos aur failures."],
+    askai: ["Ask AI usage", "Aaj ke sawal aur limits."],
+    system: ["Settings and status", "Keys, Supabase aur server ki sehat."],
+};
 
-function initializeSections() {
-    let saved = {};
-    try { saved = JSON.parse(localStorage.getItem(SECTION_KEY)) || {}; } catch { /* storage blocked */ }
-    document.querySelectorAll("details[data-sec]").forEach((details) => {
-        const id = details.dataset.sec;
-        details.open = id in saved ? Boolean(saved[id]) : id === "users";
-        details.addEventListener("toggle", () => {
-            saved[id] = details.open;
-            try { localStorage.setItem(SECTION_KEY, JSON.stringify(saved)); } catch { /* storage blocked */ }
-        });
-    });
-    document.querySelectorAll(".ad-jump a").forEach((link) => {
-        link.addEventListener("click", (event) => {
-            event.preventDefault();
-            const section = document.querySelector(link.getAttribute("href"));
-            section.querySelector("details").open = true; // open first so the scroll lands on the final layout
-            section.scrollIntoView({ block: "start" });
-            history.replaceState(null, "", link.getAttribute("href"));
-        });
-    });
+function setDrawer(open) {
+    document.body.classList.toggle("ad-nav-open", open);
+    document.getElementById("ad-burger").setAttribute("aria-expanded", String(open));
+    document.getElementById("ad-backdrop").hidden = !open;
 }
 
-initializeSections();
-setupPhotoUpload();
-setupUpload({
-    prefix: "background", endpoint: "/admin/backgrounds", fallbackType: "video/mp4", successText: "Background clip uploaded.",
-    buttonHtml: '<i class="fa-solid fa-upload" aria-hidden="true"></i>Upload clip', reload: loadBackgrounds, maxLabel: "Background clip"
-});
-setupUpload({
-    prefix: "music", endpoint: "/admin/music", fallbackType: "audio/mpeg", successText: "Background music uploaded.",
-    buttonHtml: '<i class="fa-solid fa-upload" aria-hidden="true"></i>Upload music', reload: loadMusic, maxLabel: "Music file"
-});
+function route() {
+    let view = (location.hash.match(/^#\/([\w-]+)/) || [])[1];
+    if (!VIEWS[view]) view = "dashboard";
+    document.querySelectorAll(".ad-view").forEach((node) => { node.hidden = node.dataset.view !== view; });
+    document.querySelectorAll(".ad-link").forEach((link) => {
+        if (link.dataset.nav === view) link.setAttribute("aria-current", "page"); else link.removeAttribute("aria-current");
+    });
+    document.getElementById("ad-title").textContent = VIEWS[view][0];
+    document.getElementById("ad-sub").textContent = VIEWS[view][1];
+    document.title = `${VIEWS[view][0]} | Noor ul Quran Admin`;
+    setDrawer(false);
+    window.scrollTo(0, 0);
+}
+
+for (const [key, c] of Object.entries(MEDIA)) {
+    buildMediaView(key, c);
+    setupUpload(key, c);
+}
+window.addEventListener("hashchange", route);
+document.getElementById("ad-burger").addEventListener("click", () => setDrawer(!document.body.classList.contains("ad-nav-open")));
+document.getElementById("ad-backdrop").addEventListener("click", () => setDrawer(false));
+document.addEventListener("keydown", (event) => { if (event.key === "Escape" && document.body.classList.contains("ad-nav-open")) { setDrawer(false); document.getElementById("ad-burger").focus(); } });
+route();
+noteActivity();
+renderAttention();
 
 document.getElementById("refresh-users").addEventListener("click", () => loadUsers());
 document.getElementById("refresh-audit").addEventListener("click", () => loadAudit());
+document.getElementById("user-sort").addEventListener("change", () => renderUsers(usersRows));
 document.getElementById("user-search").addEventListener("input", () => {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(reloadUsersFromStart, 300);
 });
-document.querySelectorAll(".ad-chips button").forEach((chip) => {
+document.querySelectorAll("#users-section .ad-chips button").forEach((chip) => {
     chip.addEventListener("click", () => {
         document.getElementById("user-status").value = chip.dataset.status;
-        document.querySelectorAll(".ad-chips button").forEach((other) => other.setAttribute("aria-pressed", String(other === chip)));
+        document.querySelectorAll("#users-section .ad-chips button").forEach((other) => other.setAttribute("aria-pressed", String(other === chip)));
         reloadUsersFromStart();
     });
 });
