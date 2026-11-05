@@ -536,6 +536,8 @@ async function loadDiagnostics() {
             item.append(name, detail);
             grid.append(item);
         }
+        document.getElementById("stat-disk").textContent = megabytes(diagnostics.output_free_bytes);
+        document.getElementById("stat-disk-note").textContent = `free · Supabase ${diagnostics.supabase_url_set && diagnostics.supabase_service_role_key_set ? "configured" : "incomplete"}`;
         status.textContent = "Diagnostics updated.";
     } catch (error) {
         status.textContent = error.message || "Could not load diagnostics.";
@@ -554,8 +556,16 @@ async function loadAnalytics() {
             : "";
         adminRequest("/admin/ask-usage").then((u) => {
             const today = u.days.find((d) => d.day === new Date().toISOString().slice(0, 10));
+            document.getElementById("stat-ask").textContent = `${today ? today.n : 0}/${u.global_limit}`;
             document.getElementById("ask-usage").textContent = `Ask AI: ${u.enabled ? "on" : "OFF"} · today ${today ? today.n : 0}/${u.global_limit} · per-user limit ${u.user_limit} · key ${u.key_set ? "set" : "MISSING"} · last error: ${u.last_error || "none"}`;
         }).catch(() => {});
+        const latest = days[0];
+        if (latest) {
+            const set = (id, v) => { document.getElementById(id).textContent = v; };
+            set("stat-videos", latest.videos); set("stat-failures", latest.failures);
+            set("stat-render", latest.avg_render_secs ? `${latest.avg_render_secs}s` : "-");
+            set("stat-views", `${latest.views} / ${latest.uniques}`);
+        }
         if (!days.length) {
             status.dataset.kind = "empty";
             status.textContent = "No analytics yet (or the analytics table is not set up).";
@@ -583,8 +593,10 @@ async function loadAnalytics() {
         })));
         table.tBodies[0].replaceChildren(...days.map((d) => {
             const tr = document.createElement("tr");
-            for (const v of [d.day, d.views, d.uniques, d.signups, d.videos, d.failures, d.avg_render_secs ? `${d.avg_render_secs}s` : "-"]) {
+            const labels = ["Day", "Views", "Visitors", "Signups", "Videos", "Failed", "Avg render"];
+            for (const [i, v] of [d.day, d.views, d.uniques, d.signups, d.videos, d.failures, d.avg_render_secs ? `${d.avg_render_secs}s` : "-"].entries()) {
                 const td = document.createElement("td");
+                td.dataset.label = labels[i];
                 td.textContent = v;
                 tr.append(td);
             }
