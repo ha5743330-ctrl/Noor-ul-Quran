@@ -33,7 +33,7 @@
 
     function syncTheme() {
         const dark = currentTheme() === "dark";
-        document.querySelectorAll('meta[name="theme-color"]').forEach((m) => { m.content = dark ? "#07130f" : "#f2f6f3"; });
+        document.querySelectorAll('meta[name="theme-color"]').forEach((m) => { m.content = dark ? "#07130f" : "#f6f1e7"; });
         document.querySelectorAll(".theme-toggle").forEach((button) => {
             const label = dark ? "Switch to light mode" : "Switch to dark mode";
             button.setAttribute("aria-label", label);

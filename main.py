@@ -22,7 +22,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
 from threading import Lock
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 from urllib.parse import quote, urlencode
 from uuid import UUID, uuid4
 
@@ -247,6 +247,9 @@ class HistoryBulkRequest(BaseModel):
 
 class GenerateImageRequest(BaseModel):
     ayah: Optional[str] = Field(default=None, max_length=16)
+    style: Literal["emerald_gold", "ivory", "night_sky"] = "emerald_gold"
+    translation: Literal["en", "ur"] = "en"
+    show_surah: bool = True
 
 
 def validate_video_styles(styles):
@@ -731,7 +734,7 @@ def generate_ayah_image(req: GenerateImageRequest, user=Depends(get_current_user
     try:
         surah = _quran_data()["surahs"][str(surah_number)]
         arabic_text = renderer.verified_arabic_text(surah_number, ayah_number)
-        english_text = surah["english_ayahs"][str(ayah_number)]
+        english_text = surah["ayahs" if req.translation == "ur" else "english_ayahs"][str(ayah_number)]
         surah_name = surah["english"]
     except (KeyError, TypeError) as exc:
         LOGGER.exception("Curated ayah %s is missing from Quran data.", reference)
@@ -752,12 +755,16 @@ def generate_ayah_image(req: GenerateImageRequest, user=Depends(get_current_user
     filename = f"ayah-image-{uuid4().hex}.png"
     image_path = OUTPUT_DIR / filename
 
+    # Only non-default look options are passed, so the 5-argument renderer contract stays valid.
+    look = {k: v for k, v in (("style", req.style), ("translation", req.translation), ("show_surah", req.show_surah))
+            if v != GenerateImageRequest.model_fields[k].default}
     renderer.render_ayah_image(
         arabic_text,
         english_text,
         f"Surah {surah_name} {surah_number}:{ayah_number}",
         background_path,
         image_path,
+        **look,
     )
     if SUPABASE_SERVICE_KEY:
         _upload_media_file(image_path, f"ayah-images/{filename}", "image/png")

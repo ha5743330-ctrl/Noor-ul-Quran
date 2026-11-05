@@ -5,7 +5,7 @@
     <meta name="color-scheme" content="light dark">
     <script>try{var t=localStorage.getItem("noor-theme")}catch(e){}document.documentElement.dataset.theme=t==="dark"||t==="light"?t:matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"</script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#f2f6f3">
+    <meta name="theme-color" content="#f6f1e7">
     <meta name="description" content="Free Quran reel maker: pick ayat, choose Arabic with Urdu or English text, and download a ready-to-share portrait video. Live site: 35 s reels, 5 per day.">
     <link rel="canonical" href="/">
     <meta property="og:type" content="website">
@@ -16,130 +16,122 @@
     <title>Noor ul Quran | Quran Reel Studio</title>
     <script src="https://cdn.tailwindcss.com/3.4.16"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Nastaliq+Urdu:wght@400;600&display=swap" rel="stylesheet">
     <link rel="preload" href="/fonts/AmiriQuran-Regular.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/ui.css?v=14">
+    <link rel="stylesheet" href="/ui.css?v=15">
 </head>
-<body class="ui-page ui-landing min-h-screen selection:bg-emerald-100">
+<body class="ui-page lp min-h-screen">
     <a class="skip-link" href="#main">Skip to content</a>
     <header id="site-header"></header>
 
     <main id="main">
-        <section id="home" class="relative isolate flex min-h-[36rem] items-center overflow-hidden px-4 py-16 sm:px-6 sm:py-24">
-            <div class="pointer-events-none absolute inset-0" aria-hidden="true">
-                <img src="/assets/quran-background-1.jpg" alt="" class="hero-background-slide absolute inset-0 h-full w-full object-cover">
-                <img src="/assets/quran-background-2.jpg" alt="" class="hero-background-slide absolute inset-0 h-full w-full object-cover">
-                <img src="/assets/quran-background-3.jpg" alt="" class="hero-background-slide absolute inset-0 h-full w-full object-cover">
-                <div class="absolute inset-0 bg-gradient-to-b from-slate-950/75 via-slate-950/65 to-slate-950/90"></div>
-            </div>
-            <div class="pointer-events-none absolute left-1/2 top-12 h-72 w-72 -translate-x-1/2 rounded-full bg-amber-500/10 blur-3xl" aria-hidden="true"></div>
-            <div class="relative z-10 mx-auto max-w-4xl text-center">
-                <img src="/assets/logo.png" alt="" class="mx-auto mb-6 h-16 w-16 rounded-full bg-white object-contain shadow-xl shadow-amber-900/20 sm:h-20 sm:w-20">
-                <p class="mb-5 inline-flex items-center gap-2 rounded-full border border-amber-400/30 bg-amber-400/10 px-4 py-2 text-xs font-semibold text-amber-200 sm:text-sm">
-                    <i class="fa-solid fa-circle-play" aria-hidden="true"></i>
-                    Free · Arabic recitation · Urdu or English text
-                </p>
-                <h1 class="text-4xl font-extrabold leading-tight tracking-tight text-white sm:text-6xl">
-                    Quran reels, made
-                    <span class="bg-gradient-to-r from-amber-300 to-yellow-100 bg-clip-text text-transparent">with care.</span>
-                </h1>
-                <p class="mx-auto mt-5 max-w-2xl text-base leading-7 text-slate-300 sm:text-lg">
-                    Pick an ayah, choose how the text appears, and download a portrait reel in minutes.
-                </p>
-                <div class="mt-8 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center">
-                    <a href="/generate.html" class="inline-flex min-h-14 items-center justify-center gap-3 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-300 px-8 py-4 text-base font-extrabold text-slate-950 shadow-xl shadow-amber-500/10 transition hover:-translate-y-0.5 hover:brightness-110 sm:text-lg">
-                        <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i>
-                        Video banayein
-                    </a>
-                    <a href="#how-it-works" class="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-slate-600 px-6 py-3 font-semibold text-slate-100 hover:border-amber-300 hover:text-amber-200">
-                        See how it works <i class="fa-solid fa-arrow-down text-xs" aria-hidden="true"></i>
-                    </a>
+        <div id="home" class="lp-hero lp-wrap">
+            <div class="lp-hero-text">
+                <p class="lp-bismillah ar-text" lang="ar" dir="rtl">بِسۡمِ ٱللَّهِ ٱلرَّحۡمَٰنِ ٱلرَّحِيمِ</p>
+                <p class="lp-pill"><span aria-hidden="true"></span>Free · Arabic recitation · Urdu ya English tarjuma</p>
+                <h1>Quran ki ayat, <em>khoobsurat reels</em> mein.</h1>
+                <p class="lp-lead">Surah aur ayat chunein, qari aur tarjuma select karein, aur minutes mein portrait reel ya shareable Ayah Image download karein.</p>
+                <div class="lp-cta">
+                    <a class="lp-btn lp-btn-primary" href="/generate.html"><i class="fa-solid fa-play" aria-hidden="true"></i>Video banayein</a>
+                    <a class="lp-btn lp-btn-ghost" href="/generate.html#image"><i class="fa-regular fa-image" aria-hidden="true"></i>Ayah Image banayein</a>
                 </div>
-                <p dir="rtl" lang="ur" class="mt-8 text-base text-slate-300">قرآن کی آیات سے خوبصورت ویڈیو بنائیں</p>
+                <dl class="lp-stats">
+                    <div><dt>4</dt><dd>video modes</dd></div>
+                    <div><dt>20+</dt><dd>qari ki awazain</dd></div>
+                    <div><dt>Free</dt><dd>koi charge nahi</dd></div>
+                </dl>
             </div>
-        </section>
+            <div class="lp-phone-wrap" aria-hidden="true">
+                <div class="lp-phone">
+                    <div class="lp-sky"></div><div class="lp-moon"></div>
+                    <div class="lp-phone-text">
+                        <div class="ar-text lp-ph-surah" lang="ar" dir="rtl">سُورَةُ ٱلرَّحۡمَٰنِ</div>
+                        <div class="ar-text lp-ph-ayah" lang="ar" dir="rtl">أَلَّا تَطۡغَوۡاْ فِي ٱلۡمِيزَانِ</div>
+                        <div class="lp-ph-ur" lang="ur" dir="rtl">کہ تم تول میں زیادتی نہ کرو</div>
+                    </div>
+                    <div class="lp-ph-bar"><span class="lp-ph-play"></span><span class="lp-ph-track"><i></i></span><span>0:14</span></div>
+                </div>
+                <div class="lp-float"><b>55 · AR-RAHMAN</b><span class="ar-text" lang="ar" dir="rtl">ٱلرَّحۡمَٰنُ</span><small>The Most Merciful</small></div>
+            </div>
+        </div>
 
-        <section id="how-it-works" class="mx-auto max-w-5xl px-4 py-12 sm:px-6 sm:py-16">
-            <h2 class="mb-6 text-center text-3xl font-bold text-white">How it works</h2>
-            <ol class="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <li class="glass-card rounded-2xl p-5"><span class="mb-3 flex h-9 w-9 items-center justify-center rounded-full bg-amber-400 font-extrabold text-slate-950">1</span><h3 class="font-bold text-white">Pick ayat</h3><p class="mt-1 text-sm leading-6 text-slate-300">Choose a Surah and ayah range, or a ready-made pick.</p></li>
-                <li class="glass-card rounded-2xl p-5"><span class="mb-3 flex h-9 w-9 items-center justify-center rounded-full bg-amber-400 font-extrabold text-slate-950">2</span><h3 class="font-bold text-white">Choose a mode</h3><p class="mt-1 text-sm leading-6 text-slate-300">Set the reciter, text style and optional fade animation.</p></li>
-                <li class="glass-card rounded-2xl p-5"><span class="mb-3 flex h-9 w-9 items-center justify-center rounded-full bg-amber-400 font-extrabold text-slate-950">3</span><h3 class="font-bold text-white">Download</h3><p class="mt-1 text-sm leading-6 text-slate-300">Preview the reel, download it and copy the caption.</p></li>
+        <div class="lp-fan" aria-label="Ayah Image examples">
+            <figure class="lp-tilt lp-tilt-l lp-s-night"><b>94 · ASH-SHARH</b><span class="ar-text" lang="ar" dir="rtl">فَإِنَّ مَعَ ٱلۡعُسۡرِ يُسۡرًا</span><small>For indeed, with hardship comes ease.</small></figure>
+            <figure class="lp-tilt lp-tilt-c lp-s-emerald"><b>21 · AL-ANBIYA</b><span class="ar-text" lang="ar" dir="rtl">وَمَآ أَرۡسَلۡنَٰكَ إِلَّا رَحۡمَةٗ لِّلۡعَٰلَمِينَ</span><small>And We have not sent you except as a mercy to the worlds.</small></figure>
+            <figure class="lp-tilt lp-tilt-r lp-s-ivory"><b>2 · AL-BAQARA</b><span class="ar-text" lang="ar" dir="rtl">إِنَّ ٱللَّهَ مَعَ ٱلصَّٰبِرِينَ</span><small lang="ur" dir="rtl">بے شک اللہ صبر کرنے والوں کے ساتھ ہے</small></figure>
+        </div>
+
+        <div id="how-it-works" class="lp-wrap lp-block">
+            <p class="lp-eyebrow">HOW IT WORKS</p><h2>Teen qadam, ek reel.</h2>
+            <ol class="lp-grid lp-grid-3">
+                <li class="lp-card lp-step lp-c1"><span>1</span><h3>Ayat chunein</h3><p>Surah aur ayat ki range, ya ready-made pick. Lambai ke hisab se suggestions bhi milti hain.</p></li>
+                <li class="lp-card lp-step lp-c2"><span>2</span><h3>Style select karein</h3><p>Qari, Urdu ya English tarjuma, background video ya photo, aur text animation.</p></li>
+                <li class="lp-card lp-step lp-c3"><span>3</span><h3>Download aur share</h3><p>Portrait reel ya Ayah Image download karein aur Reels, Shorts ya WhatsApp par share karein.</p></li>
             </ol>
-        </section>
+        </div>
 
-        <section id="demo" class="mx-auto max-w-5xl px-4 py-12 sm:px-6 sm:py-16">
-            <h2 class="mb-2 text-center text-3xl font-bold text-white">Demo</h2>
-            <p class="mb-6 text-center text-sm text-slate-300">Sample reels and Ayah Images made with this studio. Tap play to preview.</p>
-            <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <figure class="glass-card rounded-2xl p-3 text-center">
-                    <video class="mx-auto w-full rounded-xl" style="aspect-ratio:9/16;object-fit:cover" controls preload="none" playsinline poster="/demo/reel-ikhlas.webp" src="/demo/reel-ikhlas.mp4"></video>
-                    <figcaption class="mt-2 text-sm font-semibold text-slate-100">Surah Al-Ikhlaas 112:1-4</figcaption>
-                    <a href="/generate.html?pick=112:1-4" class="mt-2 inline-flex min-h-11 items-center justify-center rounded-xl bg-amber-400 px-4 py-2 text-sm font-bold text-slate-950 hover:bg-amber-300">Try it</a>
-                </figure>
-                <figure class="glass-card rounded-2xl p-3 text-center">
-                    <video class="mx-auto w-full rounded-xl" style="aspect-ratio:9/16;object-fit:cover" controls preload="none" playsinline poster="/demo/reel-asr.webp" src="/demo/reel-asr.mp4"></video>
-                    <figcaption class="mt-2 text-sm font-semibold text-slate-100">Surah Al-Asr 103:1-3</figcaption>
-                    <a href="/generate.html?pick=103:1-3" class="mt-2 inline-flex min-h-11 items-center justify-center rounded-xl bg-amber-400 px-4 py-2 text-sm font-bold text-slate-950 hover:bg-amber-300">Try it</a>
-                </figure>
-                <figure class="glass-card rounded-2xl p-3 text-center">
-                    <video class="mx-auto w-full rounded-xl" style="aspect-ratio:9/16;object-fit:cover" controls preload="none" playsinline poster="/demo/reel-duha.webp" src="/demo/reel-duha.mp4"></video>
-                    <figcaption class="mt-2 text-sm font-semibold text-slate-100">Surah Ad-Dhuhaa 93:1-4</figcaption>
-                    <a href="/generate.html?pick=93:1-4" class="mt-2 inline-flex min-h-11 items-center justify-center rounded-xl bg-amber-400 px-4 py-2 text-sm font-bold text-slate-950 hover:bg-amber-300">Try it</a>
-                </figure>
-            </div>
-            <h3 class="mb-3 mt-10 text-center text-xl font-bold text-white">Ayah Images</h3>
-            <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                <a href="/generate.html?pick=1:2" class="block"><img src="/demo/ayah-1-2.webp" width="720" height="900" loading="lazy" decoding="async" alt="Ayah Image for 1:2" class="w-full rounded-xl border border-slate-700"></a>
-                <a href="/generate.html?pick=2:255" class="block"><img src="/demo/ayah-2-255.webp" width="720" height="900" loading="lazy" decoding="async" alt="Ayah Image for 2:255" class="w-full rounded-xl border border-slate-700"></a>
-                <a href="/generate.html?pick=3:8" class="block"><img src="/demo/ayah-3-8.webp" width="720" height="900" loading="lazy" decoding="async" alt="Ayah Image for 3:8" class="w-full rounded-xl border border-slate-700"></a>
-                <a href="/generate.html?pick=94:5" class="block"><img src="/demo/ayah-94-5.webp" width="720" height="900" loading="lazy" decoding="async" alt="Ayah Image for 94:5" class="w-full rounded-xl border border-slate-700"></a>
-                <a href="/generate.html?pick=112:1" class="block"><img src="/demo/ayah-112-1.webp" width="720" height="900" loading="lazy" decoding="async" alt="Ayah Image for 112:1" class="w-full rounded-xl border border-slate-700"></a>
-                <a href="/generate.html?pick=55:13" class="block"><img src="/demo/ayah-55-13.webp" width="720" height="900" loading="lazy" decoding="async" alt="Ayah Image for 55:13" class="w-full rounded-xl border border-slate-700"></a>
-            </div>
-            <p class="mt-6 text-center"><a href="/generate.html" class="inline-flex min-h-12 items-center justify-center rounded-xl bg-amber-400 px-6 py-3 font-extrabold text-slate-950 hover:bg-amber-300">Try it</a></p>
-        </section>
-
-        <section id="modes" class="border-y border-slate-800 bg-slate-900/40 px-4 py-12 sm:px-6 sm:py-16">
-            <div class="mx-auto max-w-5xl">
-                <h2 class="mb-6 text-center text-3xl font-bold text-white">Four modes</h2>
-                <ul class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <li class="glass-card rounded-2xl p-4 text-sm font-semibold text-slate-100"><i class="fa-solid fa-microphone-lines mr-2 text-amber-300" aria-hidden="true"></i>Urdu only (Urdu audio + text)</li>
-                    <li class="glass-card rounded-2xl p-4 text-sm font-semibold text-slate-100"><i class="fa-solid fa-language mr-2 text-amber-300" aria-hidden="true"></i>Arabic + Urdu (Arabic audio, Urdu audio)</li>
-                    <li class="glass-card rounded-2xl p-4 text-sm font-semibold text-slate-100"><i class="fa-solid fa-font mr-2 text-amber-300" aria-hidden="true"></i>Arabic + English text</li>
-                    <li class="glass-card rounded-2xl p-4 text-sm font-semibold text-slate-100"><i class="fa-solid fa-closed-captioning mr-2 text-amber-300" aria-hidden="true"></i>Arabic + Urdu text (no Urdu audio)</li>
-                </ul>
-                <div class="mx-auto mt-8 grid max-w-xl grid-cols-2 items-start gap-4">
-                    <img src="/assets/shot-reel.webp" width="480" height="854" loading="lazy" alt="A generated reel: Arabic ayah above, Urdu translation below, over a dark sunset background" class="w-full rounded-2xl border border-slate-700">
-                    <img src="/assets/shot-generate.webp" width="390" height="844" loading="lazy" alt="The generate page on a phone with ayah, mode and reciter settings" class="w-full rounded-2xl border border-slate-700">
-                </div>
-            </div>
-        </section>
-
-        <section id="limits" class="mx-auto max-w-3xl px-4 py-12 sm:px-6 sm:py-16">
-            <h2 class="mb-4 text-center text-3xl font-bold text-white">Honest limits</h2>
-            <ul class="space-y-2 text-sm leading-6 text-slate-200">
-                <li><i class="fa-solid fa-check mr-2 text-emerald-300" aria-hidden="true"></i>The free live site makes reels up to <strong>35 seconds</strong>, <strong>5 per day</strong> per account, one at a time.</li>
-                <li><i class="fa-solid fa-check mr-2 text-emerald-300" aria-hidden="true"></i>Longer reels (up to 180 s) need the local app.</li>
-                <li><i class="fa-solid fa-check mr-2 text-emerald-300" aria-hidden="true"></i>Generated files are deleted after 3 days. Download what you want to keep.</li>
+        <div id="modes" class="lp-wrap lp-block">
+            <p class="lp-eyebrow">VIDEO MODES</p><h2>Apni zaroorat ka andaz.</h2>
+            <ul class="lp-grid">
+                <li class="lp-card lp-mode lp-m1"><em>Urdu</em><h3>Urdu only</h3><p>Urdu audio + text, pura tarjuma saaf subtitles ke saath.</p></li>
+                <li class="lp-card lp-mode lp-m2"><em>Arabic + Urdu</em><h3>Arabic aur Urdu awaz</h3><p>Pehle qari ki tilawat, phir Urdu tarjuma.</p></li>
+                <li class="lp-card lp-mode lp-m3"><em>Arabic + English</em><h3>Arabic + English text</h3><p>Tilawat ke saath English subtitles.</p></li>
+                <li class="lp-card lp-mode lp-m4"><em>Arabic + Urdu text</em><h3>Arabic + Urdu text</h3><p>Tilawat ke saath Urdu subtitles, Urdu awaz ke baghair.</p></li>
             </ul>
-        </section>
+        </div>
 
-        <section id="faq" class="border-t border-slate-800 bg-slate-900/40 px-4 py-12 sm:px-6 sm:py-16">
-            <div class="mx-auto max-w-3xl">
-                <h2 class="mb-6 text-center text-3xl font-bold text-white">FAQ</h2>
-                <div class="space-y-3 text-sm leading-6 text-slate-300">
-                    <details class="glass-card rounded-2xl p-4"><summary class="cursor-pointer font-semibold text-white">Is it free?</summary><p class="mt-2">Yes, within the daily limit. There are no ads.</p></details>
-                    <details class="glass-card rounded-2xl p-4"><summary class="cursor-pointer font-semibold text-white">Can I post the reels on social media?</summary><p class="mt-2">Yes, keep the on-video credit and do not change the text. Selling them or commercial use is not allowed. See the <a class="text-amber-300 underline" href="/terms.html">Terms</a>.</p></details>
-                    <details class="glass-card rounded-2xl p-4"><summary class="cursor-pointer font-semibold text-white">Do I need an account?</summary><p class="mt-2">Yes. Sign in with email to create reels and keep a 3-day history.</p></details>
-                    <details class="glass-card rounded-2xl p-4"><summary class="cursor-pointer font-semibold text-white">Where does the Urdu text come from?</summary><p class="mt-2">Fateh Muhammad Jalandhry (via AlQuran Cloud), or Mufti Taqi Usmani when the site owner has installed that text.</p></details>
-                </div>
+        <div id="images" class="lp-wrap lp-block">
+            <div class="lp-row"><div><p class="lp-eyebrow">AYAH IMAGES</p><h2>Saaf aur simple ayah images.</h2>
+            <p class="lp-lead">Teen styles (Emerald Gold, Ivory, Night Sky), English ya Urdu tarjuma, aur surah ka naam aur raqam.</p></div>
+            <a class="lp-btn lp-btn-ghost" href="/generate.html#image">Image banayein</a></div>
+        </div>
+
+        <div id="demo" class="lp-wrap lp-block">
+            <p class="lp-eyebrow">DEMO</p><h2>Real reels aur images</h2>
+            <p class="lp-lead">Sample reels and Ayah Images made with this studio. Tap play to preview.</p>
+            <div class="lp-grid lp-grid-3">
+                <figure class="lp-card lp-reel">
+                    <video controls preload="none" playsinline poster="/demo/reel-ikhlas.webp" src="/demo/reel-ikhlas.mp4"></video>
+                    <figcaption>Surah Al-Ikhlaas 112:1-4</figcaption>
+                    <a class="lp-btn lp-btn-primary" href="/generate.html?pick=112:1-4">Try it</a>
+                </figure>
+                <figure class="lp-card lp-reel">
+                    <video controls preload="none" playsinline poster="/demo/reel-asr.webp" src="/demo/reel-asr.mp4"></video>
+                    <figcaption>Surah Al-Asr 103:1-3</figcaption>
+                    <a class="lp-btn lp-btn-primary" href="/generate.html?pick=103:1-3">Try it</a>
+                </figure>
+                <figure class="lp-card lp-reel">
+                    <video controls preload="none" playsinline poster="/demo/reel-duha.webp" src="/demo/reel-duha.mp4"></video>
+                    <figcaption>Surah Ad-Dhuhaa 93:1-4</figcaption>
+                    <a class="lp-btn lp-btn-primary" href="/generate.html?pick=93:1-4">Try it</a>
+                </figure>
             </div>
-        </section>
+            <div class="lp-imgs"><a href="/generate.html?pick=1:2"><img src="/demo/ayah-1-2.webp" width="720" height="900" loading="lazy" decoding="async" alt="Ayah Image for 1:2"></a><a href="/generate.html?pick=2:255"><img src="/demo/ayah-2-255.webp" width="720" height="900" loading="lazy" decoding="async" alt="Ayah Image for 2:255"></a><a href="/generate.html?pick=3:8"><img src="/demo/ayah-3-8.webp" width="720" height="900" loading="lazy" decoding="async" alt="Ayah Image for 3:8"></a><a href="/generate.html?pick=94:5"><img src="/demo/ayah-94-5.webp" width="720" height="900" loading="lazy" decoding="async" alt="Ayah Image for 94:5"></a><a href="/generate.html?pick=112:1"><img src="/demo/ayah-112-1.webp" width="720" height="900" loading="lazy" decoding="async" alt="Ayah Image for 112:1"></a><a href="/generate.html?pick=55:13"><img src="/demo/ayah-55-13.webp" width="720" height="900" loading="lazy" decoding="async" alt="Ayah Image for 55:13"></a></div>
+        </div>
 
-        <section class="px-4 py-12 text-center sm:px-6">
-            <a href="/generate.html" class="inline-flex min-h-14 items-center justify-center gap-3 rounded-xl bg-amber-400 px-8 py-4 text-base font-extrabold text-slate-950 hover:bg-amber-300"><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i>Video banayein</a>
-        </section>
+        <div id="limits" class="lp-wrap lp-block lp-narrow">
+            <h2>Honest limits</h2>
+            <ul class="lp-limits">
+                <li>The free live site makes reels up to <strong>35 seconds</strong>, <strong>5 per day</strong> per account, one at a time.</li>
+                <li>Longer reels (up to 180 s) need the local app.</li>
+                <li>Generated files are deleted after 3 days. Download what you want to keep.</li>
+            </ul>
+        </div>
+
+        <div id="faq" class="lp-wrap lp-block lp-narrow">
+            <h2>FAQ</h2>
+            <details class="lp-card"><summary>Is it free?</summary><p>Yes, within the daily limit. There are no ads.</p></details>
+            <details class="lp-card"><summary>Can I post the reels on social media?</summary><p>Yes, keep the on-video credit and do not change the text. Selling them or commercial use is not allowed. See the <a href="/terms.html">Terms</a>.</p></details>
+            <details class="lp-card"><summary>Do I need an account?</summary><p>Yes. Sign in with email to create reels and keep a 3-day history.</p></details>
+            <details class="lp-card"><summary>Where does the Urdu text come from?</summary><p>Fateh Muhammad Jalandhry (via AlQuran Cloud), or Mufti Taqi Usmani when the site owner has installed that text.</p></details>
+        </div>
+
+        <div class="lp-wrap lp-block">
+            <div class="lp-final">
+                <div><h2>Pehli reel abhi banayein.</h2><p class="lp-lead">Sign up free hai. Koi payment ya card nahi chahiye.</p></div>
+                <a class="lp-btn lp-btn-primary" href="/generate.html"><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i>Free shuru karein</a>
+            </div>
+        </div>
     </main>
 
     <footer class="border-t border-slate-800 px-4 py-6 text-center text-xs leading-6 text-slate-400">

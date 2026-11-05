@@ -1031,59 +1031,114 @@ def chunk_bilingual_png(
         draw_ornament(draw, cx, center_y - box_height // 2, ornament, scale)
     im.save(path)
 
-def render_ayah_image(arabic_text, english_text, reference, background_path, output_path):
-    width, height = 1080, 1350
-    image = ImageOps.fit(
-        Image.open(background_path).convert("RGB"),
-        (width, height),
-        method=Image.Resampling.LANCZOS,
-    ).convert("RGBA")
-    image = Image.alpha_composite(
-        image,
-        Image.new("RGBA", image.size, (5, 10, 20, 112)),
-    )
-    draw = ImageDraw.Draw(image)
-    reference_font = load_font("amiri_bold", 36)
-    put(
-        draw, (width // 2, 155), reference, reference_font,
-        (255, 224, 140, 255), stroke=1, direction="ltr", language="en",
-    )
+AYAH_IMAGE_STYLES = {
+    # bg = vertical gradient stops (pos, rgb); veil = how much of it covers the photo (photo stays as texture).
+    "emerald_gold": dict(bg=[(0, (23, 81, 59)), (.55, (11, 42, 31)), (1, (7, 23, 16))], veil=225,
+                         arabic=(251, 243, 220), text=(243, 235, 211), accent=(227, 179, 65),
+                         label=(240, 198, 90), foot=(201, 190, 154), frame=True),
+    "ivory": dict(bg=[(0, (246, 240, 226)), (1, (240, 232, 214))], veil=238,
+                  arabic=(15, 77, 53), text=(27, 42, 36), accent=(180, 129, 26),
+                  label=(138, 100, 16), foot=(91, 109, 99), frame=True),
+    "night_sky": dict(bg=[(0, (7, 20, 42)), (.46, (15, 47, 82)), (.86, (181, 97, 58)), (1, (42, 23, 16))], veil=215,
+                      arabic=(255, 255, 255), text=(255, 255, 255), accent=(247, 235, 203),
+                      label=(247, 235, 203), foot=(242, 230, 203), frame=False),
+}
+_ARABIC_DIGITS = str.maketrans("0123456789", "٠١٢٣٤٥٦٧٨٩")
 
+
+def _vertical_gradient(size, stops):
+    w, h = size
+    ramp = Image.new("RGB", (1, h))
+    px = []
+    for y in range(h):
+        t = y / max(1, h - 1)
+        for (p0, c0), (p1, c1) in zip(stops, stops[1:]):
+            if t <= p1:
+                f = (t - p0) / (p1 - p0) if p1 > p0 else 0
+                px.append(tuple(int(a + (b - a) * f) for a, b in zip(c0, c1)))
+                break
+        else:
+            px.append(stops[-1][1])
+    ramp.putdata(px)
+    return ramp.resize((w, h))
+
+
+def _ornament_circle(draw, cx, cy, number, color, size=62):
+    r = size // 2
+    draw.ellipse((cx - r - 6, cy - r - 6, cx + r + 6, cy + r + 6), outline=color[:3] + (70,), width=3)
+    draw.ellipse((cx - r, cy - r, cx + r, cy + r), outline=color, width=3)
+    font = load_font("amiri_bold", 28)
+    draw.text((cx, cy), str(number).translate(_ARABIC_DIGITS), font=font, fill=color, anchor="mm",
+              direction="rtl", language="ar")
+
+
+def _divider(draw, cx, y, color):
+    for sign in (-1, 1):
+        for i in range(120):
+            a = int(255 * i / 120)
+            x = cx + sign * (22 + 120 - i)
+            draw.line((x, y, x, y + 1), fill=color[:3] + (a,))
+    draw.polygon([(cx, y - 8), (cx + 8, y), (cx, y + 8), (cx - 8, y)], fill=color)
+
+
+def render_ayah_image(arabic_text, english_text, reference, background_path, output_path,
+                      style="emerald_gold", translation="en", show_surah=True):
+    """Ayah Image in one of AYAH_IMAGE_STYLES. translation="ur" treats english_text as the Urdu text."""
+    pal = AYAH_IMAGE_STYLES.get(style) or AYAH_IMAGE_STYLES["emerald_gold"]
+    urdu = translation == "ur"
+    width, height = 1080, 1350
     try:
-        surah_number = int(reference.rsplit(" ", 1)[-1].split(":", 1)[0])
+        surah_number, ayah_number = (int(v) for v in reference.rsplit(" ", 1)[-1].split(":", 1))
     except (ValueError, IndexError):
         raise ValueError("Ayah image reference must end with a surah:ayah number.")
-    arabic_text = ayah_text_without_bismillah(arabic_text, surah_number)
-    arabic_text = arabic_text.lstrip("\ufeff").strip()
-    english_text = english_text.strip()
+    photo = ImageOps.fit(Image.open(background_path).convert("RGB"), (width, height),
+                         method=Image.Resampling.LANCZOS)
+    veil = _vertical_gradient((width, height), pal["bg"])
+    image = Image.blend(photo, veil, pal["veil"] / 255).convert("RGBA")
+    overlay = Image.new("RGBA", image.size, (0, 0, 0, 0))  # translucent shapes + text; composited once at the end
+    draw = ImageDraw.Draw(overlay)
+    accent, cx = pal["accent"] + (255,), width // 2
+    if pal["frame"]:
+        draw.rounded_rectangle((40, 40, width - 40, height - 40), radius=34, outline=accent[:3] + (140,), width=2)
+        draw.rounded_rectangle((58, 58, width - 58, height - 58), radius=24, outline=accent[:3] + (60,), width=2)
+
+    if show_surah:
+        if urdu:
+            name = normalize_surah_title("سورۃ " + strip_harakat_surah(
+                load_quran()["surahs"][str(surah_number)]["name"]).replace("سورة", "").strip())
+            label, lfont, ldir, llang = f"{surah_number} · {name}", load_font("nastaliq_bold", 38), "rtl", "ur"
+        else:
+            name = reference.rsplit(" ", 1)[0].removeprefix("Surah ").strip().upper()
+            label, lfont, ldir, llang = f"{surah_number} · {name}", load_font("amiri_bold", 38), "ltr", "en"
+        box = draw.textbbox((cx, 150), label, font=lfont, anchor="ma", direction=ldir, language=llang)
+        draw.rounded_rectangle((box[0] - 34, box[1] - 16, box[2] + 34, box[3] + 16), radius=40,
+                               fill=accent[:3] + (36,), outline=accent[:3] + (130,), width=2)
+        put(draw, (cx, 150), label, lfont, pal["label"] + (255,), stroke=0, direction=ldir, language=llang)
+
+    arabic_text = ayah_text_without_bismillah(arabic_text, surah_number).lstrip("\ufeff").strip()
+    # The verse number is drawn as the ornament circle below, so drop the font's trailing end-of-ayah digits.
+    arabic_text = re.sub(r"[\s\u00a0]*[\u0660-\u0669]+$", "", arabic_text)
+    text = english_text.strip()
     max_width = width - 210
+    ornament_h, divider_h = 100, 70
     fitted = None
-    # Normal layout first; very long ayahs (e.g. 2:255, 2:282, 2:286) fall back to the documented
-    # "long" layout: smaller Arabic/English sizes and a taller text area. Text itself is never altered.
-    for arabic_sizes, english_sizes, text_area_height in (
-        (range(82, 35, -2), range(34, 19, -1), 820),
-        (range(36, 21, -2), range(22, 13, -1), 872),
-    ):
-        for arabic_size in arabic_sizes:
-            arabic_font = load_font(QURAN_ARABIC_FONT, arabic_size)
-            arabic_lines = wrap(arabic_text, arabic_font, max_width, language="ar")
-            arabic_text_height = quran_arabic_text_height(
-                arabic_lines, arabic_font, stroke=2
-            )
-            for english_size in english_sizes:
-                english_font = load_font("amiri_regular", english_size)
-                english_lines = wrap_english(english_text, english_font, max_width)
-                english_line_height = int(english_size * 1.4)
-                text_height = (
-                    arabic_text_height
-                    + 42
-                    + english_line_height * len(english_lines)
-                )
-                if text_height <= text_area_height:
-                    fitted = (
-                        arabic_lines, english_lines, arabic_font, english_font,
-                        arabic_text_height, english_line_height, text_height,
-                    )
+    # Very long ayahs (2:255, 2:282) fall back to smaller sizes; the text itself is never altered.
+    tiers = (
+        (range(80, 35, -2), range(52, 26, -2) if urdu else range(34, 19, -1), 780),
+        (range(36, 21, -2), range(30, 16, -2) if urdu else range(22, 13, -1), 860),
+    )
+    for arabic_sizes, tr_sizes, area in tiers:
+        for asz in arabic_sizes:
+            afont = load_font(QURAN_ARABIC_FONT, asz)
+            alines = wrap(arabic_text, afont, max_width, language="ar")
+            ah = quran_arabic_text_height(alines, afont, stroke=0)
+            for tsz in tr_sizes:
+                tfont = load_font("nastaliq_regular" if urdu else "amiri_regular", tsz)
+                tlines = wrap(text, tfont, max_width, language="ur") if urdu else wrap_english(text, tfont, max_width)
+                lh = int(tsz * (2.2 if urdu else 1.4))
+                total = ah + ornament_h + divider_h + lh * len(tlines)
+                if total <= area:
+                    fitted = (alines, tlines, afont, tfont, ah, lh, total)
                     break
             if fitted:
                 break
@@ -1091,53 +1146,31 @@ def render_ayah_image(arabic_text, english_text, reference, background_path, out
             break
     if fitted is None:
         raise ValueError("Ayah text does not fit on the image.")
+    alines, tlines, afont, tfont, ah, lh, total = fitted
+    block_top = 700 - total // 2
+    positions, atop, _ = quran_arabic_line_layout(alines, afont, stroke=0)
+    y = block_top - atop
+    for i, line in enumerate(alines):
+        put(draw, (cx, y), line, afont, pal["arabic"] + (255,), stroke=0, language="ar")
+        if i + 1 < len(alines):
+            y += positions[i + 1] - positions[i]
+    y = block_top + ah + ornament_h // 2
+    _ornament_circle(draw, cx, y, ayah_number, accent)
+    y += ornament_h // 2 + divider_h // 2 - 10
+    _divider(draw, cx, y, accent)
+    y += divider_h // 2 + 10
+    for line in tlines:
+        put(draw, (cx, y), line, tfont, pal["text"] + (255,), stroke=0,
+            direction="rtl" if urdu else "ltr", language="ur" if urdu else "en")
+        y += lh
 
-    (
-        arabic_lines, english_lines, arabic_font, english_font,
-        arabic_text_height, english_line_height, text_height,
-    ) = fitted
-    padding = 44
-    card_height = text_height + 2 * padding
-    center_y = 700
-    card_top = center_y - card_height // 2
-    card_bottom = center_y + (card_height + 1) // 2
-    if card_top < 220 or card_bottom > 1180:
-        raise ValueError("Ayah text does not fit on the image.")
-    draw.rounded_rectangle(
-        (62, card_top, width - 62, card_bottom),
-        radius=34,
-        fill=(4, 9, 18, 179),
-        outline=(255, 224, 140, 95),
-        width=2,
-    )
-    block_top = center_y - text_height // 2
-    arabic_positions, arabic_top, _ = quran_arabic_line_layout(
-        arabic_lines, arabic_font, stroke=2
-    )
-    y = block_top - arabic_top
-    for index, line in enumerate(arabic_lines):
-        put(
-            draw, (width // 2, y), line, arabic_font,
-            (255, 224, 140, 255), stroke=2, language="ar",
-        )
-        if index + 1 < len(arabic_lines):
-            y += arabic_positions[index + 1] - arabic_positions[index]
-    y = block_top + arabic_text_height + 42
-    for line in english_lines:
-        put(
-            draw, (width // 2, y), line, english_font,
-            (248, 250, 252, 255), stroke=1, direction="ltr", language="en",
-        )
-        y += english_line_height
-
-    attribution_font = load_font("amiri_regular", 22)
-    put(
-        draw, (width // 2, 1215),
-        "Translation: Mohammed Marmaduke William Pickthall",
-        attribution_font, (235, 238, 242, 255),
-        stroke=1, direction="ltr", language="en",
-    )
-    image.convert("RGB").save(output_path, format="PNG", optimize=True)
+    handle = os.getenv("BRAND_HANDLE", "").strip()
+    put(draw, (cx, 1225), f"{surah_number}:{ayah_number}" + (f"  ·  {handle}" if handle else ""),
+        load_font("amiri_regular", 30), pal["foot"] + (255,), stroke=0, direction="ltr", language="en")
+    credit = "ترجمہ: فتح محمد جالندھری" if urdu else "Translation: Pickthall"
+    put(draw, (cx, 1150 if urdu else 1268), credit, load_font("nastaliq_regular" if urdu else "amiri_regular", 24),
+        pal["foot"] + (200,), stroke=0, direction="rtl" if urdu else "ltr", language="ur" if urdu else "en")
+    Image.alpha_composite(image, overlay).convert("RGB").save(output_path, format="PNG", optimize=True)
 
 @functools.cache
 def load_quran():

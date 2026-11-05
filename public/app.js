@@ -75,7 +75,7 @@ async function generateAyahImage(event) {
                 "Content-Type": "application/json",
                 Authorization: "Bearer " + session.access_token
             },
-            body: JSON.stringify(ayahToSend(reference))
+            body: JSON.stringify({ ...ayahToSend(reference), ...imageLook() })
         });
         const result = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(result.detail || `Image generation failed (HTTP ${response.status}).`);
@@ -1393,6 +1393,15 @@ function pickRefs(count) {
 }
 
 // Empty input: pick here so "random" respects the chosen theme and the last-10 memory.
+function imageLook() {
+    const v = id => document.getElementById(id)?.value;
+    return {
+        style: v("image-style") || "emerald_gold",
+        translation: v("image-translation") || "en",
+        show_surah: document.getElementById("image-show-surah")?.checked !== false
+    };
+}
+
 function ayahToSend(reference) {
     const ref = reference || pickRefs(1)[0];
     if (!ref) return {};

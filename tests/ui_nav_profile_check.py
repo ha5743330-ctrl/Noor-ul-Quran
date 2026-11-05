@@ -128,7 +128,7 @@ try:
         page.goto(f"{BASE}/library.html", wait_until="networkidle")
         page.wait_for_selector(".nav-chip-name")
         labels = page.locator(".nav-links .nav-link").all_inner_texts()
-        check("desktop nav items", [x.strip() for x in labels] == ["Home", "Generate", "Library", "Profile", "Admin", "Sign Out"], str(labels))
+        check("desktop nav items", [x.strip() for x in labels] == ["Home", "Generate", "Search", "Ask AI", "Library", "Profile", "Admin", "Sign Out"], str(labels))
         check("active item is Library", page.locator('.nav-links [aria-current="page"]').inner_text().strip() == "Library")
         check("chip shows display name", page.locator(".nav-chip-name").inner_text() == "Aisha Khan")
         page.context.close()
@@ -258,7 +258,7 @@ try:
         page.goto(f"{BASE}/privacy.html", wait_until="networkidle")
         page.wait_for_selector(".nav-bar")
         labels = [x.strip() for x in page.locator(".nav-links .nav-link").all_inner_texts()]
-        check("logged-out nav is Home | Sign In", labels == ["Home", "Sign In"], str(labels))
+        check("logged-out nav is Home | Sign In", labels == ["Home", "Search", "Ask AI", "Sign In"], str(labels))
         context.close()
 
         browser.close()

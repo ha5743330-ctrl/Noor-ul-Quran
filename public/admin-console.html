@@ -5,18 +5,18 @@
     <meta name="color-scheme" content="light dark">
     <script>try{var t=localStorage.getItem("noor-theme")}catch(e){}document.documentElement.dataset.theme=t==="dark"||t==="light"?t:matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"</script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <meta name="theme-color" content="#f2f6f3">
+    <meta name="theme-color" content="#f6f1e7">
     <title>Noor ul Quran | Admin Access</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/ui.css?v=14">
+    <link rel="stylesheet" href="/ui.css?v=15">
 </head>
 <body class="ui-page ui-admin">
     <a class="skip-link" href="#main">Skip to content</a>
     <header id="site-header"></header>
 
     <main id="main" class="ad-wrap">
-        <h1 class="page-title">Admin Access</h1>
+        <h1 class="page-title">Admin Dashboard</h1>
 
         <nav class="ad-jump" aria-label="Sections">
             <a href="#users-section">Users</a>
@@ -24,9 +24,9 @@
             <a href="#photos-section">Photos</a>
             <a href="#music-section">Music</a>
             <a href="#picks-section">Picks</a>
-            <a href="#audit-section">Audit</a>
             <a href="#analytics-section">Analytics</a>
-            <a href="#server-section">Server</a>
+            <a href="#audit-section">Audit</a>
+            <a href="#server-section">Settings</a>
         </nav>
 
         <div id="state-warning" class="ad-msg err" role="alert" hidden></div>
@@ -37,6 +37,12 @@
             <div class="ad-stat"><p class="ad-stat-label"><i class="fa-solid fa-crown" aria-hidden="true"></i> Premium</p><p id="stat-premium-users" class="ad-stat-num">0</p><p class="ad-stat-note">Premium access enabled</p></div>
             <div class="ad-stat"><p class="ad-stat-label"><i class="fa-solid fa-film" aria-hidden="true"></i> Clips</p><p id="stat-backgrounds" class="ad-stat-num">0</p><p class="ad-stat-note">Background MP4 files</p></div>
             <div class="ad-stat"><p class="ad-stat-label"><i class="fa-solid fa-shield-heart" aria-hidden="true"></i> Status</p><p id="ad-status" class="ad-stat-num ad-ok">Checking…</p><p id="ad-status-note" class="ad-stat-note">Contacting API</p></div>
+            <div class="ad-stat"><p class="ad-stat-label"><i class="fa-solid fa-clapperboard" aria-hidden="true"></i> Videos / day</p><p id="stat-videos" class="ad-stat-num">-</p><p class="ad-stat-note">Latest analytics day</p></div>
+            <div class="ad-stat"><p class="ad-stat-label"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> Failures</p><p id="stat-failures" class="ad-stat-num">-</p><p class="ad-stat-note">Failed renders, latest day</p></div>
+            <div class="ad-stat"><p class="ad-stat-label"><i class="fa-solid fa-stopwatch" aria-hidden="true"></i> Avg render</p><p id="stat-render" class="ad-stat-num">-</p><p class="ad-stat-note">Seconds per video</p></div>
+            <div class="ad-stat"><p class="ad-stat-label"><i class="fa-solid fa-eye" aria-hidden="true"></i> Views / visitors</p><p id="stat-views" class="ad-stat-num">-</p><p class="ad-stat-note">Latest analytics day</p></div>
+            <div class="ad-stat"><p class="ad-stat-label"><i class="fa-solid fa-comments" aria-hidden="true"></i> Ask AI today</p><p id="stat-ask" class="ad-stat-num">-</p><p class="ad-stat-note">Questions vs global limit</p></div>
+            <div class="ad-stat"><p class="ad-stat-label"><i class="fa-solid fa-hard-drive" aria-hidden="true"></i> Disk / Supabase</p><p id="stat-disk" class="ad-stat-num">-</p><p id="stat-disk-note" class="ad-stat-note">Output disk free</p></div>
         </div>
 
         <div class="ad-grid">
@@ -213,6 +219,6 @@
     <script src="/config.js"></script>
     <script src="/auth.js?v=9"></script>
     <script src="/nav.js?v=5"></script>
-    <script src="/admin.js?v=15"></script>
+    <script src="/admin.js?v=16"></script>
 </body>
 </html>

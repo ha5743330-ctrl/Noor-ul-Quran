@@ -58,6 +58,7 @@ try:
               page.input_value("#estimate-start") == "1" and page.input_value("#estimate-end") == "2"
               and page.input_value("#input-pick").endswith(":1-2"))
 
+        page.click("#tab-image")
         page.wait_for_selector("#image-theme option[value='tawhid']", state="attached")
         page.select_option("#image-theme", "sabr/patience")
         page.click("#image-suggest-button")

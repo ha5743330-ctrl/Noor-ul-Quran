@@ -5,13 +5,13 @@
     <meta name="color-scheme" content="light dark">
     <script>try{var t=localStorage.getItem("noor-theme")}catch(e){}document.documentElement.dataset.theme=t==="dark"||t==="light"?t:matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"</script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#f2f6f3">
+    <meta name="theme-color" content="#f6f1e7">
     <title>Generate a Reel | Noor ul Quran</title>
     <script src="https://cdn.tailwindcss.com/3.4.16"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="preload" href="/fonts/AmiriQuran-Regular.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/ui.css?v=14">
+    <link rel="stylesheet" href="/ui.css?v=15">
 </head>
 <body class="ui-page ui-generate min-h-screen selection:bg-emerald-100">
     <a class="skip-link" href="#main">Skip to content</a>
@@ -21,8 +21,8 @@
         <div class="mb-7 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
                 <p class="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-amber-300">Noor ul Quran Studio</p>
-                <h1 class="text-3xl font-extrabold tracking-tight text-white sm:text-4xl">Video banayein</h1>
-                <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-300">Ayat, style aur output settings chunein, phir apni reel preview aur download karein.</p>
+                <h1 class="text-3xl font-extrabold tracking-tight text-white sm:text-4xl">Studio</h1>
+                <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-300">Ayat chunein, andaz select karein, aur reel ya image banayein.</p>
             </div>
             <a href="/" class="w-fit rounded-lg border border-slate-700 px-3 py-2 text-sm font-medium text-slate-200 hover:border-amber-400 hover:text-amber-200">
                 <i class="fa-solid fa-arrow-left mr-2" aria-hidden="true"></i>Home
@@ -30,11 +30,16 @@
         </div>
         <p id="access-message" class="mb-5 hidden rounded-xl border border-amber-400/50 bg-amber-400/10 px-4 py-3 text-sm text-amber-100" role="alert" aria-live="polite"></p>
 
-        <form id="reel-generator-form" onsubmit="handleFormSubmit(event)" class="grid grid-cols-1 items-start gap-5 lg:grid-cols-2 lg:gap-7">
+        <div class="studio-tabs" role="tablist" aria-label="Output type">
+            <button type="button" role="tab" id="tab-reel" aria-selected="true" data-tab="reel"><i class="fa-solid fa-film" aria-hidden="true"></i> Video Reel</button>
+            <button type="button" role="tab" id="tab-image" aria-selected="false" data-tab="image"><i class="fa-regular fa-image" aria-hidden="true"></i> Ayah Image</button>
+        </div>
+
+        <form id="reel-generator-form" data-tab="reel" onsubmit="handleFormSubmit(event)" class="grid grid-cols-1 items-start gap-5 lg:grid-cols-2 lg:gap-7">
             <input type="hidden" id="mode-select" value="pick">
 
             <div class="space-y-5">
-                <section class="glass-card rounded-2xl p-4 shadow-xl sm:p-6" aria-labelledby="content-heading">
+                <section data-pane="reel" class="glass-card rounded-2xl p-4 shadow-xl sm:p-6" aria-labelledby="content-heading">
                     <div class="mb-5 flex items-center gap-3">
                         <span class="flex h-9 w-9 items-center justify-center rounded-full bg-amber-400/15 font-bold text-amber-300">1</span>
                         <div>
@@ -55,7 +60,13 @@
                         </button>
                     </div>
 
-                    <div class="mt-5">
+                    <div id="mode-tiles" class="mode-tiles mt-5" role="group" aria-label="Text and audio tiles">
+                        <button type="button" data-cm="urdu_only" style="--t:45 212 167"><b>Urdu</b><span>Sirf Urdu tarjuma</span></button>
+                        <button type="button" data-cm="full" style="--t:227 179 65"><b>Arabic + Urdu</b><span>Arabic aur Urdu awaz</span></button>
+                        <button type="button" data-cm="arabic_only" style="--t:96 165 250"><b>Arabic + English</b><span>Arabic aur English text</span></button>
+                        <button type="button" data-cm="arabic_urdu_text" style="--t:244 114 182"><b>Arabic + Urdu text</b><span>Urdu subtitles, no Urdu audio</span></button>
+                    </div>
+                    <div class="mt-4">
                         <label for="input-content-mode" class="mb-2 block text-sm font-semibold text-slate-200">Text and audio</label>
                         <select id="input-content-mode" dir="auto" class="control">
                             <option value="full">Arabic + Urdu (Arabic audio, Urdu audio)</option>
@@ -69,39 +80,9 @@
 
                 </section>
 
-                <section class="glass-card rounded-2xl p-4 shadow-xl sm:p-6 gen-card" aria-label="Reciter and voice">
-                    <details class="gen-acc">
-                    <summary>
+                <section data-pane="reel" class="glass-card rounded-2xl p-4 shadow-xl sm:p-6" aria-label="Surah and ayah">
                     <div class="mb-5 flex items-center gap-3">
                         <span class="flex h-9 w-9 items-center justify-center rounded-full bg-amber-400/15 font-bold text-amber-300">2</span>
-                        <div>
-                            <h2 class="text-lg font-bold text-white">Reciter &amp; voice</h2>
-                            <p class="text-xs text-slate-300">Choose the voices for this reel</p>
-                        </div>
-                    </div>
-                    <span id="sum-reciter" class="gen-val"></span>
-                    </summary>
-                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                        <div>
-                            <label for="input-reciter" class="mb-1.5 block text-sm font-semibold text-slate-200">Arabic reciter</label>
-                            <select id="input-reciter" class="control">
-                                <option value="alafasy">Mishary Rashid Alafasy</option>
-                            </select>
-                        </div>
-                        <div id="urdu-voice-control">
-                            <label for="input-urdu-voice" class="mb-1.5 block text-sm font-semibold text-slate-200">Urdu voice</label>
-                            <select id="input-urdu-voice" class="control">
-                                <option value="shamshad_ali_khan">Shamshad Ali Khan (Urdu)</option>
-                            </select>
-                        </div>
-                    </div>
-                    <p id="reciter-load-status" class="mt-2 hidden text-xs text-red-300" role="status"></p>
-                    </details>
-                </section>
-
-                <section class="glass-card rounded-2xl p-4 shadow-xl sm:p-6" aria-label="Surah and ayah">
-                    <div class="mb-5 flex items-center gap-3">
-                        <span class="flex h-9 w-9 items-center justify-center rounded-full bg-amber-400/15 font-bold text-amber-300">3</span>
                         <div>
                             <h2 class="text-lg font-bold text-white">Surah &amp; ayah</h2>
                             <p class="text-xs text-slate-300">Select the verse range to render</p>
@@ -155,7 +136,70 @@
                     </div>
                 </section>
 
-                <details class="advanced-style-card rounded-2xl border border-slate-700 bg-white p-2 shadow-xl">
+                <section data-pane="reel" class="glass-card rounded-2xl p-4 shadow-xl sm:p-6 gen-card" aria-label="Reciter and voice">
+                    <details class="gen-acc">
+                    <summary>
+                    <div class="mb-5 flex items-center gap-3">
+                        <span class="flex h-9 w-9 items-center justify-center rounded-full bg-amber-400/15 font-bold text-amber-300">3</span>
+                        <div>
+                            <h2 class="text-lg font-bold text-white">Reciter &amp; voice</h2>
+                            <p class="text-xs text-slate-300">Choose the voices for this reel</p>
+                        </div>
+                    </div>
+                    <span id="sum-reciter" class="gen-val"></span>
+                    </summary>
+                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <div>
+                            <label for="input-reciter" class="mb-1.5 block text-sm font-semibold text-slate-200">Arabic reciter</label>
+                            <select id="input-reciter" class="control">
+                                <option value="alafasy">Mishary Rashid Alafasy</option>
+                            </select>
+                        </div>
+                        <div id="urdu-voice-control">
+                            <label for="input-urdu-voice" class="mb-1.5 block text-sm font-semibold text-slate-200">Urdu voice</label>
+                            <select id="input-urdu-voice" class="control">
+                                <option value="shamshad_ali_khan">Shamshad Ali Khan (Urdu)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <p id="reciter-load-status" class="mt-2 hidden text-xs text-red-300" role="status"></p>
+                    </details>
+                </section>
+
+                <details data-pane="reel" class="background-music-card rounded-2xl border border-slate-700 bg-white p-2 shadow-xl">
+                    <summary class="cursor-pointer rounded-xl px-3 py-3 text-sm font-bold text-slate-200">Background &amp; music<span id="sum-background" class="gen-val"></span></summary>
+                    <div class="space-y-4 p-3">
+                            <div>
+                                <label for="input-background" class="mb-1.5 block text-sm font-semibold text-slate-200">Background source</label>
+                                <select id="input-background" class="control">
+                                    <option value="local">Local portrait clips (backgrounds/ folder)</option>
+                                    <option value="paxels" disabled>Nature &amp; landscapes — locked</option>
+                                    <option value="stars" disabled>Night sky &amp; space — locked</option>
+                                    <option value="timelapse" disabled>Cloud timelapses — locked</option>
+                                </select>
+                                <p class="mt-1.5 text-xs text-slate-400">Locked background sources are not available yet.</p>
+                            </div>
+                            <div>
+                                <label for="input-background-type" class="mb-1.5 block text-sm font-semibold text-slate-200">Background type</label>
+                                <select id="input-background-type" class="control">
+                                    <option value="video">Video clips</option>
+                                    <option value="photos">Photos</option>
+                                </select>
+                                <p class="mt-1.5 text-xs text-slate-400">Photos use the admin photo pool, with a slow zoom. They render faster and allow longer reels.</p>
+                            </div>
+                            <div>
+                                <label for="input-music" class="mb-1.5 block text-sm font-semibold text-slate-200">Background music (optional)</label>
+                                <select id="input-music" class="control">
+                                    <option value="">No background music</option>
+                                </select>
+                                <p id="arabic-only-audio-note" class="mt-2 hidden text-xs leading-5 text-amber-200" role="status">
+                                    Arabic-only videos use Quran recitation only; background music is disabled.
+                                </p>
+                            </div>
+                    </div>
+                </details>
+
+                <details data-pane="reel" class="advanced-style-card rounded-2xl border border-slate-700 bg-white p-2 shadow-xl">
                     <summary class="cursor-pointer rounded-xl px-3 py-3 text-sm font-bold text-slate-200">Advanced video style<span id="sum-style" class="gen-val"></span></summary>
                     <section class="glass-card rounded-2xl p-4 shadow-xl sm:p-6" aria-labelledby="video-style-heading">
                     <div class="mb-5 flex items-center gap-3">
@@ -236,7 +280,7 @@
                     </section>
                 </details>
 
-                <section class="glass-card rounded-2xl p-4 shadow-xl sm:p-6 gen-card" aria-labelledby="output-settings-heading">
+                <section data-pane="reel" class="glass-card rounded-2xl p-4 shadow-xl sm:p-6 gen-card" aria-labelledby="output-settings-heading">
                     <details class="gen-acc">
                     <summary>
                     <div class="mb-5 flex items-center gap-3">
@@ -274,40 +318,7 @@
                     </details>
                 </section>
 
-                <details class="background-music-card rounded-2xl border border-slate-700 bg-white p-2 shadow-xl">
-                    <summary class="cursor-pointer rounded-xl px-3 py-3 text-sm font-bold text-slate-200">Background &amp; music<span id="sum-background" class="gen-val"></span></summary>
-                    <div class="space-y-4 p-3">
-                            <div>
-                                <label for="input-background" class="mb-1.5 block text-sm font-semibold text-slate-200">Background source</label>
-                                <select id="input-background" class="control">
-                                    <option value="local">Local portrait clips (backgrounds/ folder)</option>
-                                    <option value="paxels" disabled>Nature &amp; landscapes — locked</option>
-                                    <option value="stars" disabled>Night sky &amp; space — locked</option>
-                                    <option value="timelapse" disabled>Cloud timelapses — locked</option>
-                                </select>
-                                <p class="mt-1.5 text-xs text-slate-400">Locked background sources are not available yet.</p>
-                            </div>
-                            <div>
-                                <label for="input-background-type" class="mb-1.5 block text-sm font-semibold text-slate-200">Background type</label>
-                                <select id="input-background-type" class="control">
-                                    <option value="video">Video clips</option>
-                                    <option value="photos">Photos</option>
-                                </select>
-                                <p class="mt-1.5 text-xs text-slate-400">Photos use the admin photo pool, with a slow zoom. They render faster and allow longer reels.</p>
-                            </div>
-                            <div>
-                                <label for="input-music" class="mb-1.5 block text-sm font-semibold text-slate-200">Background music (optional)</label>
-                                <select id="input-music" class="control">
-                                    <option value="">No background music</option>
-                                </select>
-                                <p id="arabic-only-audio-note" class="mt-2 hidden text-xs leading-5 text-amber-200" role="status">
-                                    Arabic-only videos use Quran recitation only; background music is disabled.
-                                </p>
-                            </div>
-                    </div>
-                </details>
-
-                <section class="generate-submit-wrap rounded-2xl border border-slate-700 bg-slate-950/95 p-3 shadow-2xl backdrop-blur lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none" aria-labelledby="generate-heading">
+                <section data-pane="reel" class="generate-submit-wrap rounded-2xl border border-slate-700 bg-slate-950/95 p-3 shadow-2xl backdrop-blur lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none" aria-labelledby="generate-heading">
                     <div class="glass-card rounded-2xl p-4 sm:p-5">
                         <div class="mb-3 flex items-center gap-3">
                             <span class="flex h-9 w-9 items-center justify-center rounded-full bg-amber-400/15 font-bold text-amber-300">5</span>
@@ -324,11 +335,11 @@
                     </div>
                 </section>
 
-                <section class="glass-card rounded-2xl p-4 shadow-xl sm:p-6" aria-label="Ayah image">
+                <section data-pane="image" class="glass-card rounded-2xl p-4 shadow-xl sm:p-6" aria-label="Ayah image">
                     <div class="mb-4 flex items-center gap-3">
                         <span class="flex h-9 w-9 items-center justify-center rounded-full bg-amber-400/15 font-bold text-amber-300"><i class="fa-regular fa-image" aria-hidden="true"></i></span>
                         <div>
-                            <h2 class="text-lg font-bold text-white">Ayah image</h2>
+                            <h2 class="text-lg font-bold text-white">Ayah Image</h2>
                             <p class="text-xs text-slate-300">Create a shareable portrait image</p>
                         </div>
                     </div>
@@ -344,7 +355,25 @@
                     <button id="generate-image-button" type="button" class="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-amber-300 px-5 py-3 text-sm font-bold text-amber-100 transition hover:bg-amber-400/10 disabled:cursor-wait disabled:opacity-50">
                         <i class="fa-regular fa-image" aria-hidden="true"></i>Generate Ayah Image
                     </button>
-                    <p class="mt-2 text-xs text-slate-400">Arabic, Pickthall English translation, and attribution.</p>
+                    <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <div>
+                            <label for="image-style" class="mb-1.5 block text-xs font-semibold text-slate-300">Style</label>
+                            <select id="image-style" class="control">
+                                <option value="emerald_gold">Emerald Gold</option>
+                                <option value="ivory">Ivory</option>
+                                <option value="night_sky">Night Sky</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="image-translation" class="mb-1.5 block text-xs font-semibold text-slate-300">Translation</label>
+                            <select id="image-translation" class="control">
+                                <option value="en">English</option>
+                                <option value="ur">Urdu</option>
+                            </select>
+                        </div>
+                    </div>
+                    <label class="mt-3 flex min-h-11 items-center gap-2 text-sm font-semibold text-slate-200"><input id="image-show-surah" type="checkbox" checked class="h-4 w-4">Show surah name + number (e.g. 21 · AL-ANBIYA)</label>
+                    <p class="mt-2 text-xs text-slate-400">Arabic with verse-number ornament, English (Pickthall) or Urdu (Jalandhry) translation.</p>
                     <p id="image-generation-status" class="mt-2 hidden text-sm text-amber-200" role="status" aria-live="polite"></p>
                 </section>
             </div>
@@ -474,5 +503,6 @@
     <script src="/nav.js?v=5"></script>
     <script src="/app.js?v=22"></script>
     <script src="/picks.js?v=3"></script>
+    <script src="/studio.js?v=1"></script>
 </body>
 </html>
