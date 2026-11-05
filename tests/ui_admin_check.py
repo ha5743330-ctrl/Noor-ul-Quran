@@ -116,7 +116,7 @@ try:
                 check(f"{width}px: no console errors", not page.errors, str(page.errors))
                 if width <= 820:
                     state = page.evaluate("[...document.querySelectorAll('details[data-sec]')].map(d => d.dataset.sec + ':' + d.open).join()")
-                    check(f"{width}px: users open, others collapsed", state == "users:true,clips:false,photos:false,music:false,picks:false,audit:false,server:false", state)
+                    check(f"{width}px: users open, others collapsed", state == "users:true,clips:false,photos:false,music:false,picks:false,audit:false,server:false,analytics:false", state)
                     page.click('.ad-jump a[href="#clips-section"]')
                     page.wait_for_timeout(2500)  # html has smooth scrolling
                     check(f"{width}px: chip opens + scrolls to section", page.evaluate("document.querySelector('#clips-section details').open && Math.abs(document.querySelector('#clips-section').getBoundingClientRect().top - 128) < 40 || document.documentElement.scrollTop + innerHeight >= document.documentElement.scrollHeight - 2"))

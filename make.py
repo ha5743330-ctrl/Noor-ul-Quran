@@ -1115,7 +1115,9 @@ def render_ayah_image(arabic_text, english_text, reference, background_path, out
                                fill=accent[:3] + (36,), outline=accent[:3] + (130,), width=2)
         put(draw, (cx, 150), label, lfont, pal["label"] + (255,), stroke=0, direction=ldir, language=llang)
 
-    arabic_text = ayah_text_without_bismillah(arabic_text, surah_number).lstrip("﻿").strip()
+    arabic_text = ayah_text_without_bismillah(arabic_text, surah_number).lstrip("\ufeff").strip()
+    # The verse number is drawn as the ornament circle below, so drop the font's trailing end-of-ayah digits.
+    arabic_text = re.sub(r"[\s\u00a0]*[\u0660-\u0669]+$", "", arabic_text)
     text = english_text.strip()
     max_width = width - 210
     ornament_h, divider_h = 100, 70
@@ -1133,7 +1135,7 @@ def render_ayah_image(arabic_text, english_text, reference, background_path, out
             for tsz in tr_sizes:
                 tfont = load_font("nastaliq_regular" if urdu else "amiri_regular", tsz)
                 tlines = wrap(text, tfont, max_width, language="ur") if urdu else wrap_english(text, tfont, max_width)
-                lh = int(tsz * (1.9 if urdu else 1.4))
+                lh = int(tsz * (2.2 if urdu else 1.4))
                 total = ah + ornament_h + divider_h + lh * len(tlines)
                 if total <= area:
                     fitted = (alines, tlines, afont, tfont, ah, lh, total)

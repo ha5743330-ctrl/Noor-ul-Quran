@@ -1296,7 +1296,7 @@ html[data-theme="dark"] body.ui-page a:not([class]) { color: var(--secondary); }
 #reel-generator-form[data-tab="reel"] [data-pane="image"] { display: none !important; }
 .mode-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .mode-tiles button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 12px 14px; border: 1.5px solid rgb(var(--t) / 0.55) !important; border-radius: 14px; background: rgb(var(--t) / 0.14) !important; color: var(--ink) !important; text-align: left; cursor: pointer; }
-.mode-tiles button span { color: var(--muted); font-size: 12px; line-height: 1.35; }
+.mode-tiles button span { color: var(--ink); font-size: 12px; line-height: 1.35; }
 .mode-tiles button[aria-pressed="true"] { background: rgb(var(--t) / 0.3) !important; box-shadow: 0 0 0 3px rgb(var(--t) / 0.35); }
 @media (min-width: 640px) { .mode-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 
@@ -1353,7 +1353,7 @@ body.ui-page .lp-btn-primary:hover { background: var(--accent-dark); color: var(
 .lp-tilt-r { transform: rotate(7deg) translateY(10px); }
 .lp-tilt-c { position: relative; z-index: 2; }
 .lp-tilt:hover { transform: translateY(-6px) rotate(0); z-index: 3; }
-.lp-s-night { background: linear-gradient(180deg, #0b2236, #14405a 55%, #c9763b); color: #fff; }
+.lp-s-night { background: linear-gradient(180deg, #0b2236, #14405a 55%, #7a3f1c); color: #fff; }
 .lp-s-night b { color: #f6e9c7; }
 .lp-s-emerald { background: radial-gradient(circle at 50% 0, #14402f, #08140f 75%); color: #f3ebd3; border: 1px solid rgb(227 179 65 / 50%); }
 .lp-s-emerald b { color: #f0c65a; }
@@ -1394,4 +1394,9 @@ body.ui-page .lp-btn-primary:hover { background: var(--accent-dark); color: var(
     .ad-table tr { margin-bottom: 10px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-soft); }
     .ad-table td { display: flex; justify-content: space-between; gap: 12px; border: 0; padding: 4px 0; text-align: right; }
     .ad-table td::before { content: attr(data-label); color: var(--muted); font-weight: 600; }
+}
+@media (max-width: 520px) {
+    .ad-stat { padding: 10px 12px; }
+    .ad-stat-num { font-size: 1.4rem; margin-top: 2px !important; }
+    .ad-stat-note:not(#ad-status-note) { display: none; }
 }
