@@ -186,6 +186,19 @@ function applyFreeTierLimits() {
     }
     const generateButton = document.getElementById("generate-button");
     if (generateButton && limitReached()) generateButton.disabled = true;
+    // Daily limit: a visible reason next to the button, removed again when slots are free.
+    let note = document.getElementById("limit-state");
+    if (generateButton && limitReached() && !note) {
+        note = document.createElement("p");
+        note.id = "limit-state";
+        note.className = "st-limit";
+        note.setAttribute("role", "status");
+        const icon = document.createElement("i");
+        icon.className = "fa-solid fa-hourglass-half";
+        icon.setAttribute("aria-hidden", "true");
+        note.append(icon, "Aaj ki video limit poori ho gayi. Kal dobara banayein; tab tak Library aur Search istemal karein.");
+        generateButton.insertAdjacentElement("beforebegin", note);
+    } else if (note && !limitReached()) note.remove();
 }
 
 function limitReached() {
@@ -555,14 +568,15 @@ async function loadMusicList() {
 
 async function initializeStudio() {
     const client = window.supabaseClient;
+    const main = document.getElementById("main");
     if (!client) {
-        redirectToAuth();
+        window.noorUi.gates.signedOut(main, "Generate");
         return;
     }
 
     const { data: { session }, error } = await client.auth.getSession();
     if (error || !session) {
-        redirectToAuth();
+        window.noorUi.gates.signedOut(main, "Generate");
         return;
     }
 
@@ -572,8 +586,7 @@ async function initializeStudio() {
         });
         if (!response.ok) {
             if (response.status === 401) {
-                await client.auth.signOut();
-                redirectToAuth();
+                window.noorUi.sessionExpired(); // its Login button signs out and returns here
                 return;
             }
             const result = await response.json();
@@ -586,7 +599,13 @@ async function initializeStudio() {
         if (remaining) remaining.textContent = "Daily limit: unavailable";
         const accessMessage = document.getElementById("access-message");
         if (accessMessage) {
-            accessMessage.textContent = error.message || "Could not load account access.";
+            accessMessage.textContent = `${window.noorUi.friendly(error)} `;
+            const retry = document.createElement("button");
+            retry.type = "button";
+            retry.className = "btn btn-outline btn-sm";
+            retry.textContent = "Retry";
+            retry.addEventListener("click", initializeStudio);
+            accessMessage.append(retry);
             accessMessage.classList.remove("hidden");
         }
         const generateButton = document.getElementById("generate-button");
@@ -636,8 +655,17 @@ async function generateVideo(event) {
     const generateButton = document.getElementById("generate-button");
 
     if (mode === "pick" && !verse) {
-        alert("Please enter a Surah:Verse range (e.g., 55:1-8)");
+        window.noorUi.fieldError(document.getElementById("input-pick"), "Surah:Start-End likhein, jaise 55:1-8.");
         return;
+    }
+    if (mode === "pick") {
+        const pickInput = document.getElementById("input-pick");
+        window.noorUi.clearField(pickInput);
+        if (!/^\d{1,3}:\d{1,3}(-\d{1,3})?$/.test(verse.trim())) {
+            window.noorUi.fieldError(pickInput, "Format Surah:Start-End hona chahiye, jaise 55:1-8.");
+            pickInput.focus();
+            return;
+        }
     }
     if (generateButton?.disabled) return;
     // Picks mode sends server pick ids (never refs); picks.js owns that selection.
@@ -722,6 +750,7 @@ async function generateVideo(event) {
             setBatchDownload(result.job_id || generationJobId, videos);
             renderGenerationWarnings(result.warnings || videos.flatMap((video) => video.warnings || []));
             showGeneratedVideos(videos);
+            window.noorUi.toast("Video tayyar hai");
             await refreshRecentVideos();
         } else {
             if (result.videos?.length) {
@@ -729,6 +758,10 @@ async function generateVideo(event) {
                 showGeneratedVideos(result.videos);
             }
             const errorMessage = result.error || result.detail || "Generation failed.";
+            if (response.status === 429 && window.userAccess) {
+                window.userAccess.daily_remaining = 0;
+                applyFreeTierLimits();
+            }
             if (logMsg) logMsg.innerText = "❌ Error: " + errorMessage;
             if (statusPercent) statusPercent.innerText = "0%";
             if (statusHeading) statusHeading.textContent = "Status: failed";
@@ -1136,7 +1169,13 @@ async function refreshRecentVideos() {
         setRecentVideosStatus("");
     } catch (error) {
         console.error("Recent video history error:", error);
-        setRecentVideosStatus(error.message || "Could not load recent videos.");
+        setRecentVideosStatus(`Recent videos load nahi hui. ${window.noorUi.friendly(error)} `);
+        const retry = document.createElement("button");
+        retry.type = "button";
+        retry.className = "btn btn-outline btn-sm";
+        retry.textContent = "Retry";
+        retry.addEventListener("click", refreshRecentVideos);
+        document.getElementById("recent-videos-status")?.append(retry);
     }
 }
 
@@ -1357,10 +1396,10 @@ async function copyCaption() {
     const caption = generatedVideos[currentVideoIndex]?.caption || "Generated with Noor ul Quran Auto Reel Maker #QuranReels #IslamicContent";
     try {
         await navigator.clipboard.writeText(caption);
-        alert("Caption copied to clipboard!");
+        window.noorUi.toast("Caption copy ho gaya");
     } catch (error) {
         console.error("Clipboard error:", error);
-        alert("Could not copy the caption. Check browser clipboard permissions.");
+        window.noorUi.toast("Copy nahi ho saka. Browser ki clipboard permission check karein.", "err");
     }
 }
 
@@ -1483,7 +1522,13 @@ async function loadRangeSuggestions() {
             return chip;
         }));
     } catch (error) {
-        box.textContent = error.message || "Suggestions unavailable.";
+        box.textContent = "Suggestions load nahi hue. ";
+        const retry = document.createElement("button");
+        retry.type = "button";
+        retry.className = "rounded-full border border-slate-500 px-3 py-1.5 text-xs font-semibold text-slate-100";
+        retry.textContent = "Retry";
+        retry.addEventListener("click", loadRangeSuggestions);
+        box.append(retry);
     }
 }
 

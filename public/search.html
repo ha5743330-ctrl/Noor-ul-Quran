@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="preload" href="/fonts/AmiriQuran-Regular.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/ui.css?v=14">
+    <link rel="stylesheet" href="/ui.css?v=16">
 </head>
 <body class="ui-page ui-search">
     <a class="skip-link" href="#main">Skip to content</a>
@@ -21,7 +21,7 @@
         <h1 class="page-title">Search Ayat</h1>
         <p class="page-sub">Arabic, Urdu ya English likhein (ya 2:255 jaisa reference). Sirf text search, tafseer quran.com par.</p>
 
-        <form id="sr-form" class="ui-card pf-card" role="search">
+        <form id="sr-form" class="ui-card pf-card" role="search" novalidate>
             <label for="sr-q" class="hint">Search text</label>
             <div class="sr-row">
                 <input id="sr-q" name="q" type="search" class="control" minlength="2" maxlength="100" autocomplete="off" required placeholder="e.g. patience, صبر, الحي القيوم">
@@ -29,7 +29,8 @@
             </div>
         </form>
 
-        <p id="sr-status" class="ui-state" data-kind="empty" role="status" aria-live="polite">Type at least 2 letters and press Search.</p>
+        <p id="sr-status" class="ui-state" data-kind="empty" role="status" aria-live="polite" hidden></p>
+        <div id="sr-extra" aria-live="polite"></div>
         <ul id="sr-list" class="sr-list"></ul>
     </main>
 
@@ -39,8 +40,9 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js" integrity="sha384-0w2KAL2YHP6wKOkUDzkCDGgVvfmHnj02DHeQ6XcHOgTfFsGyonKOpShMH1x6nk9o" crossorigin="anonymous"></script>
     <script src="/config.js"></script>
-    <script src="/auth.js?v=9"></script>
+    <script src="/ui-states.js?v=1"></script>
+    <script src="/auth.js?v=10"></script>
     <script src="/nav.js?v=5"></script>
-    <script src="/search.js?v=1"></script>
+    <script src="/search.js?v=2"></script>
 </body>
 </html>

@@ -44,6 +44,23 @@ function showResendConfirmation(show) {
     document.getElementById("btn-resend-confirmation")?.classList.toggle("hidden", !show);
 }
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// Inline errors under the exact field; returns true when everything is valid. Field values are never touched.
+function validateFields(checks) {
+    let first = null;
+    for (const [id, bad, message] of checks) {
+        const input = document.getElementById(id);
+        if (!input) continue;
+        if (bad(input)) {
+            window.noorUi?.fieldError(input, message);
+            first = first || input;
+        } else window.noorUi?.clearField(input);
+    }
+    first?.focus();
+    return !first;
+}
+const emailBad = (input) => !EMAIL_RE.test(input.value.trim());
+
 // 1. Sign In Handler
 async function handleSignIn(event) {
     if (event) event.preventDefault();
@@ -52,10 +69,10 @@ async function handleSignIn(event) {
     const password = document.getElementById("login-password")?.value;
     const submitBtn = document.getElementById("btn-login");
 
-    if (!email || !password) {
-        showAlert("Please enter both email and password.");
-        return;
-    }
+    if (!validateFields([
+        ["login-email", (i) => !i.value.trim() || emailBad(i), "Sahi email likhein, jaise name@example.com."],
+        ["login-password", (i) => !i.value, "Password likhein."]
+    ])) return;
 
     if (submitBtn) {
         submitBtn.disabled = true;
@@ -99,14 +116,12 @@ async function handleSignUp(event) {
     const password = document.getElementById("signup-password")?.value;
     const submitBtn = document.getElementById("btn-signup");
 
-    if (!fullName || !email || !password) {
-        showAlert("Please fill in all fields.");
-        return;
-    }
-    if (!document.getElementById("terms")?.checked) {
-        showAlert("Please agree to the Terms and Privacy Policy to continue.");
-        return;
-    }
+    if (!validateFields([
+        ["signup-name", (i) => !i.value.trim(), "Apna naam likhein."],
+        ["signup-email", (i) => !i.value.trim() || emailBad(i), "Sahi email likhein, jaise name@example.com."],
+        ["signup-password", (i) => i.value.length < 6, "Password kam az kam 6 characters ka ho."],
+        ["terms", (i) => !i.checked, "Terms aur Privacy Policy se ittefaq zaroori hai."]
+    ])) return;
 
     if (submitBtn) {
         submitBtn.disabled = true;
@@ -151,7 +166,8 @@ async function resendConfirmationEmail() {
     const email = document.getElementById("login-email")?.value.trim()
         || document.getElementById("signup-email")?.value.trim();
     if (!email) {
-        showAlert("Enter your email address first.");
+        const target = document.getElementById("login-email") || document.getElementById("signup-email");
+        if (target) window.noorUi?.fieldError(target, "Pehle apna email likhein.");
         return;
     }
 
@@ -167,6 +183,7 @@ async function resendConfirmationEmail() {
         if (error) throw error;
         showResendConfirmation(false);
         showAlert("Confirmation email sent. Check your inbox and spam folder.", false);
+        window.noorUi?.toast("Confirmation email bhej di gayi");
     } catch (error) {
         showAlert(error.message || "Could not resend confirmation email.", true);
     } finally {
@@ -204,7 +221,8 @@ async function handleForgot(event) {
     event.preventDefault();
     const button = document.getElementById("btn-forgot");
     const email = document.getElementById("forgot-email").value.trim();
-    if (!email || button.disabled) return;
+    if (button.disabled) return;
+    if (!validateFields([["forgot-email", emailBad, "Sahi email likhein, jaise name@example.com."]])) return;
     try {
         if (!supabaseClient) throw new Error("Supabase client unavailable.");
         const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
@@ -216,6 +234,7 @@ async function handleForgot(event) {
     }
     // Same message whether or not the account exists (no account enumeration).
     showAlert("If this email exists, a reset link was sent. Check your inbox and spam folder.", false);
+    window.noorUi?.toast("Reset email bhej di gayi");
     let left = 60;
     button.disabled = true;
     button.textContent = `Wait ${left}s`;

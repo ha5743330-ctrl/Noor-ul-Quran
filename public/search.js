@@ -5,6 +5,28 @@
     const list = document.getElementById("sr-list");
     const base = (window.NOOR_API_BASE_URL || window.NOOR_SUPABASE_CONFIG?.apiBaseUrl || "/api").replace(/\/$/, "");
 
+    const extra = document.getElementById("sr-extra");
+    const TOPICS = ["patience", "mercy", "forgiveness", "prayer", "gratitude"];
+
+    function topicChips(host) {
+        const row = document.createElement("div");
+        row.className = "st-topics";
+        TOPICS.forEach((topic) => {
+            const b = document.createElement("button");
+            b.type = "button";
+            b.className = "btn btn-outline btn-sm";
+            b.textContent = topic;
+            b.addEventListener("click", () => { input.value = topic; submit(topic); });
+            row.append(b);
+        });
+        host.append(row);
+    }
+
+    function firstView() {
+        setStatus("empty", "");
+        window.noorUi.empty(extra, { icon: "fa-magnifying-glass", title: "Ayat talash karein", text: "Arabic, Urdu ya English likhein, ya 2:255 jaisa reference.", action: { label: "Misaal: patience", onClick: () => { input.value = "patience"; submit("patience"); } } });
+    }
+
     function setStatus(kind, text) {
         status.hidden = !text;
         status.dataset.kind = kind;
@@ -44,27 +66,38 @@
 
     async function run(q) {
         list.replaceChildren();
-        setStatus("loading", "Searching…");
+        setStatus("empty", "");
+        window.noorUi.skeleton(extra, 3);
         try {
             const res = await fetch(`${base}/search?q=${encodeURIComponent(q)}`);
-            if (!res.ok) throw new Error("bad status");
+            if (!res.ok) { const e = new Error("bad status"); e.status = res.status; throw e; }
             const data = await res.json();
-            if (!data.results.length) { setStatus("empty", `No ayat found for “${q}”.`); return; }
+            extra.replaceChildren();
+            if (!data.results.length) {
+                const box = window.noorUi.empty(extra, { icon: "fa-magnifying-glass-minus", title: `"${q}" ke liye kuch nahi mila`, text: "Spelling check karein, ya in topics mein se koi try karein." });
+                topicChips(box);
+                return;
+            }
             setStatus("empty", data.total > data.results.length ? `Showing ${data.results.length} of ${data.total} matches. Narrow your search to see others.` : `${data.total} match${data.total === 1 ? "" : "es"}.`);
             list.replaceChildren(...data.results.map(render));
-        } catch {
-            setStatus("error", "Search failed. Please try again.");
+        } catch (err) {
+            window.noorUi.error(extra, { what: "Search", err, onRetry: () => run(q) });
         }
+    }
+
+    function submit(raw) {
+        const q = raw.trim();
+        if (q.length < 2) { window.noorUi.fieldError(input, "Kam az kam 2 harf likhein."); return; }
+        window.noorUi.clearField(input);
+        history.replaceState(null, "", `?q=${encodeURIComponent(q)}`);
+        run(q);
     }
 
     form.addEventListener("submit", (event) => {
         event.preventDefault();
-        const q = input.value.trim();
-        if (q.length < 2) { setStatus("error", "Type at least 2 characters."); return; }
-        history.replaceState(null, "", `?q=${encodeURIComponent(q)}`);
-        run(q);
+        submit(input.value);
     });
 
     const initial = new URLSearchParams(window.location.search).get("q");
-    if (initial) { input.value = initial; run(initial.trim()); }
+    if (initial) { input.value = initial; run(initial.trim()); } else firstView();
 })();

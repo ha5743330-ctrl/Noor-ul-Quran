@@ -17,9 +17,10 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js" integrity="sha384-0w2KAL2YHP6wKOkUDzkCDGgVvfmHnj02DHeQ6XcHOgTfFsGyonKOpShMH1x6nk9o" crossorigin="anonymous"></script>
     <script src="/config.js" defer></script>
     <!-- Updated JS with Cache-Buster Version -->
-    <script src="auth.js?v=9" defer></script>
+    <script src="/ui-states.js?v=1" defer></script>
+    <script src="auth.js?v=10" defer></script>
     <script src="/nav.js?v=5" defer></script>
-    <link rel="stylesheet" href="/ui.css?v=14">
+    <link rel="stylesheet" href="/ui.css?v=16">
 </head>
 <body class="ui-page ui-auth min-h-screen flex flex-col justify-between selection:bg-emerald-100">
     <a class="skip-link" href="#main">Skip to content</a>
@@ -54,7 +55,7 @@
             </button>
 
             <!-- Login Form -->
-            <form id="form-login" onsubmit="handleSignIn(event)" class="space-y-4">
+            <form id="form-login" onsubmit="handleSignIn(event)" class="space-y-4" novalidate>
                 <div>
                     <label class="block text-xs font-medium text-slate-300 mb-1.5">Email Address</label>
                     <div class="relative">
@@ -85,7 +86,7 @@
             </form>
 
             <!-- Forgot Password Form (Hidden by Default) -->
-            <form id="form-forgot" onsubmit="handleForgot(event)" class="space-y-4 hidden">
+            <form id="form-forgot" onsubmit="handleForgot(event)" class="space-y-4 hidden" novalidate>
                 <p class="text-xs text-slate-400">Apna email likhein, hum reset link bhejenge. Enter your email and we will send a reset link.</p>
                 <div>
                     <label for="forgot-email" class="block text-xs font-medium text-slate-300 mb-1.5">Email Address</label>
@@ -96,7 +97,7 @@
             </form>
 
             <!-- Sign Up Form (Hidden by Default) -->
-            <form id="form-signup" onsubmit="handleSignUp(event)" class="space-y-4 hidden">
+            <form id="form-signup" onsubmit="handleSignUp(event)" class="space-y-4 hidden" novalidate>
                 <div>
                     <label class="block text-xs font-medium text-slate-300 mb-1.5">Full Name</label>
                     <div class="relative">

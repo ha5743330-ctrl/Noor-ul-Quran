@@ -33,28 +33,45 @@ async function adminRequest(path, options = {}) {
             result = { detail: text };
         }
     }
-    if (!response.ok) throw new Error(result?.detail || "Admin request failed.");
+    if (!response.ok) {
+        const failure = new Error(result?.detail || "Admin request failed.");
+        failure.status = response.status;
+        throw failure;
+    }
     return result;
+}
+
+// Skeleton while a list loads; error + Retry (never raw text) when it fails.
+function listLoading(list, count = 3) { window.noorUi.skeleton(list, count); }
+function listFailed(list, what, error, retry) {
+    if (error.status === 401 || error.status === 403) return;
+    window.noorUi.error(list, { what, err: error, onRetry: retry });
+}
+function listEmpty(list, icon, title, text) {
+    const li = document.createElement("li");
+    list.append(li);
+    window.noorUi.empty(li, { icon, title, text });
 }
 
 async function initializeAdmin() {
     let apiUp = false;
     const client = window.supabaseClient;
+    const main = document.getElementById("main");
     if (!client) {
-        window.location.replace("/auth.html");
+        window.noorUi.gates.signedOut(main, "Admin console");
         return;
     }
 
     const { data: { session } } = await client.auth.getSession();
     if (!session) {
-        window.location.replace("/auth.html");
+        window.noorUi.gates.signedOut(main, "Admin console");
         return;
     }
 
     try {
         const access = await adminRequest("/access");
         if (!access.is_admin) {
-            window.location.replace("/");
+            window.noorUi.gates.notAdmin(main);
             return;
         }
         selfId = access.user_id;
@@ -70,7 +87,8 @@ async function initializeAdmin() {
         await loadAnalytics();
     } catch (error) {
         if (!apiUp) setApiStatus(false);
-        showAdminMessage(error.message, true);
+        if (error.status === 403) { window.noorUi.gates.notAdmin(main); return; }
+        showAdminMessage(window.noorUi.friendly(error), true);
     }
 }
 
@@ -104,6 +122,7 @@ function renderSummary() {
 async function loadUsers(from = 1) {
     const list = document.getElementById("users-list");
     const rows = from === 1 ? [] : usersRows;
+    if (from === 1 && !usersRows.length) listLoading(list, 4);
     try {
         for (let page = from; page <= usersPage; page += 1) {
             const params = new URLSearchParams({
@@ -121,7 +140,7 @@ async function loadUsers(from = 1) {
         renderUsers(rows);
     } catch (error) {
         list.replaceChildren();
-        showAdminMessage(error.message, true);
+        listFailed(list, "Users", error, () => loadUsers(from));
     }
 }
 
@@ -150,7 +169,7 @@ function actionButton(label, className, onClick) {
         try {
             await onClick();
         } catch (error) {
-            showAdminMessage(error.message, true);
+            showAdminMessage(window.noorUi.friendly(error), true);
         } finally {
             button.disabled = false;
         }
@@ -210,10 +229,7 @@ function renderUsers(users) {
     document.getElementById("users-more").hidden = users.length >= usersTotal;
 
     if (!users.length) {
-        const empty = document.createElement("li");
-        empty.className = "lib-empty";
-        empty.textContent = "No users found.";
-        list.append(empty);
+        listEmpty(list, "fa-users", "Koi user nahi mila", "Search ya status filter badal kar dekhein.");
         return;
     }
 
@@ -298,7 +314,7 @@ async function updatePremium(user, checkbox) {
         showAdminMessage(`${user.email}: premium access ${checkbox.checked ? "granted" : "revoked"}.`);
     } catch (error) {
         checkbox.checked = !checkbox.checked;
-        showAdminMessage(error.message, true);
+        showAdminMessage(window.noorUi.friendly(error), true);
     } finally {
         checkbox.disabled = false;
     }
@@ -306,15 +322,14 @@ async function updatePremium(user, checkbox) {
 
 async function loadAudit(offset = 0) {
     const list = document.getElementById("audit-list");
+    if (!offset) listLoading(list, 3);
     try {
         const { entries, total } = await adminRequest(`/admin/audit?offset=${offset}`);
         document.getElementById("audit-badge").textContent = String(total ?? entries.length);
         if (!offset) list.replaceChildren();
         document.getElementById("audit-more").hidden = offset + entries.length >= (total ?? 0);
         if (!entries.length && !offset) {
-            const empty = document.createElement("li");
-            empty.textContent = "No admin actions yet.";
-            list.append(empty);
+            listEmpty(list, "fa-clipboard-list", "Abhi koi admin action nahi", "Jab koi user block ya premium hoga to yahan likha jayega.");
         }
         for (const entry of entries) {
             const row = document.createElement("li");
@@ -322,7 +337,8 @@ async function loadAudit(offset = 0) {
             list.append(row);
         }
     } catch (error) {
-        showAdminMessage(error.message, true);
+        if (!offset) list.replaceChildren();
+        listFailed(list, "Audit log", error, () => loadAudit(offset));
     }
 }
 
@@ -377,7 +393,7 @@ function deleteButton(path, filename, reload) {
             showAdminMessage(`${filename} deleted.`);
             await reload();
         } catch (error) {
-            showAdminMessage(error.message, true);
+            showAdminMessage(window.noorUi.friendly(error), true);
             button.disabled = false;
         }
     });
@@ -386,12 +402,13 @@ function deleteButton(path, filename, reload) {
 
 async function loadPhotos() {
     const list = document.getElementById("photo-list");
+    listLoading(list, 3);
     try {
         const photos = await adminRequest("/admin/photos");
         const active = photos.filter((photo) => photo.enabled).length;
         document.getElementById("photos-badge").textContent = `${active} of ${photos.length} on`;
         list.replaceChildren();
-        if (!photos.length) list.append(emptyRow("No photos uploaded. Ayah Images use the built-in background."));
+        if (!photos.length) listEmpty(list, "fa-images", "Abhi koi photo nahi", "Ayah Images built-in background istemal kar rahi hain. Upar se photo upload karein.");
         for (const photo of photos) {
             const card = document.createElement("li");
             card.className = "ad-photo" + (photo.enabled ? "" : " is-off");
@@ -417,7 +434,7 @@ async function loadPhotos() {
                     });
                     await loadPhotos();
                 } catch (error) {
-                    showAdminMessage(error.message, true);
+                    showAdminMessage(window.noorUi.friendly(error), true);
                     toggle.disabled = false;
                 }
             });
@@ -426,7 +443,8 @@ async function loadPhotos() {
             list.append(card);
         }
     } catch (error) {
-        showAdminMessage(error.message, true);
+        list.replaceChildren();
+        listFailed(list, "Photos", error, loadPhotos);
     }
 }
 
@@ -472,6 +490,7 @@ function setupPhotoUpload() {
 async function loadBackgrounds() {
     const list = document.getElementById("background-list");
     const countEl = document.getElementById("stat-backgrounds");
+    listLoading(list, 2);
     try {
         const clips = await adminRequest("/admin/backgrounds");
         if (countEl) {
@@ -480,27 +499,30 @@ async function loadBackgrounds() {
         }
         document.getElementById("stat-backgrounds-badge").textContent = `${clips.length} files`;
         list.replaceChildren();
-        if (!clips.length) list.append(emptyRow("No background clips uploaded."));
+        if (!clips.length) listEmpty(list, "fa-film", "Abhi koi background clip nahi", "Upar se MP4 clip upload karein.");
         for (const clip of clips) {
             list.append(mediaRow(clip.filename, formatSize(clip.size), deleteButton("/admin/backgrounds", clip.filename, loadBackgrounds)));
         }
     } catch (error) {
-        showAdminMessage(error.message, true);
+        list.replaceChildren();
+        listFailed(list, "Background clips", error, loadBackgrounds);
     }
 }
 
 async function loadMusic() {
     const list = document.getElementById("music-list");
+    listLoading(list, 2);
     try {
         const result = await adminRequest("/admin/music");
         document.getElementById("music-badge").textContent = `${result.music_files.length} files`;
         list.replaceChildren();
-        if (!result.music_files.length) list.append(emptyRow("No background music uploaded."));
+        if (!result.music_files.length) listEmpty(list, "fa-music", "Abhi koi music nahi", "Upar se audio file upload karein.");
         for (const filename of result.music_files) {
             list.append(mediaRow(filename, "", deleteButton("/admin/music", filename, loadMusic)));
         }
     } catch (error) {
-        showAdminMessage(error.message, true);
+        list.replaceChildren();
+        listFailed(list, "Background music", error, loadMusic);
     }
 }
 
@@ -667,6 +689,7 @@ function setupUpload({ prefix, endpoint, fallbackType, successText, buttonHtml, 
             info.textContent = "No file chosen";
             bar.hidden = true;
             showAdminMessage(successText);
+            window.noorUi.toast("Upload ho gaya");
             await reload();
         } catch (uploadError) {
             fail(uploadError.message);
@@ -798,6 +821,7 @@ function picksChips(container, options, current, onPick) {
 }
 
 async function loadPicks() {
+    if (!picksUi.all.length) listLoading(document.getElementById("ap-list"), 3);
     try {
         const all = await adminRequest("/picks");
         picksUi.cap = all.cap;
@@ -805,7 +829,9 @@ async function loadPicks() {
         document.getElementById("picks-badge").textContent = String(all.picks.length);
         renderPicks();
     } catch (error) {
-        showAdminMessage(error.message, true);
+        const list = document.getElementById("ap-list");
+        list.replaceChildren();
+        listFailed(list, "Picks", error, loadPicks);
     }
 }
 
@@ -821,7 +847,7 @@ function renderPicks() {
         `${rows.length} picks · ${overBucket} over the ${picksUi.bucket} s bucket · ${overCap} over the ${picksUi.cap} s server cap (kept, users cannot tick them)`;
     const list = document.getElementById("ap-list");
     list.replaceChildren();
-    if (!rows.length) list.append(emptyRow("No picks in this list."));
+    if (!rows.length) listEmpty(list, "fa-list-check", "Is list mein abhi koi pick nahi", "Upar ref likh kar (jaise 112:1-4) pehla pick add karein.");
     rows.forEach((row) => list.append(picksRow(row)));
     document.getElementById("ap-apply").disabled = !picksUi.preview?.add?.length;
 }
@@ -856,7 +882,7 @@ function picksRow(row) {
         try {
             preview = await adminRequest(`/picks/${encodeURIComponent(row.id)}/trim`, { method: "POST", body: JSON.stringify({}) });
         } catch (error) {
-            showAdminMessage(error.message, true);
+            showAdminMessage(window.noorUi.friendly(error), true);
             return;
         }
         const yes = await picksConfirm("Trim to whole ayat?",
@@ -892,7 +918,7 @@ async function picksCall(path, method, body, okText) {
         showAdminMessage(okText);
         await Promise.all([loadPicks(), loadAudit()]);
     } catch (error) {
-        showAdminMessage(error.message, true); // includes Supabase save failures
+        showAdminMessage(window.noorUi.friendly(error), true); // includes Supabase save failures
     }
 }
 
@@ -935,7 +961,7 @@ async function picksImport(apply) {
             document.getElementById("ap-apply").disabled = !result.add.length;
         }
     } catch (error) {
-        showAdminMessage(error.message, true);
+        showAdminMessage(window.noorUi.friendly(error), true);
     }
 }
 
@@ -951,7 +977,7 @@ async function picksExport() {
         link.click();
         URL.revokeObjectURL(url);
     } catch (error) {
-        showAdminMessage(error.message, true);
+        showAdminMessage(window.noorUi.friendly(error), true);
     }
 }
 
@@ -961,7 +987,7 @@ async function picksRecompute(remeasure) {
     try {
         await adminRequest("/picks/recompute", { method: "POST", body: JSON.stringify({ remeasure }) });
     } catch (error) {
-        showAdminMessage(error.message, true);
+        showAdminMessage(window.noorUi.friendly(error), true);
         return;
     }
     bar.hidden = false;
@@ -981,14 +1007,19 @@ async function picksRecompute(remeasure) {
             }
         } catch (error) {
             clearInterval(picksUi.poll);
-            showAdminMessage(error.message, true);
+            showAdminMessage(window.noorUi.friendly(error), true);
         }
     }, 1500);
 }
 
 document.getElementById("ap-add").addEventListener("submit", async (event) => {
     event.preventDefault();
-    const ref = document.getElementById("ap-ref").value.trim();
+    const refInput = document.getElementById("ap-ref");
+    const ref = refInput.value.trim();
+    if (!/^\d{1,3}:\d{1,3}(-\d{1,3})?$/.test(ref)) {
+        window.noorUi.fieldError(refInput, "Format likhein Surah:Start-End, jaise 112:1-4.");
+        return;
+    }
     await picksCall("/picks", "POST", { bucket: picksUi.bucket, mode: picksUi.mode, ref }, `Added ${ref}.`);
     document.getElementById("ap-ref").value = "";
     document.getElementById("ap-estimate").textContent = "";

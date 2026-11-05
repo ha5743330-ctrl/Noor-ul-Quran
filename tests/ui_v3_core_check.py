@@ -85,7 +85,7 @@ try:
         check("estimate text is dark green on light", page.evaluate("getComputedStyle(document.getElementById('duration-estimate-text')).color") == "rgb(22, 101, 52)", page.evaluate("document.getElementById('duration-estimate-text').className + ' ' + getComputedStyle(document.getElementById('duration-estimate-text')).color + ' ' + document.body.className"))
         lib = open_page(browser, "library.html", make_api(fail_all=True))
         lib.wait_for_timeout(800)
-        check("library error hides empty state", lib.is_hidden("#lib-empty") and "Server error" in lib.inner_text("#lib-status"))
+        check("library error hides empty state", lib.is_hidden("#lib-empty") and "Library" in lib.inner_text("#lib-skel") and lib.locator("#lib-skel button").count() == 1)
         lib2 = open_page(browser, "library.html", make_api())
         lib2.wait_for_timeout(800)
         check("library empty state shown without error", lib2.is_visible("#lib-empty"))
