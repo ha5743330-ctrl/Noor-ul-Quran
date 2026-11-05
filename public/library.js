@@ -50,7 +50,12 @@ function render() {
     const list = $("lib-list");
     const shown = visibleItems();
     list.replaceChildren();
-    $("lib-empty").hidden = shown.length > 0 || loadFailed;
+    const showEmpty = shown.length === 0 && !loadFailed;
+    if (showEmpty) {
+        window.noorUi.empty($("lib-empty"), items.length
+            ? { icon: "fa-filter", title: "Is filter mein kuch nahi", text: "Doosra filter chunein ya All dekhein.", action: { label: "Sab dekhein", onClick: () => document.querySelector('.lib-tabs [data-filter="all"]').click() } }
+            : { icon: "fa-photo-film", title: "Abhi koi item nahi", text: "Aap ki banayi hui videos aur ayah images yahan nazar aayengi.", action: { label: "Pehli video banayein", href: "/generate.html" } });
+    } else if (!loadFailed) $("lib-empty").hidden = true;
     $("lib-more").hidden = shown.length <= shownCount;
     for (const item of shown.slice(0, shownCount)) {
         const isImage = item.type === "image";
@@ -161,6 +166,7 @@ async function downloadSelected() {
         } else {
             const result = await window.noorApi("/history/bulk-download-url", { method: "POST", json: { ids: chosen.map((item) => item.id) } });
             triggerDownload(absolute(result.url));
+            window.noorUi.toast("Download shuru ho gaya");
         }
         setSelecting(false);
         setStatus("");
@@ -182,6 +188,7 @@ async function deleteItems(ids) {
         }
         ids.forEach((id) => selected.delete(id));
         setSelecting(false);
+        window.noorUi.toast("Delete ho gaya");
         await load();
     } catch (error) {
         setStatus(error.message);
@@ -195,6 +202,8 @@ function setSelecting(next) {
 }
 
 async function load() {
+    window.noorUi.skeleton($("lib-skel"), 6, "card");
+    $("lib-empty").hidden = true;
     try {
         const result = await window.noorApi("/history");
         items = (Array.isArray(result.videos) ? result.videos : [])
@@ -202,14 +211,15 @@ async function load() {
         loadFailed = false;
         setStatus("");
     } catch (error) {
-        if (error.status === 401) {
-            window.location.replace(`/auth.html?next=${encodeURIComponent("/library.html")}`);
-            return;
-        }
         items = [];
         loadFailed = true;
-        setStatus(error.message);
+        $("lib-skel").replaceChildren();
+        if (error.status !== 401) window.noorUi.error($("lib-skel"), { what: "Library", err: error, onRetry: load });
+        else window.noorUi.sessionExpired();
+        render();
+        return;
     }
+    $("lib-skel").replaceChildren();
     render();
 }
 

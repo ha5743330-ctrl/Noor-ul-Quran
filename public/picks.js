@@ -50,7 +50,11 @@
             headers: { Authorization: `Bearer ${await token()}` },
         });
         const body = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(body.detail || `Could not load picks (HTTP ${response.status}).`);
+        if (!response.ok) {
+            const failure = new Error(body.detail || `Could not load picks (HTTP ${response.status}).`);
+            failure.status = response.status;
+            throw failure;
+        }
         return body;
     }
 
@@ -87,11 +91,12 @@
 
     async function refresh() {
         const list = root.querySelector(".pk-list");
-        list.replaceChildren(el("p", "pk-empty", "Loading picks…"));
+        window.noorUi.skeleton(list, 4);
         try {
             await ensureLoaded();
         } catch (error) {
-            list.replaceChildren(el("p", "pk-empty pk-err", error.message));
+            list.replaceChildren();
+            window.noorUi.error(list, { what: "Picks", err: error, onRetry: refresh });
             return;
         }
         renderList();
@@ -148,7 +153,13 @@
         const chosen = selection();
         list.replaceChildren();
         const shown = visibleRows();
-        if (!shown.length) list.append(el("li", "pk-empty", rows().length ? "No picks match your search." : "No picks in this list yet."));
+        if (!shown.length) {
+            const host = el("li", "pk-empty");
+            list.append(host);
+            window.noorUi.empty(host, rows().length
+                ? { icon: "fa-magnifying-glass-minus", title: "Koi pick match nahi hua", text: "Surah ka naam ya 2:255 jaisa reference likh kar dekhein.", action: { label: "Search saaf karein", onClick: () => { state.search = ""; const box = root.querySelector(".pk-search"); if (box) box.value = ""; renderList(); } } }
+                : { icon: "fa-list-check", title: "Is list mein abhi koi pick nahi", text: "Doosri length ya language chunein, ya dobara load karein.", action: { label: "Dobara load karein", onClick: () => { delete state.data[key()]; refresh(); } } });
+        }
         shown.forEach((row) => {
             const item = el("li", `pk-row${row.selectable ? "" : " pk-off"}`);
             const label = el("label", "pk-label");

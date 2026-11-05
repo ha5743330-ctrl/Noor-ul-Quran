@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="preload" href="/fonts/AmiriQuran-Regular.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/ui.css?v=14">
+    <link rel="stylesheet" href="/ui.css?v=16">
 </head>
 <body class="ui-page ui-library">
     <a class="skip-link" href="#main">Skip to content</a>
@@ -37,7 +37,8 @@
                 </div>
             </div>
             <p id="lib-status" class="pf-msg" role="status" aria-live="polite"></p>
-            <p id="lib-empty" class="lib-empty" hidden>Abhi koi item nahi. <a href="/generate.html">Pehli video banayein</a>.</p>
+            <div id="lib-skel"></div>
+            <div id="lib-empty" class="lib-empty" hidden></div>
             <ul id="lib-list" class="lib-grid"></ul>
             <button id="lib-more" type="button" class="btn btn-outline btn-sm load-more" hidden>Load more</button>
         </section>
@@ -49,8 +50,9 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js" integrity="sha384-0w2KAL2YHP6wKOkUDzkCDGgVvfmHnj02DHeQ6XcHOgTfFsGyonKOpShMH1x6nk9o" crossorigin="anonymous"></script>
     <script src="/config.js"></script>
-    <script src="/auth.js?v=9"></script>
+    <script src="/ui-states.js?v=1"></script>
+    <script src="/auth.js?v=10"></script>
     <script src="/nav.js?v=5"></script>
-    <script src="/library.js?v=3"></script>
+    <script src="/library.js?v=4"></script>
 </body>
 </html>
