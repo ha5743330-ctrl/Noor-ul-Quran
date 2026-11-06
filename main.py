@@ -27,6 +27,8 @@ from typing import Any, Literal, Optional
 from urllib.parse import quote, urlencode
 from uuid import UUID, uuid4
 
+import anyio
+import anyio.to_thread
 import requests
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
@@ -787,6 +789,30 @@ def generate_ayah_image(req: GenerateImageRequest, user=Depends(get_current_user
 async def health_check():
     # async: runs on the event loop, so it answers even while a render saturates the threadpool.
     return {"status": "online", "system": "Noor ul Quran Engine"}
+
+def _db_ping() -> bool:
+    key = SUPABASE_SERVICE_KEY or SUPABASE_KEY
+    try:
+        r = requests.get(
+            f"{SUPABASE_URL}/rest/v1/profiles?select=id&limit=1",
+            headers={"apikey": key, "Authorization": f"Bearer {key}"},
+            timeout=3,
+        )
+        return r.ok
+    except Exception:  # missing config, network error: db is down
+        return False
+
+
+@app.api_route("/api/health/db", methods=["GET", "HEAD"])
+async def health_db():
+    """Always 200; db flag only, no details. Async + hard 3 s cap so it never hangs."""
+    try:
+        with anyio.fail_after(3):
+            db = await anyio.to_thread.run_sync(_db_ping, abandon_on_cancel=True)
+    except TimeoutError:
+        db = False
+    return {"ok": True, "db": db}
+
 
 @app.get("/api/reciters")
 def list_reciters():
