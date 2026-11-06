@@ -8,6 +8,7 @@ import ctypes
 import functools
 import hashlib
 import shlex
+import tempfile
 import progress as job_progress
 import math
 from concurrent.futures import ThreadPoolExecutor
@@ -243,6 +244,8 @@ def audio_cache_path(kind, surah, ayah, reciter_id=None):
 
 def cached_ayah_duration(surah, ayah, kind, reciter_id=None):
     reciter_id = resolve_reciter_id(kind, reciter_id)
+    if _fallback_audio and (kind, reciter_id, surah, ayah) in _fallback_audio:
+        return _fallback_audio[(kind, reciter_id, surah, ayah)][1]
     return load_duration_cache().get(
         _duration_key(kind, reciter_id, surah, ayah)
     )
@@ -627,6 +630,54 @@ BLOCKED_CLIP_IDS = ("12419860", "16349470")
 def is_blocked_clip(path):
     return any(i in Path(path).name for i in BLOCKED_CLIP_IDS)
 
+# --- Audio fallback (only used when every EveryAyah retry fails) ---
+AUDIO_DEFAULT_PROVIDERS = ("everyayah", "islamic")
+def audio_fallbacks():
+    """Fallback providers after EveryAyah, from env AUDIO_PROVIDERS; invalid/missing -> default."""
+    names = [n.strip().lower() for n in os.getenv("AUDIO_PROVIDERS", "").split(",") if n.strip()]
+    if not names or any(n not in AUDIO_DEFAULT_PROVIDERS for n in names):
+        names = list(AUDIO_DEFAULT_PROVIDERS)
+    return [n for n in names if n != "everyayah"]
+
+ISLAMIC_CDN = "https://cdn.islamic.network/quran/audio/"
+# reciter id -> (bitrate, edition). Urdu voice and Yasser/Mujawwad have no edition there -> no fallback.
+ISLAMIC_EDITIONS = {
+    "alafasy": ("128", "ar.alafasy"),
+    "husary": ("128", "ar.husary"),
+    "minshawy_murattal": ("128", "ar.minshawi"),
+    "abdul_basit_murattal": ("192", "ar.abdulbasitmurattal"),
+}
+AYAH_COUNTS = (7,286,200,176,120,165,206,75,129,109,123,111,43,52,99,128,111,110,98,135,112,78,118,64,77,227,93,88,69,60,34,30,73,54,45,83,182,88,75,85,54,53,89,59,37,35,38,29,18,45,60,49,62,55,78,96,29,22,24,13,14,11,11,18,12,12,30,52,52,44,28,28,20,56,40,31,50,40,46,42,29,19,36,25,22,17,19,26,30,20,15,21,11,8,8,19,5,8,8,11,11,8,3,9,5,4,7,3,6,3,5,4,5,6)
+PROVIDER_CREDITS = {"islamic": "Audio: Islamic Network"}
+FALLBACK_DIR = Path(tempfile.gettempdir()) / "noor_fallback"  # build() points this at its job tmp
+_fallback_audio = {}     # (kind, reciter, s, a) -> (path, duration); in memory only, never in the audio cache
+fallback_used = set()    # providers that served audio in the current job (footer credit)
+
+def _fallback_ayah(kind, s, a, reciter_id):
+    key = (kind, reciter_id, s, a)
+    if key in _fallback_audio and _fallback_audio[key][0].exists():
+        return _fallback_audio[key][0]
+    ed = ISLAMIC_EDITIONS.get(reciter_id)
+    if "islamic" not in audio_fallbacks() or ed is None or not (1 <= s <= 114 and 1 <= a <= AYAH_COUNTS[s - 1]):
+        return None
+    url = f"{ISLAMIC_CDN}{ed[0]}/{ed[1]}/{sum(AYAH_COUNTS[:s - 1]) + a}.mp3"
+    for attempt in range(2):
+        try:
+            r = requests.get(url, timeout=(10, 30))
+            if r.status_code == 200 and len(r.content) > 1000:
+                FALLBACK_DIR.mkdir(parents=True, exist_ok=True)
+                path = FALLBACK_DIR / f"{kind}_{reciter_id}_{s:03d}{a:03d}.mp3"
+                path.write_bytes(r.content)
+                _fallback_audio[key] = (path, dur(path))
+                fallback_used.add("islamic")
+                print(f"Audio provider for {kind} {s}:{a}: islamic (fallback)", file=sys.stderr)
+                return path
+        except requests.RequestException:
+            pass
+        if attempt < 1:
+            time.sleep(BACKOFF_BASE)
+    return None
+
 def fetch_ayah(kind, s, a, reciter_id=None):
     reciter_id = resolve_reciter_id(kind, reciter_id)
     audio_path = audio_cache_path(kind, s, a, reciter_id)
@@ -642,7 +693,7 @@ def fetch_ayah(kind, s, a, reciter_id=None):
                     audio_path.write_bytes(response.content)
                     break
                 if response.status_code == 404:
-                    return None
+                    return _fallback_ayah(kind, s, a, reciter_id)
                 last = f"HTTP {response.status_code}"
             except requests.RequestException as exc:
                 last = type(exc).__name__
@@ -650,6 +701,9 @@ def fetch_ayah(kind, s, a, reciter_id=None):
             if attempt < 3:
                 time.sleep(BACKOFF_BASE * 2 ** attempt)
         else:
+            fb = _fallback_ayah(kind, s, a, reciter_id)
+            if fb is not None:
+                return fb
             raise RuntimeError(f"EveryAyah download failed for {s}:{a} ({kind}): {last}")
 
     if cached_ayah_duration(s, a, kind, reciter_id) is None:
@@ -1203,6 +1257,9 @@ def render_ayah_image(arabic_text, english_text, reference, background_path, out
     put(draw, (cx, 1225), f"{surah_number}:{ayah_number}" + (f"  ·  {handle}" if handle else ""),
         load_font("amiri_regular", 30), pal["foot"] + (255,), stroke=0, direction="ltr", language="en")
     credit = "ترجمہ: فتح محمد جالندھری" if urdu else "Translation: Pickthall"
+    if fallback_used:
+        put(draw, (cx, 1300), " · ".join(PROVIDER_CREDITS[p] for p in sorted(fallback_used)),
+            load_font("amiri_regular", 22), pal["foot"] + (170,), stroke=0, direction="ltr", language="en")
     put(draw, (cx, 1150 if urdu else 1268), credit, load_font("nastaliq_regular" if urdu else "amiri_regular", 24),
         pal["foot"] + (200,), stroke=0, direction="rtl" if urdu else "ltr", language="ur" if urdu else "en")
     Image.alpha_composite(image, overlay).convert("RGB").save(output_path, format="PNG", optimize=True)
@@ -1464,6 +1521,9 @@ def build(
     animate = text_animation != "none"
     require_raqm()
     styles = styles or {}
+    global FALLBACK_DIR
+    FALLBACK_DIR = Path(tmp) / "fallback"
+    _fallback_audio.clear(); fallback_used.clear()
     plan = plan_reel(
         Q, s, a0, a1, max_duration, content_mode, reciter_id, urdu_voice_id
     )
