@@ -120,9 +120,9 @@ def api(route):
                     x["enabled"] = not x["enabled"]
     elif path == "/admin/analytics":
         days = [{"day": (datetime.date.today() - datetime.timedelta(days=i)).isoformat(), "views": 40 + i * 3, "uniques": 20 + i, "signups": i % 3, "videos": 12 - i % 5,
-                 "failures": 3 if i == 0 else 0, "avg_render_secs": 11.5,
-                 **({"failed_videos": [{"at": f"{TODAY}T09:00:00Z", "reason": "ffmpeg: out of memory while rendering clip"}]} if i == 0 else {})} for i in range(30)]
-        body = {"days": days, "status": {"last_flush": "now", "buffered_views": 2, "last_error": None, "enabled": True}}
+                 "failures": 3 if i == 0 else 0, "avg_render_secs": 11.5, } for i in range(30)]
+        body = {"days": days, "status": {"last_flush": "now", "buffered_views": 2, "last_error": None, "enabled": True},
+                "failed_videos": [{"at": f"{TODAY}T09:00:00Z", "reason": "ffmpeg: out of memory while rendering clip"}]}
     elif path == "/admin/ask-usage":
         body = {"enabled": True, "global_limit": 100, "user_limit": 5, "key_set": True, "last_error": None, "days": [{"day": TODAY, "n": 85}, {"day": "2026-01-01", "n": 4}]}
     elif path == "/picks":

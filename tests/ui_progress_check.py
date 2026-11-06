@@ -73,7 +73,7 @@ def run(browser, theme, width):
     tag = f"[{theme} {width}]"
     item = {"ref": "112:1", "status": "queued"}
     jobs = [{"job_id": "j1", "status": "queued", "videos": [], "items": [item], "queue_ahead": 1, "estimated_wait_seconds": 10},
-            {"job_id": "j1", "status": "processing", "videos": [], "items": [item], "estimated_wait_seconds": 5, "percent": 60, "stage": "frames"},
+            {"job_id": "j1", "status": "processing", "videos": [], "items": [item], "estimated_wait_seconds": 5, "percent": 60, "stage": "frames", "eta_seconds": 12},
             {"job_id": "j1", "status": "completed", "videos": [VIDEO], "items": [{**item, "status": "done"}], "message": "ok"}]
     ctx, page, errors, held = make_env(browser, theme, width, jobs, False)
     page.fill("#input-pick", "112:1-4")
@@ -84,6 +84,7 @@ def run(browser, theme, width):
     check(f"{tag} video: Quran font word reveal + Urdu translation", page.locator("#waiting-card .wc-ar.ar-text .wc-w").count() > 0 and page.get_attribute("#waiting-card .wc-tr", "lang") == "ur")
     page.wait_for_function("document.querySelectorAll('#waiting-card .wc-stages li.on').length === 3", timeout=8000)
     check(f"{tag} video: stage icons follow job stage (frames=3 lit)", "Frames" in page.inner_text("#waiting-card .wc-status"))
+    check(f"{tag} video: server ETA shown", "~12s" in page.inner_text("#waiting-card .wc-eta"))
     page.wait_for_function("document.querySelector('#waiting-card .wc-vr').textContent === '94:5-6'", timeout=5000)
     check(f"{tag} verse rotation shows 94:5-6 label", True)
     page.screenshot(path=str(ROOT / "tests" / "output" / f"waiting-video-{theme}-{width}.png"))

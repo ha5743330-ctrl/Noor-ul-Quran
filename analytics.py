@@ -9,7 +9,7 @@ import logging
 import re
 import threading
 import time
-from collections import Counter, defaultdict
+from collections import Counter, defaultdict, deque
 from datetime import datetime, timezone
 
 import requests
@@ -20,6 +20,7 @@ BOT_RE = re.compile(
     r"monitor|uptime|preview|facebookexternalhit|lighthouse|pingdom|scanner|^$",
     re.I,
 )
+PATH_RE = re.compile(r"(?:[A-Za-z]:\\|/)[\w.\-]+(?:[\\/][\w.\-]+)+")  # absolute paths in failure reasons
 MAX_VISITORS_PER_DAY = 20000  # ponytail: memory cap per day; beyond it uniques undercount, views stay exact
 
 _lock = threading.Lock()
@@ -29,6 +30,7 @@ _visitors = defaultdict(set)     # day -> {hash}
 _seen_signups = set()
 _cfg = {"url": "", "key": "", "secret": ""}
 _state = {"last_flush": None, "last_error": None}
+_failed = deque(maxlen=20)       # [{at, reason}] newest last; in memory, resets on restart
 
 
 def configure(url, key, secret=""):
@@ -72,7 +74,11 @@ def signup(user_id):
         _counts[_today()]["signups"] += 1
 
 
-def render_done(videos, failed, seconds):
+def render_done(videos, failed, seconds, reasons=()):
+    """`reasons`: already-redacted error texts, one per failed video."""
+    with _lock:
+        at = datetime.now(timezone.utc).isoformat()
+        _failed.extend({"at": at, "reason": PATH_RE.sub("[path]", str(r))[:200]} for r in reasons)
     if not _enabled():
         return
     with _lock:
@@ -112,6 +118,11 @@ def flush():
                 _counts[day].update(c)
                 _secs[day] += secs.get(day, 0.0)
                 _visitors[day] |= vis.get(day, set())
+
+
+def failed_videos():
+    with _lock:
+        return list(_failed)[::-1]
 
 
 def status():

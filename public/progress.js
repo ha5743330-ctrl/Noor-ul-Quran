@@ -26,6 +26,7 @@
             `<li><i class="fa-solid ${i}" aria-hidden="true"></i><span>${n}</span></li>`).join("")}</ol>
             <span class="wc-wave" aria-hidden="true"><b></b><b></b><b></b><b></b><b></b></span></div>
             <p class="wc-status" role="status" aria-live="polite"></p>
+            <p class="wc-eta"></p>
             <div class="wc-peek" hidden aria-hidden="true"><span>Image ban rahi hai</span></div>
             <div class="wc-reveal"><p class="ar-text wc-ar" dir="rtl" lang="ar"></p><p class="wc-tr"></p></div>
             <div class="wc-verse" aria-live="off"><p class="ar-text wc-vq" dir="rtl" lang="ar"></p><p class="wc-vt"></p><p class="wc-vr"></p></div>`;
@@ -41,6 +42,7 @@
         const label = st.kind === "image" ? "Image ban rahi hai" : st.queued ? "Queue mein hai, thori der" : STAGES[st.stage][2];
         const status = q(".wc-status");
         if (status.dataset.k !== label) { status.dataset.k = label; status.textContent = `${label}...`; }
+        q(".wc-eta").textContent = st.eta == null ? "" : st.eta < 5 ? "Bas ho gaya..." : `~${st.eta}s baqi`;
         const words = [...q(".wc-ar").children], n = Math.ceil((pct / 100) * words.length);
         words.forEach((w, i) => w.classList.toggle("on", i < n));
         q(".wc-tr").classList.toggle("on", n > 0);
@@ -111,8 +113,9 @@
             const done = job.items?.length ? job.items.filter((i) => i.status === "done").length / job.items.length * 100 : 0;
             const pct = Number.isFinite(job.percent) ? job.percent : st.queued ? 0 : est > 0 ? ms / (ms + est * 1000) * 100 : st.pct;
             st.pct = Math.min(95, Math.max(st.pct, pct, done));
-            const named = { audio: 0, text: 1, frames: 2, video: 3 }[job.stage];
+            const named = { audio: 0, text: 1, frames: 2, video: 3, upload: 3 }[job.stage];
             st.stage = named ?? (st.queued ? 0 : Math.min(3, Math.floor(st.pct / 25)));
+            st.eta = Number.isFinite(job.eta_seconds) ? job.eta_seconds : null;
             paint();
         },
         stop() {

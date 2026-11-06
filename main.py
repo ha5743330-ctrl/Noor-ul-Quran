@@ -9,6 +9,7 @@ import ntpath
 import os
 import random
 import re
+import progress as job_progress
 import secrets
 import shutil
 import signal
@@ -187,6 +188,7 @@ DAILY_USAGE_LOCK = Lock()
 RENDER_DURATIONS = []  # seconds per reel, last 10 completed jobs
 RENDER_RATES = []  # render seconds per video second, last 10 completed jobs
 DEFAULT_RENDER_RATE = 3.0
+RATE_STAT = CACHE_DIR / "render_rate.json"  # rolling render s per video s, survives restarts
 AUTH_CACHE = {}
 AUTH_CACHE_LOCK = Lock()
 LAST_IMAGE_RENDER = {}
@@ -1248,7 +1250,7 @@ def admin_ask_usage(user=Depends(require_admin)):
 @app.get("/api/admin/analytics")
 def admin_analytics(days: int = 30, user=Depends(require_admin)):
     rows = analytics.read_days(max(1, min(days, 90)))
-    return {"days": rows, "status": analytics.status()}
+    return {"days": rows, "status": analytics.status(), "failed_videos": analytics.failed_videos()}
 
 
 CONTENT_MODES = {"full", "urdu_only", "arabic_only", "arabic_urdu_text"}
@@ -2426,6 +2428,7 @@ def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
         "--batch-id", batch_id,
         "--work-dir", str(work_dir),
         "--result-json", str(manifest_path),
+        "--progress-json", str(work_dir / "progress.json"),
     ])
 
     # Picks are charged per video; single and random jobs stay one slot each.
@@ -2466,6 +2469,7 @@ def generate_reel(req: GenerateRequest, user=Depends(get_current_user)):
             "refunded": 0,
             "per_video_charge": req.mode == "picks",
             "manifest_path": str(manifest_path),
+            "progress_path": str(work_dir / "progress.json"),
         }
         queue_ahead, wait_seconds = _queue_info(job_id)
     if req.mode == "picks":
@@ -2706,6 +2710,9 @@ def _run_generation_job(
             completed = _run_render(
                 cmd, timeout, job_id=job_id, on_tick=lambda: settle(_read_manifest(manifest_path)),
             )
+            with GENERATION_JOBS_LOCK:
+                if job_id in GENERATION_JOBS:
+                    GENERATION_JOBS[job_id].update(stage="upload", percent=job_progress.percent("upload"))
             entries = _read_manifest(manifest_path)
             videos = [e for e in entries if isinstance(e.get("filename"), str)]
             if _job_cancelled(job_id):
@@ -2751,15 +2758,17 @@ def _run_generation_job(
                     if skipped else "Some reels could not be rendered; completed reels are ready."
                 )
         seconds = sum(v.get("duration") or 0 for v in videos)
-        analytics.render_done(len(videos), sum(1 for e in entries if e.get("error")), time.monotonic() - started)
+        errors = [_redact_secrets(str(e["error"])) for e in entries if e.get("error")]
+        analytics.render_done(len(videos), len(errors), time.monotonic() - started, errors)
         RENDER_DURATIONS.append((time.monotonic() - started) / max(1, len(videos)))
         del RENDER_DURATIONS[:-10]
         if seconds:
             RENDER_RATES.append((time.monotonic() - started) / seconds)
             del RENDER_RATES[:-10]
+            job_progress.record_rate(RATE_STAT, RENDER_RATES[-1])
     except Exception as exc:
         safe_error = _redact_secrets(str(exc))
-        analytics.render_done(0, 1, 0)
+        analytics.render_done(0, 1, 0, [safe_error])
         LOGGER.error(
             "Generation job failed (job_id=%s, user_id=%s): %s",
             job_id,
@@ -2796,11 +2805,19 @@ def generation_status(job_id: str, user=Depends(get_current_user)):
             raise HTTPException(status_code=404, detail="Generation job not found.")
         response = {
             key: (list(value) if isinstance(value, list) else value) for key, value in job.items()
-            if key not in {"owner_id", "manifest_path", "_proc", "admin", "charged", "refunded", "per_video_charge"}
+            if key not in {"owner_id", "manifest_path", "progress_path", "_proc", "admin", "charged", "refunded", "per_video_charge"}
         }
         if job["status"] in {"queued", "processing"}:
             response["queue_ahead"], response["estimated_wait_seconds"] = _queue_info(job_id)
         manifest_path = Path(job["manifest_path"])
+        progress_path, planned = job.get("progress_path"), job.get("planned_seconds")
+
+    if response["status"] == "processing" and progress_path:
+        live = job_progress.read(progress_path)
+        if response.get("stage") != "upload" and live:  # server-set "upload" wins once rendering ended
+            response.update(stage=live["stage"], percent=live["percent"])
+        if "percent" in response:
+            response["eta_seconds"] = job_progress.eta(response["percent"], planned, job_progress.load_rate(RATE_STAT))
 
     if response["status"] in {"queued", "processing"} and not response.get("videos"):
         response["videos"] = _read_generation_manifest(manifest_path)

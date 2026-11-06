@@ -8,6 +8,7 @@ import ctypes
 import functools
 import hashlib
 import shlex
+import progress as job_progress
 import math
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -284,14 +285,48 @@ LOW_X264_ARGS = "-preset superfast -crf 22 -x264-params aq-mode=3"
 X264_PRESETS = {"fast": "veryfast", "balanced": "fast", "high": "medium"}
 QUALITY = "high"
 
+PROGRESS = {"path": None, "reel": 1, "reels": 1, "total": 0.0}
+
+
+def report(stage, frac=0.0):
+    """Best-effort progress for the server's status endpoint (--progress-json)."""
+    if PROGRESS["path"]:
+        try:
+            job_progress.write(PROGRESS["path"], stage, frac, PROGRESS["reel"], PROGRESS["reels"])
+        except OSError:
+            pass
+
+
+def run_encode(cmd, check=True):
+    """Run ffmpeg; with progress reporting on, follow `-progress` and map out_time/total onto the video stage (<=1 write/s)."""
+    if not PROGRESS["path"] or PROGRESS["total"] <= 0:
+        return run(cmd) if check else subprocess.run(cmd, check=False).returncode
+    proc = subprocess.Popen([cmd[0], "-progress", "pipe:1", "-nostats", *cmd[1:]], stdout=subprocess.PIPE, text=True)
+    last = 0.0
+    try:
+        for line in proc.stdout:
+            secs = job_progress.out_seconds(line)
+            if secs is not None and time.monotonic() - last >= 1:
+                last = time.monotonic()
+                report("video", secs / PROGRESS["total"])
+    except (OSError, ValueError):
+        pass
+    finally:
+        proc.stdout.close()
+        rc = proc.wait()
+    if check and rc:
+        raise subprocess.CalledProcessError(rc, cmd)
+    return rc
+
+
 def encode_video(cmd, outfile):
     if os.getenv("NOOR_LOSSLESS") == "1":  # debug: lossless reference for SSIM/PSNR comparisons
-        run(cmd + ["-c:v", "libx264", "-preset", "ultrafast", "-crf", "0", *FFMPEG_CODEC_THREADS,
+        run_encode(cmd + ["-c:v", "libx264", "-preset", "ultrafast", "-crf", "0", *FFMPEG_CODEC_THREADS,
                    "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k", str(outfile)])
         return
     low_memory = os.getenv("RENDER_MEMORY_PROFILE", "").lower() == "low"
     if not low_memory:
-        run(
+        run_encode(
             cmd
             + [
                 "-c:v", "libx264",
@@ -322,16 +357,16 @@ def encode_video(cmd, outfile):
         hardware_args = []
 
     if hardware_args:
-        result = subprocess.run(
+        rc = run_encode(
             cmd + hardware_args + list(FFMPEG_CODEC_THREADS) + ["-pix_fmt", "yuv420p"] + audio_args,
             check=False,
         )
-        if result.returncode == 0:
+        if rc == 0:
             return
         print(f"Hardware encoder {encoder} failed; retrying with CPU encoding.", file=sys.stderr)
         Path(outfile).unlink(missing_ok=True)
 
-    run(
+    run_encode(
         cmd
         + ["-c:v", "libx264", *shlex.split(os.getenv("NOOR_LOW_X264", LOW_X264_ARGS))]
         + list(FFMPEG_CODEC_THREADS)
@@ -1295,7 +1330,8 @@ def plan_reel(
     urdu_source = "usmani" if usmani is not None else "jalandhry"
     plan["urdu_source"] = urdu_source
     plan["urdu_credit"] = URDU_CREDITS[urdu_source]
-    for item in plan["fit_items"]:
+    for n, item in enumerate(plan["fit_items"]):
+        report("audio", n / len(plan["fit_items"]))
         a = item["ayah"]
         english_text = None
         if content_mode == "arabic_only":
@@ -1431,6 +1467,7 @@ def build(
     plan = plan_reel(
         Q, s, a0, a1, max_duration, content_mode, reciter_id, urdu_voice_id
     )
+    report("text")
     items = plan["items"]
     total = plan["fit_seconds"]
     used_a1 = plan["fits_up_to"]
@@ -1674,6 +1711,7 @@ def build(
 
     last_frame = None
     for k, (st, en, lines_group, is_arabic, english_group, ayah_no) in enumerate(timeline):
+        report("frames", k / len(timeline))
         p = tmp / f"c{k}.png"
         render_chunk(p, base_p, lines_group, is_arabic, english_group, ayah_no)
         if not animate:
@@ -1810,6 +1848,8 @@ def build(
         fc.append(f"[rec_audio]afade=t=in:d=1,afade=t=out:st={max(0.0, total-1.5):.2f}:d=1.5[aout]")
 
     cmd += ["-filter_complex", ";".join(fc), "-map", "[vout]", "-map", "[aout]", "-t", f"{total:.2f}"]
+    report("video")
+    PROGRESS["total"] = total
     try:
         encode_video(cmd, outfile)
     except subprocess.CalledProcessError:
@@ -1951,6 +1991,7 @@ def main():
     ap.add_argument("--batch-id")
     ap.add_argument("--work-dir")
     ap.add_argument("--result-json")
+    ap.add_argument("--progress-json")
     ap.add_argument("--style-json")
     ap.add_argument("--check", nargs="*", type=int)
     ap.add_argument("--dry", action="store_true")
@@ -2058,6 +2099,7 @@ def main():
             name = outfile.name
             print(f"[{i}/{len(picks)}] Surah {s}:{a0}-{a1}", end=" ")
             content_mode = CONTENT_MODE
+            PROGRESS.update(path=a.progress_json, reel=i, reels=len(picks))
             try:
                 res = build(
                     Q, s, a0, a1, outfile, bgs, rng, tmp, styles,

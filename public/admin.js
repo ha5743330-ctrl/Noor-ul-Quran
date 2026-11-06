@@ -635,7 +635,13 @@ async function loadAnalytics() {
     const status = document.getElementById("analytics-status");
     const table = document.getElementById("analytics-table");
     try {
-        const { days, status: st } = await adminRequest("/admin/analytics?days=30");
+        const { days, status: st, failed_videos: failed = [] } = await adminRequest("/admin/analytics?days=30");
+        document.getElementById("dash-failed").hidden = !failed.length;
+        document.getElementById("dash-failed-list").replaceChildren(...failed.map((f) => {
+            const li = document.createElement("li");
+            li.textContent = `${formatWhen(f.at)} · ${f.reason || "reason not saved"}`;
+            return li;
+        }));
         document.getElementById("analytics-flush").textContent = st
             ? `Last flush: ${st.last_flush || "never"} · buffered views: ${st.buffered_views} · last error: ${st.last_error || "none"}${st.enabled ? "" : " · analytics disabled (no service key)"}`
             : "";
@@ -646,14 +652,6 @@ async function loadAnalytics() {
             set("stat-render", latest.avg_render_secs ? `${latest.avg_render_secs}s` : "-");
             set("stat-views", `${latest.views} / ${latest.uniques}`);
             attn.failed = latest.day === new Date().toISOString().slice(0, 10) ? latest.failures : 0;
-            // ponytail: the API sends no per-video failure reasons yet; the card stays hidden until `failed_videos` ([{at, reason}]) arrives
-            const failed = latest.failed_videos || [];
-            document.getElementById("dash-failed").hidden = !failed.length;
-            document.getElementById("dash-failed-list").replaceChildren(...failed.map((f) => {
-                const li = document.createElement("li");
-                li.textContent = `${formatWhen(f.at)} · ${f.reason || "reason not saved"}`;
-                return li;
-            }));
             noteActivity([...days].find((d) => d.views > 0)?.day);
         }
         renderAttention();
