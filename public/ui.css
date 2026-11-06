@@ -1302,7 +1302,8 @@ body.ui-page :is(button, .btn, a.btn, [type="submit"]):focus-visible, body.ui-pa
 .sr-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
 /* ---------- theme toggle (nav.js) ---------- */
-.theme-toggle {
+.theme-toggle,
+.pwa-install {
     display: inline-flex;
     flex: none;
     align-items: center;
@@ -1316,10 +1317,10 @@ body.ui-page :is(button, .btn, a.btn, [type="submit"]):focus-visible, body.ui-pa
     font-size: 1.05rem;
     cursor: pointer;
 }
-.theme-toggle:hover { background: var(--accent-soft); }
+.theme-toggle:hover, .pwa-install:hover { background: var(--accent-soft); }
 .nav-drawer .theme-toggle { justify-content: flex-start; gap: 10px; width: 100%; padding: 0 12px; color: var(--ink); font: inherit; font-weight: 600; }
 .nav-drawer .theme-toggle i { color: var(--accent); }
-@media (max-width: 820px) { .nav-bar > .theme-toggle { margin-left: auto; } .nav-bar > .theme-toggle + .nav-chip { margin-left: 0; } }
+@media (max-width: 820px) { .nav-bar > .theme-toggle, .nav-bar > .pwa-install:not([hidden]) { margin-left: auto; } .pwa-install:not([hidden]) + .theme-toggle { margin-left: 0; } .nav-bar > .theme-toggle + .nav-chip { margin-left: 0; } }
 
 /* Dark only: Tailwind utilities that ui.css does not remap for light (light rendering stays as before). */
 html[data-theme="dark"] body.ui-page .text-slate-950 { color: var(--on-accent) !important; }
@@ -1525,3 +1526,5 @@ body.ui-page .lp-btn-primary:hover { background: var(--accent-dark); color: var(
     .wc-peek::after { display: none; }
     .wc-card * { transition: none !important; }
 }
+
+.pwa-install[hidden] { display: none; }

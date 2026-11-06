@@ -54,6 +54,23 @@
         syncTheme();
     }
 
+    function installButton() {
+        const button = el("button", "pwa-install");
+        button.type = "button";
+        button.title = button.ariaLabel = "Install app";
+        button.hidden = !window.noorInstallPrompt;
+        button.append(icon("fa-download"));
+        button.addEventListener("click", async () => {
+            const prompt = window.noorInstallPrompt;
+            if (!prompt) return;
+            window.noorInstallPrompt = null;  // a prompt can be used once
+            button.hidden = true;
+            prompt.prompt();
+        });
+        return button;
+    }
+    window.addEventListener("noor-install-ready", () => document.querySelectorAll(".pwa-install").forEach((b) => { b.hidden = false; }));
+
     function themeToggle(withLabel) {
         const button = el("button", "theme-toggle");
         button.type = "button";
@@ -206,7 +223,7 @@
             nav.append(out);
         }
 
-        bar.append(burger, brand, nav, themeToggle(false));
+        bar.append(burger, brand, nav, installButton(), themeToggle(false));
         if (state.signedIn && state.profile) {
             const chip = el("a", "nav-chip");
             chip.href = "/profile.html";
